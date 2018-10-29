@@ -1,0 +1,1094 @@
+#!/usr/bin/env python
+"""
+@author: phdenzel
+
+Learn everything about .fits files with SkyF
+
+TODO:
+   - center estimate is sometimes off by ~ 1-23 pixels... what's the issue?
+"""
+###############################################################################
+# Imports
+###############################################################################
+import __init__
+from gleam.skycoords import SkyCoords
+from gleam.megacam_fields import MEGACAM_FPROPS
+
+import sys
+import os
+import re
+import copy
+import math
+import warnings
+import numpy as np
+from astropy.io import fits
+import matplotlib.pyplot as plt
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+
+__all__ = ['SkyF']
+
+
+###############################################################################
+class SkyF(object):
+    """
+    Framework for patches of the sky (.fits files) of a single band
+    """
+    hdr_keys = ['FILTER', 'NAXIS1', 'NAXIS2', 'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
+                'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'OBJECT', 'PHOTZP']
+
+    def __init__(self, filepath, px2arcsec=None, refpx=None, refval=None, photzp=None,
+                 verbose=False):
+        """
+        Initialize parsing of a fits file with a file name
+
+        Args:
+            filepath <str> - path to .fits file (shortcuts are automatically resolved)
+
+        Kwargs:
+            px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
+            refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
+            refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
+            photzp <float> - overwrite photometric zero-point information
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            <SkyF object> - standard initializer
+        """
+        # .fits file data
+        self.filepath = self.check_path(filepath)
+        self.data, self.hdr = self.parse_fitsfile(filepath)  # data[Dec, RA] and .fits header
+        if px2arcsec is not None and len(px2arcsec) == 2:
+            self.px2arcsec = px2arcsec
+        if refpx is not None and len(refpx) == 2:
+            self.refpx = refpx
+        if refval is not None and len(refval) == 2:
+            self.refval = refval
+        if photzp is not None:
+            self.photzp = photzp
+        self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=self.photzp)
+        # get rid of methods when inherited
+        if self.__class__.__name__ != SkyF.__name__ and hasattr(SkyF, 'show_fullsky'):
+            del SkyF.show_fullsky
+        # some verbosity
+        if verbose:
+            print(self.__v__)
+
+    def __eq__(self, other):
+        if isinstance(other, SkyF):
+            return self.filepath == other.filepath
+        elif isinstance(other, str):
+            return self.filepath == other
+        else:
+            NotImplemented
+
+    def __copy__(self):
+        args = (self.filepath,)
+        kwargs = {
+            'px2arcsec': self.px2arcsec,
+            'refval': self.refval,
+            'refpx': self.refpx,
+            'photzp': self.photzp
+        }
+        return SkyF(*args, **kwargs)
+
+    def __deepcopy__(self, memo):
+        args = (copy.deepcopy(self.filepath, memo),)
+        kwargs = {
+            'px2arcsec': copy.deepcopy(self.px2arcsec, memo),
+            'refval': copy.deepcopy(self.refval, memo),
+            'refpx': copy.deepcopy(self.refpx, memo),
+            'photzp': copy.deepcopy(self.photzp, memo)
+        }
+        return SkyF(*args, **kwargs)
+
+    def __str__(self):
+        return "SkyF({}@[{:.4f}, {:.4f}])".format(self.band, *self.center)
+
+    def __repr__(self):
+        return self.__str__()
+
+    @property
+    def tests(self):
+        """
+        A list of attributes being tested when calling __v__
+
+        Args/Kwargs:
+            None
+
+        Return:
+            tests <list(str)> - a list of test variable strings
+        """
+        return ['filename', 'filepath', 'band', 'naxis1', 'naxis2', 'naxis_plus',
+                'refval', 'refpx', 'center', 'px2deg', 'px2arcsec', 'megacam_range',
+                'field', 'photzp', 'mag_formula']
+
+    @property
+    def __v__(self):
+        """
+        Info string for test printing
+
+        Args/Kwargs:
+            None
+
+        Return:
+            <str> - test of SkyF attributes
+        """
+        return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in self.tests])
+
+    def copy(self, verbose=False):
+        cpy = copy.copy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    def deepcopy(self, verbose=False):
+        cpy = copy.deepcopy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    @property
+    def filename(self):
+        """
+        File name of the .fits file
+
+        Args/Kwargs:
+            None
+
+        Return:
+            filename <str> - Base name of the file path
+        """
+        return os.path.basename(self.filepath)
+
+    @staticmethod
+    def check_path(filepath, check_ext=True, extensions=['.fits', '.fit', '.fts'],
+                   verbose=False):
+        """
+        Check whether the input file exists and is readable
+
+        Args:
+            filepath <str> - path string to the .fits file
+
+        Kwargs:
+            check_ext <bool> - check path for .fits extension
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            filepath <str> - verified path string to the .fits file
+        """
+        # validate input
+        if filepath is None:
+            return None
+        if not isinstance(filepath, str):
+            raise TypeError("Input path needs to be string")
+        # expand shortcuts
+        if '~' in filepath:
+            filepath = os.path.expanduser(filepath)
+        if not os.path.isabs(filepath):
+            filepath = os.path.abspath(filepath)
+        # check if path exists
+        if not os.path.exists(filepath):
+            try:  # python 3
+                FileNotFoundError
+            except NameError:  # python 2
+                FileNotFoundError = IOError
+            raise FileNotFoundError("'{}' does not exist".format(filepath))
+        # optionally check extension
+        if check_ext and True not in [filepath.endswith(ext) for ext in extensions]:
+            raise ValueError('Input file path need to be a .fits file')
+        # some verbosity
+        if verbose:
+            print("Valid input path:\n{}".format(filepath))
+        return filepath
+
+    @staticmethod
+    def parse_fitsfile(filepath, header=True, header_only=False, verbose=False):
+        """
+        Parse the .fits file's data and/or header
+
+        Args:
+            filepath <str> - path string to the .fits file
+
+        Kwargs:
+            header <bool> - parse header of .fits file
+            header_only <bool> - parse only header of .fits file, skip data parsing
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            data <numpy.ndarray>, hdr <dict> - parsed .fits file
+        """
+        if header_only:
+            header = True
+        filepath = SkyF.check_path(filepath)
+        # get data and header
+        data, hdrobj = fits.getdata(filepath, header=True)
+        # make a dict out of the header object
+        if header:
+            hdr = dict(hdrobj)
+            keys = sorted(set(hdrobj), key=hdrobj.index)
+            for k in keys:  # reformatting comments
+                if isinstance(hdr[k], fits.header._HeaderCommentaryCards):
+                    comments = [i for i in hdr[k] if i is not '']
+                    for i, c in enumerate(comments):
+                        c2 = comments[min(i+1, len(comments)-1)]
+                        if c2.startswith(" ") and c2.strip()[0].islower():  # mult lines comments
+                            comments[i] = c.strip()+" "+c2.strip()
+                            del comments[min(i+1, len(comments)-1)]
+                        else:
+                            comments[i] = c.strip()
+                    hdr[k] = comments
+        # standardize header dictionary
+        for key in SkyF.hdr_keys:
+            if key not in hdr.keys():
+                hdr[key] = None
+        if 'COMMENT' not in hdr.keys():
+            hdr['COMMENT'] = []
+        # standardize data list/array
+        if hasattr(data[0], 'field'):  # data rows are FITS_record > np.array
+            standard = []
+            for i in range(len(data[0])):
+                standard.append(np.asarray(data.field(i)))
+            data = np.array(standard)
+        data = data.squeeze()
+        # deal with data if pixeltype is healpix
+        if 'PIXTYPE' in hdr and 'HEALPIX' in hdr['PIXTYPE']:
+            try:  # import healpy
+                from healpy import pixelfunc
+            except ImportError:
+                raise ImportError(
+                    "For this fits file format you need to install healpy\n"
+                    + "Use: pip install --user healpy")
+            # remap 1D array according to ordering scheme
+            mapping = []
+            if 'ORDERING' in hdr:
+                nside = int(hdr['NSIDE']) if 'NSIDE' in hdr else 1024
+                for d in data:
+                    if hdr['ORDERING'] == 'NESTED':
+                        idx = pixelfunc.ring2nest(nside, np.arange(d.size, dtype=np.int32))
+                        mapping.append(d[idx])
+                    elif hdr['ORDERING'] == 'RING':
+                        idx = pixelfunc.nest2ring(nside, np.arange(d.size, dtype=np.int32))
+                        mapping.append(d[idx])
+                    else:  # assume NESTED
+                        print("Ordering undefined: defaulting back to NESTED ordering scheme")
+                        idx = pixelfunc.ring2nest(nside, np.arange(d.size, dtype=np.int32))
+                        mapping.append(d[idx])
+            if len(mapping) == 1:
+                data = mapping[0]
+            else:
+                data = mapping
+        # some verbosity
+        if verbose:
+            if not header_only:
+                print('DATA:')
+                print(str(data)+"\n")
+            if header:
+                print('HEADER:')
+                for k in keys:
+                    if isinstance(hdr[k], list):
+                        print(k+"\n\t"+"\n\t".join(hdr[k]))
+                    else:
+                        print(k.ljust(20)+str(hdr[k]))
+        # select what to return
+        if header and header_only:
+            return hdr
+        elif header:
+            return data, hdr
+        else:
+            return data
+
+    @property
+    def band(self):
+        """
+        Simplified string of the .fits image's band
+
+        Args/Kwargs:
+            None
+
+        Return:
+            band <str> - simplified string of the image's band
+        """
+        if self.hdr['FILTER'] is not None:
+            return self.hdr['FILTER'].split('.')[0]
+
+    @property
+    def naxis1(self):
+        """
+        Length of axis 1
+
+        Args/Kwargs:
+            None
+
+        Return:
+            naxis1 <int> - number of pixels along axis 1
+        """
+        if self.hdr['NAXIS1'] is None:
+            return self.data.shape[0]
+        else:
+            return self.hdr['NAXIS1']
+
+    @property
+    def naxis2(self):
+        """
+        Length of axis 2
+
+        Args/Kwargs:
+            None
+
+        Return:
+            naxis2 <int> - number of pixels along axis 2
+        """
+        if self.hdr['NAXIS2'] is None:
+            return self.data.shape[1]
+        else:
+            return self.hdr['NAXIS2']
+
+    @property
+    def naxis_plus(self):
+        """
+        Length of axis 3 and more
+
+        Args/Kwargs:
+            None
+
+        Return:
+            naxis_plus <list(int)> - number of pixels along each additional axis
+        """
+        if 'NAXIS' in self.hdr.keys():
+            naxis = self.hdr['NAXIS']
+        else:
+            naxis = sum(['NAXIS' in k for k in self.hdr.keys()])
+        if naxis > 2:
+            plus = []
+            for i in range(3, naxis+1):
+                plus.append(self.hdr['NAXIS{}'.format(i)])
+            return plus
+        else:
+            return None
+
+    @property
+    def refval(self):
+        """
+        Reference pixel from .fits image
+
+        Args/Kwargs:
+            None
+
+        Return:
+            refval <float,float> - reference pixel coordinates in degrees
+        """
+        return self.refpx_from_hdr(self.hdr, as_radec=True)
+
+    @refval.setter
+    def refval(self, refval):
+        """
+        Change reference pixel from .fits image by changing the CRVAL1/CRVAL2 entries
+
+        Args:
+            refval <float,float> - reference pixel coordinates in degrees
+
+        Kwargs/Return:
+            None
+
+        Note:
+            - those entry changes will not be saved in the .fits file, only in the dict
+        """
+        self.hdr['CRVAL1'] = refval[0]
+        self.hdr['CRVAL2'] = refval[1]
+
+    @property
+    def refpx(self):
+        """
+        Reference pixel from .fits image
+
+        Args/Kwargs:
+            None
+
+        Return:
+            refpx <int,int> - reference pixel coordinates in pixels
+        """
+        return self.refpx_from_hdr(self.hdr, as_radec=False)
+
+    @refpx.setter
+    def refpx(self, refpx):
+        """
+        Change reference pixel values from .fits image by changing the CRPIX1/CRPIX2 entries
+
+        Args:
+            refpx <int,int> - reference pixel coordinates in pixels
+
+        Kwargs/Return:
+            None
+
+        Note:
+            - those entry changes will not be saved in the .fits file, only in the dict
+        """
+        self.hdr['CRPIX1'] = refpx[0]
+        self.hdr['CRPIX2'] = refpx[1]
+
+    @property
+    def px2deg(self):
+        """
+        Pixel scale, i.e. pixel-to-degree conversion factors, for RA and Dec
+
+        Args/Kwargs:
+            None
+
+        Return:
+            px2deg <float,float> - pixel-to-degrees conversion factor in units of degrees/pixels
+        """
+        return self.pxscale_from_hdr(self.hdr, as_degrees=True)
+
+    @px2deg.setter
+    def px2deg(self, pxscale):
+        """
+        Change the pixel scale of the .fits file by changing the distortion matrix entries
+
+        Args:
+            pxscale <float,float> - pixel-to-degrees conversion factor in units of degrees/pixels
+
+        Kwargs/Return:
+            None
+
+        Note:
+            - those entry changes will not be saved in the .fits file, only in the dict
+        """
+        self.hdr['CD1_1'] = -pxscale[0]
+        self.hdr['CD1_2'] = 0
+        self.hdr['CD2_1'] = 0
+        self.hdr['CD2_2'] = pxscale[1]
+
+    @property
+    def px2arcsec(self):
+        """
+        Pixel scale, i.e. pixel-to-arcsec conversion factors, for RA and Dec
+
+        Args/Kwargs:
+            None
+
+        Return:
+            pxscale <float,float> - pixel-to-arcsec conversion factor in units of arcsecs/pixels
+        """
+        return self.pxscale_from_hdr(self.hdr, as_degrees=False)
+
+    @px2arcsec.setter
+    def px2arcsec(self, pxscale):
+        """
+        Change the pixel scale of the .fits file by changing the distortion matrix entries
+
+        Args:
+            pxscale <float,float> - pixel-to-arcsec conversion factor in units of arcsecs/pixels
+
+        Kwargs/Return:
+            None
+
+        Note:
+            - those entry changes will not be saved in the .fits file, only in the dict
+        """
+        self.hdr['CD1_1'] = -pxscale[0]/3600.
+        self.hdr['CD1_2'] = 0
+        self.hdr['CD2_1'] = 0
+        self.hdr['CD2_2'] = pxscale[1]/3600.
+
+    @property
+    def photzp(self):
+        """
+        Photometric zero-point
+
+        Args/Kwargs:
+            None
+
+        Return:
+            photzp <float> - photometric zero-point needed for AB magnitude conversion
+        """
+        return self.hdr['PHOTZP']
+
+    @photzp.setter
+    def photzp(self, photzp):
+        """
+        Change photometric zero-point by changing the PHOTZP entry
+
+        Args:
+            photzp <float> - photometric zero-point needed for AB magnitude conversion
+
+        Kwargs/Return:
+            None
+        Note:
+            - those entry changes will not be saved in the .fits file, only in the dict
+        """
+        self.hdr['PHOTZP'] = photzp
+        self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=photzp)
+
+    @property
+    def field(self):
+        """
+        Field signature of the survey (e.g. for CFHTLS: W3+3-2,...)
+
+        Args/Kwargs:
+            None
+
+        Return:
+            field <str> - Field signature
+        """
+        if self.hdr['OBJECT'] is not None:
+            field = re.sub("\.", "", self.hdr['OBJECT'].upper())
+            # standardize, i.e. if field ends with 0, switch ...-0 => ...+0
+            if field[-1] == '0' and field[-2] == '-':
+                field = field[:-2]+re.sub("\-", "+", field[-2:])
+            return field
+
+    @property
+    def megacam_range(self):
+        """
+        Image selection range in the MegaPipe image stacking pipeline
+
+        Args/Kwargs:
+            None
+
+        Return:
+            selection <(int,int),(int,int)> - lower left and upper right pixel coordinates
+        """
+        try:
+            field_props = MEGACAM_FPROPS[self.field]
+        except:
+            print("Properties of that field are unknown [{}]".format(self.field))
+            return None
+        # get field size
+        refx, refy = field_props['X'], field_props['Y']
+        refra, refdec = self.refval
+        diff_ra, diff_dec = refra-self.center[0], refdec-self.center[1]
+        x = int(refx+diff_ra*np.cos(refdec*np.pi/180)/self.px2deg[0])
+        y = int(refy-diff_dec/self.px2deg[1])
+        return [(math.ceil(x-(self.naxis1-1)/2), math.floor(x+self.naxis1/2)),
+                (math.ceil(y-(self.naxis2-1)/2), math.floor(y+self.naxis2/2))]
+
+    @property
+    def center(self):
+        """
+        The approximate center of the .fits file's image
+
+        Args/Kwargs:
+            None
+
+        Return:
+            center <Skycoords object> - center coordinate of the .fits file's image
+        """
+        return SkyCoords.from_pixels(self.naxis1/2, self.naxis2/2, px2arcsec_scale=self.px2arcsec,
+                                     reference_pixel=self.refpx, reference_value=self.refval)
+
+    @property
+    def magnitudes(self):
+        """
+        A magnitude map converted from data
+
+        Args/Kwargs:
+            None
+
+        Return:
+            mags <np.ndarray> - magnitude map converted from data
+        """
+        mags = self.mag_formula(self.data)
+        # filter out nans
+        mags[np.isnan(mags)] = np.max(mags[~np.isnan(mags)])
+        return mags
+
+    def total_magnitude(self, radius, center=None, verbose=False):
+        """
+        Radially integrated total magnitude
+
+        Args:
+            radius <int> - integration radius in pixels
+
+        Kwargs:
+            center <int,int> - integration center in pixels; if None, the image's center is used
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            totmag <float> - radially integratedd total magnitude
+        """
+        if center is None:
+            center = (self.naxis1//2, self.naxis2//2)
+        # select integration area
+        msk = np.indices(self.data.shape)
+        msk[0] -= center[0]
+        msk[1] -= center[1]
+        msk = np.square(msk)  # square for easier distance comparison
+        msk = msk[0, :, :] + msk[1, :, :] < radius*radius
+        fluxsum = np.sum(self.data[msk])  # integrated flux
+        fluxsum = max(0, fluxsum)
+        totmag = self.mag_formula(fluxsum)  # magnitude of integrated flux
+        # some verbosity
+        if verbose:
+            print(totmag)
+        return totmag
+
+    def image_f(self, cmap='magma'):
+        """
+        An 8-bit PIL.Image of the .fits data
+
+        Args:
+            None
+
+        Kwargs:
+            cmap <str> - a cmap string from matplotlib.colors.Colormap
+
+        Return:
+            f_image <PIL.Image object> - a colorized image object
+        """
+        from PIL import Image
+        cmap = plt.get_cmap(cmap)
+        if self.data is not None:
+            lower = self.data.min()
+            upper = self.data.max()
+            return Image.fromarray(
+                np.uint8(255*cmap((self.data-lower)/(upper-lower)))
+            ).transpose(Image.FLIP_TOP_BOTTOM)
+        return self.data
+
+    def cutout(self, window, center=None, verbose=False):
+        """
+        Cutout a square segment of the .fits file's image
+
+        Args:
+            window <int> - window size in pixels of the cutout
+            center <int,int> - pixel coordinates of the window's center
+
+        Kwargs:
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            cutout <np.ndarray> - cutout part of the .fits file's image
+        """
+        if center is None:
+            center = (self.naxis1//2, self.naxis2//2)
+        if window % 2:
+            co = window//2 + 1, window//2
+        else:
+            co = window//2, window//2
+        cutout = self.data[center[1]-co[0]:center[1]+co[1],
+                           center[0]-co[0]:center[0]+co[1]]
+        # some verbosity
+        if verbose:
+            print("Cropped data around {} of size {}x{}".format(center, window, window))
+            print(cutout)
+        return cutout
+
+    def gain(self, window=20, center=(10, 10), factor=1, verbose=False):
+        """
+        Calculate the gain from an empty, noisy square region in the .fits image
+
+        Args:
+            None
+
+        Kwargs:
+            window <int> - window size in pixels of the empty, noisy region
+            center <int,int> - pixel coordinates of the window's center
+            factor <float> - efficiency factor for the gain estimation
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            gain <float> - an estimate of the gain with sigma^2/mean
+        """
+        noisecut = self.cutout(window, center)
+        # gain = factor*abs(np.std(noisecut)**2/np.mean(noisecut))
+        gain = (np.sqrt(np.mean(noisecut))/np.std(noisecut))**2
+        if verbose:
+            print(gain)
+        return gain
+
+    @staticmethod
+    def pxscale_from_hdr(hdr, as_degrees=False, verbose=False):
+        """
+        Get pixel scale from .fits file header (assuming ctype=RA/DEC and cunit=deg)
+
+        Args:
+            hdr <dict> - dictionary of the .fits file header
+
+        Kwargs:
+            as_degrees <bool> - return result in degrees instead of arcsecs
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            cdelt1 <float>, cdelt2 <float> - pixel scales for RA and Dec
+        """
+        if any([hdr[k] is None for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
+            return [None, None]
+        if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
+            print("Warning! In the WCS rotation East is not to the left!")
+        cdelt1 = math.sqrt(hdr['CD1_1']*hdr['CD1_1']+hdr['CD2_1']*hdr['CD2_1'])
+        cdelt2 = math.sqrt(hdr['CD1_2']*hdr['CD1_2']+hdr['CD2_2']*hdr['CD2_2'])
+        # calculate the determinante of the distortion matrix
+        det = hdr['CD1_1']*hdr['CD2_2']-hdr['CD1_2']*hdr['CD2_1']
+        sign = det//abs(det)  # the sign of the determinante
+        # rotation of the coordinate system axes relative to the world coordinates
+        crota2 = 0.5*(math.atan2(-hdr['CD2_1'], sign*hdr['CD1_1'])
+                      + math.atan2(sign*hdr['CD1_2'], hdr['CD2_2']))
+        if abs(crota2) > 1e-9:
+            print("Warning! The coordinate system is skewed!")
+        # select how to return pixel scale of RA, Dec
+        if as_degrees:
+            if verbose:
+                print([cdelt1, cdelt2])
+            return [cdelt1, cdelt2]
+        if verbose:
+            print([3600*cdelt1, 3600*cdelt2])
+        return [3600*cdelt1, 3600*cdelt2]
+
+    @staticmethod
+    def crota2_from_hdr(hdr, as_degrees=False, verbose=False):
+        """
+        Get rotation (of y-axis) and skew of coordinate system from .fits file header
+        (assuming ctype=RA/DEC and cunit=deg)
+
+        Args:
+            hdr <dict> - dictionary of the .fits file header
+
+        Kwargs:
+            as_degrees <bool> - return result in degrees instead of arcsecs
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            crota2 <float>, skew <float> - rotation angle and skew of pixel grid
+        """
+        if any([hdr[k] is None for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
+            return [None, None]
+        if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
+            print("Warning! In the WCS rotation East is not to the left!")
+        # calculate the determinante of the distortion matrix
+        det = hdr['CD1_1']*hdr['CD2_2']-hdr['CD1_2']*hdr['CD2_1']
+        sign = det//abs(det)  # the sign of the determinante
+        crot1 = math.atan2(-hdr['CD2_1'], sign*hdr['CD1_1'])
+        crot2 = math.atan2(sign*hdr['CD1_2'], hdr['CD2_2'])
+        crota2 = 0.5*(crot1+crot2)  # average of the rotation angles of both axes
+        skew = abs(crot1-crot2)
+        # select how to return pixel scale of rotation and skew
+        if as_degrees:
+            if verbose:
+                print([180./math.pi*crota2, 180./math.pi*skew])
+            return [180./math.pi*crota2, 180./math.pi*skew]
+        if verbose:
+            print([crota2, skew])
+        return [crota2, skew]
+
+    @staticmethod
+    def refpx_from_hdr(hdr, as_radec=False, verbose=False):
+        """
+        Get reference pixel from .fits file header (assuming ctype=RA/DEC and cunit=deg)
+
+        Args:
+            hdr <dict> - dictionary of the .fits file header
+
+        Kwargs:
+            as_radec <bool> - return RA,Dec result in degrees instead of pixels
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            refx <int/float>, refy <int/float> - reference pixel coordinates
+        """
+        refx, refy = hdr['CRPIX1'], hdr['CRPIX2']
+        if as_radec:
+            refx, refy = hdr['CRVAL1'], hdr['CRVAL2']
+        # some verbosity
+        if verbose:
+            print([refx, refy])
+        return [refx, refy]
+
+    @staticmethod
+    def mag_formula_from_hdr(hdr, photzp=None, mag_key='AB magnitude', verbose=False):
+        """
+        Get the magnitude formula from the .fits file header
+
+        Args:
+            hdr <dict> - dictionary of the .fits file header
+            flux <float> - flux to be converted to
+
+        Kwargs:
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            magnitude <func> - magnitude conversion formula
+        """
+        if photzp is None:
+            photzp = 30
+        # search the formula in the comments
+        formula_match = [c for c in hdr['COMMENT'] if mag_key in c]
+        formula_str = "-2.5 * log10(flux) + PHOTZP"
+        if formula_match:
+            formula_str = formula_match[0].split("=")[-1].strip()
+        # flux formatting
+        if not any([c in formula_str for c in ['flux', 'FLUX', 'ADU', 'adu']]):
+            formula_str = "-2.5 * log10(flux) + PHOTZP"
+        else:
+            formula_str = re.sub('(?i)flux', 'flux', formula_str)
+            formula_str = re.sub('(?i)adu', 'flux', formula_str)
+        # photzp formatting
+        if not any([c in formula_str for c in ['photzp', 'PHOTZP', 'zp', 'ZP']]):
+            formula_str = "-2.5 * log10(flux) + PHOTZP"
+        else:
+            formula_str = re.sub('(?i)photzp', '{:.24f}', formula_str).format(photzp)
+        # log10 formatting
+        formula_str = re.sub('(?i)log', 'np.log', formula_str)
+        if verbose:
+            print(formula_str)
+
+        def formula(flux, verbose=verbose):
+            rslt = eval(formula_str)
+            if verbose:
+                print(rslt)
+            return rslt
+        formula.__name__ = "mag_formula"
+        return formula
+
+    def plot_f(self, fig, ax=None, as_magnitudes=False, scalebar=True,
+               colorbar=False, plain=False,
+               verbose=False, cmap='magma', reverse_map=False, **kwargs):
+        """
+        Plot the image on an axis
+
+        Args:
+            fig <matplotlib.figure.Figure object> - figure in which the image is to be plotted
+
+        Kwargs:
+            ax <matplotlib.axes.Axes object> - option to control on which axis the image is plotted
+            as_magnitudes <bool> - if True, plot data as magnitudes
+            scalebar <bool> - if True, add scalebar plot (15% of the image's width)
+            colorbar <bool> - if True, add colorbar plot
+            verbose <bool> -  verbose mode; print command line statements
+            kwargs **<dict> - keywords for the imshow function
+
+        Return:
+            fig <matplotlib.figure.Figure object> - figure in which the image was plotted
+            ax <matplotlib.axes.Axes object> - axis on which the image was plotted
+        """
+        # check axes
+        if ax is None or len(fig.get_axes()) < 1:
+            ax = fig.add_subplot(111)
+        # handle bad pixels
+        cmap = plt.get_cmap(cmap)
+        cmap.set_bad('black', alpha=1)
+        cmap.set_under('black', alpha=1)
+        # plot data
+        if as_magnitudes:
+            if self.naxis_plus is not None and len(self.data.shape) > 2:
+                img = ax.imshow(np.sum(self.magnitudes, axis=0), cmap=cmap, **kwargs)
+            else:
+                img = ax.imshow(self.magnitudes, cmap=cmap, **kwargs)
+        else:
+            if self.naxis_plus is not None and len(self.data.shape) > 2:
+                d = np.sum(self.data, axis=0)
+                img = ax.imshow(d, cmap=cmap, vmax=np.nanmax(d)*0.1, **kwargs)
+            else:
+                d = self.data
+                img = ax.imshow(d, cmap=cmap, **kwargs)
+        if colorbar:  # plot colorbar
+            clrbar = fig.colorbar(img)
+            clrbar.outline.set_visible(False)
+        if scalebar and self.px2arcsec[0] is not None:  # plot scalebar
+            from matplotlib import patches
+            barpos = (0.05*self.naxis1, 0.025*self.naxis2)
+            w, h = 0.15*self.naxis1, 0.01*self.naxis2
+            scale = self.px2arcsec[0]*w
+            rect = patches.Rectangle(barpos, w, h, facecolor='white', edgecolor=None, alpha=0.85)
+            ax.add_patch(rect)
+            ax.text(barpos[0]+w/4, barpos[1]+2*h, r"$\mathrm{{{:.1f}''}}$".format(scale),
+                    color='white', fontsize=16)
+            # flip axes
+        ax.set_xlim(left=0, right=self.naxis1)
+        ax.set_ylim(bottom=0, top=self.naxis2)
+        ax.set_aspect('equal')
+        # no axis tick labels
+        plt.axis('off')
+        # plt.tight_layout()
+        # some verbosity
+        if verbose:
+            print(ax)
+        return fig, ax
+
+    def show_f(self, savefig=None, **kwargs):
+        """
+        Plot the image on a new figure
+
+        Args:
+            None
+
+        Kwargs:
+            as_magnitudes <bool> - if True, plot data as magnitudes
+            scalebar <bool> - if True, add scalebar plot (15% of the image's width)
+            colorbar <bool> - if True, add colorbar plot
+            savefig <str> - save figure in file string instead of showing it
+            verbose <bool> -  verbose mode; print command line statements
+            kwargs **<dict> - other keywords for the figure and imshow function
+
+        Return:
+            fig <matplotlib.figure.Figure object> - figure with the image's plot
+            ax <matplotlib.axes.Axes object> - axis on which the image was plotted
+        """
+        fsize = kwargs.pop('figsize', (8, 6))
+        verbose = kwargs.get('verbose', False)
+        if fsize is None:
+            fsize = (8, 6)
+        # open a new figure
+        fig = plt.figure(figsize=fsize)
+        ax = fig.add_subplot(111)
+        fig, ax = self.plot_f(fig, ax, **kwargs)
+        if savefig is not None:
+            if not savefig.endswith(".pdf") and not savefig.endswith(".jpg") \
+               and not savefig.endswith(".png") and not savefig.endswith(".eps"):
+                savefig = savefig + ".pdf"
+            plt.savefig(savefig)
+        else:
+            plt.show()
+        # some verbosity
+        if verbose:
+            print(fig)
+        return fig, ax
+
+    def show_fullsky(self, cmap='gnuplot2', savefig=None, bg='black',
+                     **kwargs):
+        """
+        Plot the data as a Mollweide-projected fullsky map
+        For compatible .fits files, see: https://pla.esac.esa.int/pla/#maps
+
+        Args:
+            None
+
+        Kwargs:
+            savefig <str> - save figure in file string instead of showing it
+            verbose <bool> -  verbose mode; print command line statements
+            kwargs **<dict> - other keywords for the figure and mollview function
+
+        Return:
+            fig <matplotlib.figure.Figure object> - figure with the image's plot
+            ax <matplotlib.axes.Axes object> - axis on which the image was plotted
+
+        Note:
+            - Needs healpy module
+            - Only compatible with .fits files with HEALPIX pixel type
+        """
+        try:  # import healpy
+            from healpy import mollview
+        except ImportError:
+            raise ImportError(
+                "For this fits file format you need to install healpy\n"
+                + "Use: pip install --user healpy")
+        if 'HEALPIX' not in self.hdr:
+            pass
+        fsize = kwargs.pop('figsize', (8, 6))
+        verbose = kwargs.get('verbose', False)
+        if fsize is None:
+            fsize = (8, 6)
+        mu, sigma = 1.2*self.data.mean(), self.data.std()
+        # open a new figure
+        fig = plt.figure(figsize=fsize)
+        cmap = plt.get_cmap(cmap)
+        cmap.set_bad(bg, alpha=1)
+        cmap.set_under(bg, alpha=1)
+        mollview(self.data, fig=fig.number, xsize=fsize[0]*300,
+                 min=mu-.3*sigma, max=mu,  # +.3*sigma,
+                 title="", cbar=False,
+                 cmap=cmap)
+        ax = fig.axes[0]
+        if savefig is not None:
+            if not savefig.endswith(".pdf") and not savefig.endswith(".jpg") \
+               and not savefig.endswith(".png") and not savefig.endswith(".eps"):
+                savefig = savefig + ".pdf"
+            plt.savefig(savefig, facecolor=bg)
+        else:
+            plt.show()
+        # some verbosity
+        if verbose:
+            print(fig)
+        return fig, ax
+
+
+# MAIN FUNCTION ###############################################################
+def main(case, args):
+    """
+    Main function to use SkyF from command line
+
+    Args:
+        case <str> - test case
+        args <namespace> - namespace of keyword arguments for all functions
+
+    Kwargs:
+        end_message <str> - optional message for printing at the end
+
+    Return:
+        None
+    """
+    sp = SkyF(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
+              photzp=args.photzp, verbose=args.verbose)
+    if args.show or args.savefig is not None and args.fullsky is None:
+        sp.show_f(as_magnitudes=args.mags, figsize=args.figsize, savefig=args.savefig,
+                  scalebar=args.scalebar, colorbar=args.colorbar, verbose=args.verbose)
+    if args.fullsky:
+        sp.show_fullsky(figsize=args.figsize, savefig=args.savefig, verbose=args.verbose)
+
+
+def parse_arguments():
+    """
+    Parse command line arguments
+    """
+    from argparse import ArgumentParser, RawTextHelpFormatter
+    parser = ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
+    # main args
+    parser.add_argument("case", nargs='?',
+                        help="Path input to .fits file for skyf to use",
+                        default=os.path.abspath(os.path.dirname(__file__)) \
+                        + '/test/W3+3-2.U.12907_13034_7446_7573.fits')
+    parser.add_argument("--scale", metavar=("<dx", "dy>"), nargs=2, type=float,
+                        help="Pixel-to-arcsec scale for x (-RA) and y (Dec) direction")
+    parser.add_argument("--refpx", metavar=("<x", "y>"), nargs=2, type=float,
+                        help="Coordinates of the reference pixel")
+    parser.add_argument("--refval", metavar=("<ra", "dec>"), nargs=2, type=float,
+                        help="Values of the reference pixel")
+    parser.add_argument("--photzp", metavar="<zp>", type=float,
+                        help="Magnitude zero-point information")
+
+    # plotting args
+    parser.add_argument("-s", "--show", dest="show", action="store_true",
+                        help="Plot and show the .fits file's data",
+                        default=False)
+    parser.add_argument("--figsize", dest="figsize", metavar=("<w", "h>"), nargs=2, type=float,
+                        help="Size of the figure (is multiplied by the default dpi)")
+    parser.add_argument("-m", "--magnitudes", dest="mags", action="store_true",
+                        help="Plot the .fits file's data in magnitudes",
+                        default=False)
+    parser.add_argument("--scalebar", dest="scalebar", action="store_true",
+                        help="Plot the scalebar in the figure",
+                        default=False)
+    parser.add_argument("--colorbar", dest="colorbar", action="store_true",
+                        help="Plot the colorbar next to the figure",
+                        default=False)
+    parser.add_argument("--savefig", dest="savefig", metavar="<output-name>", type=str,
+                        help="Save the figure in <output-name> instead of showing it")
+    parser.add_argument("--fullsky", dest="fullsky", action="store_true",
+                        help="Plot the data as a Mollweide-projected fullsky map",
+                        default=False)
+
+    # mode args
+    parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
+                        help="Run program in verbose mode",
+                        default=False)
+    parser.add_argument("-t", "--test", "--test-mode", dest="test_mode", action="store_true",
+                        help="Run program in testing mode",
+                        default=False)
+    args = parser.parse_args()
+    case = args.case
+    delattr(args, 'case')
+    return parser, case, args
+
+
+###############################################################################
+if __name__ == "__main__":
+    parser, case, args = parse_arguments()
+    no_input = len(sys.argv) <= 1 and os.path.abspath(os.path.dirname(__file__))+'/test/' in case
+    if no_input:
+        parser.print_help()
+    elif args.test_mode:
+        sys.argv = sys.argv[:1]
+        from gleam.test.test_skyf import TestSkyF
+        TestSkyF.main()
+    else:
+        main(case, args)
