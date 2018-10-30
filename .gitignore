@@ -1,0 +1,6 @@
+.gitignore
+activate
+include/*
+lib/*
+src/glass/*
+venv/*

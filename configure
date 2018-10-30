@@ -1,0 +1,23 @@
+#!/bin/bash
+ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+echo "Currently in $ROOT";
+set -x;
+
+# Unpack src libraries
+cd $ROOT/src
+for f in $(ls $ROOT/src/*.tar.gz); do
+    echo $f
+    tar zxfv $f
+done;
+cd $ROOT;
+
+# Set up virtual environment
+virtualenv venv;
+ln -s $ROOT/venv/bin/activate $ROOT/activate;
+# Install requirements in the virtual environment
+if [ -d "$ROOT/venv" ]; then
+    source $ROOT/activate;
+    pip install -r $ROOT/requirements.txt
+fi;
+
+set +x;

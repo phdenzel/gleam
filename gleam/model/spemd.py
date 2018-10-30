@@ -11,8 +11,8 @@ Base parameters (see modelbase.py):
 Model-specific parameters:
     - theta_E: Einstein radius (sets specific scale)
     - q: minor-to-major axis ratio
-    - phi_G: position angle 
-    - gamma: power-law slope index
+    - phi_G: position angle
+    - gamma: power-law slope
 Image parameters (see modelbase.py):
     - Nx, Ny: image size (in pixels)
     - n_subsamples: number of sub-pixels
@@ -42,32 +42,36 @@ class SPEMD(_BaseModel):
         Kwargs:
             x <float> - first center coordinate on x-axis
             y <float> - second center coordinate on y-axis
-            phi <float> - position angle (in radians [0, 2\pi])
-            e <float> - ellipticity [0, 1]
-            I_0 <float> - intensity at r=0
-            c_0 <float> - box parameter
-            n <float> - Sersic index
-            r_s <float> - half-light radius
+            phi_G <float> - position angle with respect to y-axis
+                            (in radians [0, 2\pi])
+            q <float> - minor-to-major axis ratio [0.5, 1]
+            gamma <float> - power-law slope index
+            s <float> - smoothing/core radius
+            phi <float> - position angle (in radians [0, 2\pi]) will be overridden by phi_G
+            e <float> - ellipticity [0, 1] will be overridden by q
             Nx <int> - number of pixels along the x-axis
             Ny <int> - number of pixels along the y-axis
             n_subsamples: number of subsampling pixels
             verbose <bool> - verbose mode; print command line statements
 
         Return:
-            <Sersic object> - Sersic model object instance
+            <SPEMD object> - SPEMD model object instance
         """
+        # Model specific parameters
         theta_E = kwargs.pop('theta_E', 1.)
         q = kwargs.pop('q', 1)
         phi_G = kwargs.pop('phi_G', 0.)
         gamma = kwargs.pop('gamma', 2.)
+        s = kwargs.pop('s', 1e-8)
+        self.theta_E = theta_E
+        self.phi_G = phi_G
+        self.gamma = gamma
+        self.s2 = s*s
         # Base parameters
-        kwargs['phi'] = phi_G
+        kwargs['phi'] = np.pi/2-phi_G
         kwargs['e'] = 1 - q
         super(SPEMD, self).__init__(**kwargs)
-        # Model specific parameters
-        self.theta_E = theta_E
-        self.phi_G = self.phi
-        # apply parameter constraints
+        # finally apply parameter constraints
         self.apply_constaints()
 
     def apply_constaints(self):
@@ -89,7 +93,46 @@ class SPEMD(_BaseModel):
         if self.q > 1:
             self.q = 1.
             self.theta_E = 0
-        
+
+    @property
+    def E(self):
+        """
+        Fixes overall normalization
+
+        Args/Kwargs:
+            None
+
+        Return:
+            E <float> - normalization factor
+        """
+        if hasattr(self, '_E'):
+            if (self.gamma, self.theta_E, self.q) in self._E:
+                return self._E[(self.gamma, self.theta_E, self.q)]
+        else:
+            self._E = {}
+        # E = self.theta_E / ((3-self.gamma) / 2.)**(1./(1-self.gamma))
+        E = (3.-self.gamma)/2. * (self.theta_E*self.theta_E / self.q)**((self.gamma-1.)/2.)
+        self._E[(self.gamma, self.theta_E, self.q)] = E
+        return self._E[(self.gamma, self.theta_E, self.q)]
+
+    @property
+    def eta(self):
+        """
+        Power-law index from Barkana (1998) [arXiv:astro-ph/9802002]
+
+        Args/Kwargs:
+            None
+
+        Return:
+            eta <float> - power-law index derived from gamma
+        """
+        if hasattr(self, '_eta'):
+            if (self.gamma) in self._eta:
+                return self._eta[self.gamma]
+        else:
+            self._eta = {}
+        self._eta[self.gamma] = 3-self.gamma
+        return self._eta[self.gamma]
 
     @property
     def profile_scale(self):
@@ -117,22 +160,21 @@ class SPEMD(_BaseModel):
         """
         self.theta_E = pscale
 
-    def get_major_profile(self, a):
+    def get_profile(self, a):
         """
-        Intensity at radius a along the semi-major axis
+        Surface mass density at radius a along the profile axis
 
         Args:
-            a <float> - radial distance from the center along the semi-major axis
+            a <float> - radial distance from the center along the profile axis
         Kwargs:
             None
 
         Return:
             I(r=a) <float> - intensity at radius a
         """
-        return 0
+        return self.E * (a*a + self.s2)**(self.eta/2. - 1)
 
 
 if __name__ == "__main__":
     from gleam.test.test_spemd import TestSPEMD
     TestSPEMD.main(verbosity=1)
-    

@@ -153,7 +153,7 @@ class Sersic(_BaseModel):
         """
         self.r_s = pscale
 
-    def get_major_profile(self, a):
+    def get_profile(self, a):
         """
         Intensity at radius a along the semi-major axis
 
@@ -172,4 +172,3 @@ class Sersic(_BaseModel):
 if __name__ == "__main__":
     from gleam.test.test_sersic import TestSersic
     TestSersic.main(verbosity=1)
-    

@@ -7,21 +7,21 @@ import os
 from setuptools import setup
 
 APP = ['modelzapper.py']
-PLIST = dict(CFBundleName='GLEAMing',
-             CFBundleDisplayName='GLEAMing',
-             CFBundleGetInfoString='Analyze photometric gravitational lens data' \
-             + ' using the GLEAM',
-             CFBundleIdentifier='org.pythonmac.gleam',
-             author_email='phdenzel@gmail.com',
-             CFBundleVersion='0.1.0',
-             CFBundleShortVersionString='0.1.0',
+PLIST = dict(CFBundleName="GLEAM",
+             CFBundleDisplayName="GLEAM",
+             CFBundleGetInfoString="Analyze photometric gravitational lens data" \
+             + " using the GLEAM",
+             CFBundleIdentifier="org.pythonmac.gleam",
+             author_email="phdenzel@gmail.com",
+             CFBundleVersion="0.1.0",
+             CFBundleShortVersionString="0.1.0",
              NSHumanReadableCopyright=u"Copyright \u00A9 2018, Philipp Denzel," \
              + " All Rights Reserved",
              LSBackgroundOnly=False,
 )
 DATAFILES = [('', ['']),
-             ('', ['libs']),
-             ('', ['includes']),
+             ('', ['lib']),
+             ('', ['include']),
 ]
 PACKAGES = [
     'numpy',
@@ -30,7 +30,7 @@ PACKAGES = [
     'PIL',
             
 ]
-OPTIONS = {'iconfile': 'imgs/zapper.icns',
+OPTIONS = {'iconfile': "imgs/gleam.icns",
            'plist': PLIST,
            'packages': PACKAGES,
 }

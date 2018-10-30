@@ -21,13 +21,12 @@ class TestSPEP(UnitTestPrototype):
     def setUp(self):
         # arguments and keywords
         self.model_kwargs = {
-            'x': 100,
-            'y': 100,
-            'phi_G': np.pi,
-            'phi': np.pi,
-            'q': 1.,
-            'theta_E': 1.,
-            'gamma': 2.
+            'phi_G': 1.731,
+            'phi': 1.731,
+            'q': .787,
+            'e': 1.-.787,
+            'theta_E': 1.161,
+            'gamma': 2.044
         }
         self.v = {'verbose': 1}
         # __init__ test
@@ -81,14 +80,12 @@ class TestSPEP(UnitTestPrototype):
 
     def test_model_parameters_setter(self):
         """ # model_parameters.setter """
-        kwargs = { # double all parameters except for gamma
-            'x': 200,
-            'y': 200,
-            'phi_G': 2*np.pi,
-            'phi': 2*np.pi,
-            'q': 2.,
-            'theta_E': 2.,
-            'gamma': 2.
+        kwargs = {  # double all parameters except for gamma
+            'phi_G': 2*self.model_kwargs['phi_G'],
+            'phi': 2*self.model_kwargs['phi'],
+            'q': 2*self.model_kwargs['q'],
+            'theta_E': 2*self.model_kwargs['theta_E'],
+            'gamma': 2.044
         }
         print(">>> {}".format(kwargs))
         before = self.spep.model_parameters[:]
@@ -100,16 +97,15 @@ class TestSPEP(UnitTestPrototype):
         print(SPEP.parameter_keys)
         print(before)
         print(after)
-        
+
     def test_set_model_parameters(self):
         """ # set_model_parameters """
-        kwargs = { # double all parameters except for gamma
-            'x': 200,
-            'y': 200,
-            'phi_G': 2*np.pi,
-            'q': 2.,
-            'theta_E': 2.,
-            'gamma': 2.
+        kwargs = {  # double all parameters except for gamma
+            'phi_G': 2*self.model_kwargs['phi_G'],
+            'phi': 2*self.model_kwargs['phi'],
+            'q': 2*self.model_kwargs['q'],
+            'theta_E': 2*self.model_kwargs['theta_E'],
+            'gamma': 2.044
         }
         print(">>> {}".format(kwargs))
         before = self.spep.model_parameters[:]
@@ -130,23 +126,31 @@ class TestSPEP(UnitTestPrototype):
         self.assertEqual(len(pars), len(self.spep.map_keys))
         print(SPEP.map_keys)
         print(pars)
-        print(list(zip(SPEP.map_keys, pars)))
-
-    def test_get_map(self):
-        """ # get_map """
-        print(">>> {}".format(()))
-        print("TODO")
 
     def test_calc_map(self):
         """ # calc_map """
         print(">>> {}".format(()))
-        print("TODO")
-        
+        self.spep.calc_map(smooth_center=True, **self.v)
+        self.assertTrue(np.any(self.spep.map2D))
+
+    def test_get_map(self):
+        """ # get_map """
+        print(">>> {}".format(()))
+        map2D = self.spep.get_map(smooth_center=True, **self.v)
+        self.assertTrue(np.any(map2D))
+
     def test_calc_pixel(self):
         """ # calc_pixel """
         print(">>> {}".format((self.spep.x, self.spep.y)))
-        print("TODO")
+        center = self.spep.calc_pixel(self.spep.x, self.spep.y)
+        self.assertIsInstance(center, np.float64)
+        print(center)
 
+    def test_plot_map(self):
+        """ # plot_map """
+        self.spep.calc_map()
+        fig = self.spep.plot_map(contours=True, show=True)
+        print(fig)
 
 
 if __name__ == "__main__":

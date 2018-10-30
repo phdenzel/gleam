@@ -43,4 +43,3 @@ class ROISelector(object):
            <ROISelector object> - standard initializer (also see other classmethod initializers)
         """
         self.data = data
-        

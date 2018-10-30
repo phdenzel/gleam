@@ -1,0 +1,29 @@
+#!/bin/bash
+ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+echo "Currently in $ROOT";
+set -x;
+
+# Enter the virtual environment
+if [ -d "$ROOT/venv" ]; then
+    source $ROOT/venv/bin/activate;
+fi;
+
+# Build glass
+if [ ! -d "$ROOT/src/glass/build" ]; then
+    cd $ROOT/src/glass && make && make
+fi;
+
+# Move builds into glass/libs & glass/includes
+mkdir -p $ROOT/include/glpk;
+if [ -d "$ROOT/src/glass/build/glpk_build/lib" ]; then
+    cp -r $ROOT/src/glass/build/glpk_build/lib/* $ROOT/include/glpk/
+fi;
+mkdir -p $ROOT/lib/glass;
+glass_build=$(ls -d $ROOT/src/glass/build/lib*/glass)
+if [ -d "$glass_build" ]; then
+    cp -r $glass_build $ROOT/lib/glass/
+fi;
+python_glpk_build=$(ls -d $ROOT/src/glass/build/python-glpk/lib*/glpk)
+if [ -d "$python_glpk_build" ]; then
+    cp -r $python_glpk_build $ROOT/lib/
+fi;

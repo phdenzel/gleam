@@ -6,7 +6,10 @@
 ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 GLEAM_ROOT="$ROOT/gleam"
 
-TESTCASES=("skycoords.py" "skyf.py" "skypatch.py" "lensobject.py" "multilens.py" "glscfactory.py" "lensfinder.py")
+TESTCASES=("skycoords.py" "skyf.py" "skypatch.py" "lensobject.py" "multilens.py" \
+                          "glscfactory.py" "lensfinder.py" \
+                          "gui.py" \
+          "model/sersic.py" "model/spep.py" "model/spemd.py")
 
 # Python 2 tests
 PYTHON="python"
