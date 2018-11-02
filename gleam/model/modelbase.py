@@ -422,7 +422,7 @@ class _BaseModel(object):
         return n_subsamples
 
     def plot_map(self, log=False, colorbar=True, scalebar=None,
-                 contours=None, show=False, **kwargs):
+                 mask=None, contours=None, show=False, **kwargs):
         """
         Plot the map once it has been calculated
 
@@ -431,9 +431,12 @@ class _BaseModel(object):
 
         Kwargs:
             log <bool> - plot in log scale
-            cbar <bool> - plot the colorbar
+            colorbar <bool> - plot the colorbar
             scalebar <float> - if not None, the scalebar is plotted
                                with scalebar being the pixel scale
+            mask <np.ndarray(bool)> - a boolean mask where False values are set
+                                      to -np.inf resulting in a transparent map
+            contours <bool> - plot contours on the map
             show <bool> - display the plot
             **kwargs <dict> - matplotlib.pyplot.imshow keywords
 
@@ -448,26 +451,29 @@ class _BaseModel(object):
         map2D = self.get_map()
         if log:
             map2D = np.log10(self.get_map())
+        img = map2D.copy()
+        if mask is not None:
+            np.place(img, ~mask, -np.inf)
         # keywords
         fig, ax = plt.subplots()
-        kwargs.setdefault('alpha', 0.8)
+        kwargs.setdefault('alpha', 0.4)
         kwargs.setdefault('interpolation', 'none')
         kwargs.setdefault('origin', 'lower')
         kwargs.setdefault('aspect', 'equal')
         kwargs.setdefault('linestyles', 'solid')
-        kwargs.setdefault('clevels', 40)
+        kwargs.setdefault('clevels', 30)
         kwargs.setdefault('levels', np.linspace(np.min(map2D), np.max(map2D), kwargs['clevels']))
         kwargs.setdefault('extent', [(-self.Nx-1)//2, self.Nx//2, (-self.Ny-1)//2, self.Ny//2])
         # plotting
         if contours:
-            img = ax.contourf(map2D, **kwargs)
+            img = ax.contourf(img, **kwargs)
             kwargs.pop('alpha')
-            ax.contour(map2D, **kwargs)
+            ax.contour(img, **kwargs)
         else:
             kwargs.pop('levels')
             kwargs.pop('clevels')
             kwargs.pop('linestyles')
-            img = ax.imshow(map2D, **kwargs)
+            img = ax.imshow(img, **kwargs)
         if colorbar:
             clrbar = fig.colorbar(img)
             clrbar.outline.set_visible(False)

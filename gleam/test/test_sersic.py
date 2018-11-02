@@ -8,7 +8,6 @@ Elliptical 2D Sersic model profile
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.model.sersic import Sersic
 import os
 import numpy as np

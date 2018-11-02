@@ -8,7 +8,6 @@ Learn everything about .fits files with SkyF
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skyf import SkyF
 import os
 import numpy as np

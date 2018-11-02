@@ -10,7 +10,6 @@ TODO:
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skycoords import SkyCoords
 from gleam.megacam_fields import MEGACAM_FPROPS
 

@@ -8,6 +8,7 @@ GLEAM is avaiable as a standalone app for macOS.
 Simply download the lates release and double-click to run...
 To use the full framework however, clone the repository and add it to your ~PYTHONPATH~ (e.g. in your ~.bashrc~ file).
 
+
 ** Install
 
 To install GLEAM manually, simply open the terminal and run
@@ -18,48 +19,72 @@ To install GLEAM manually, simply open the terminal and run
 #+END_SRC
   
 This will unpack, compile, and install all the necessary dependencies.
+
     
 ** Content
 
-*** gleam/skycoords.py
+*** gleam.skycoords
 Framework for reading astronomical coordinates such as /J2000/, /RA/Dec/, etc.
 Is able to convert between different coordinate systems, and interfaces particularly well with
 the MegaPipe pixel coordinate system.
 
-*** gleam/skyf.py
+*** gleam.skyf
 Reads in a single ~.fits~ file and extracts general information on the observation.
 Also contains several plotting procedures which visualize the data.
 
-*** gleam/skypatch.py
+*** gleam.skypatch
 Reads in a set of ~.fits~ files and extracts general information on the observation in different bands,
 analogously to ~skyf.py~ (importing ~skyf.py~). Visualizes data as stacked or palette image.
 
-*** gleam/lensobject.py
+*** gleam.lensobject
 Inherits from ~SkyF~. Additionally extracts properties important for gravitational lenses
 and lensed sources.
 Visualizes these properties on top of inherited plotting procedures.
 
-*** gleam/multilens.py
+*** gleam.multilens
 Inherits from ~SkyPatch~. Additionally extracts properties important for gravitational lenses
 and lensed sources, analogously to ~lensobject.py~.
 Visualizes these properties on top of inherited plotting procedures as stacked or palette image.
-- TODO: Figure out a way to unify all lens properties!
+- TODO: Figure out a way to unify all lens properties amongst bands!
 
-*** gleam/lensfinder.py
+*** gleam.lensfinder
 A simple peak finder to extract lens and source image positions.
 Uses very crude procedures, whose parameters have to be fine-tuned.
-Provides an automatic lens detection feature to the LensObject class.
+Provides an automatic lens detection feature to the ~LensObject~ class.
 - TODO: Write a main method for use as a script!
 
-*** gleam/glscfactory.py
+*** gleam.glscfactory
 GLASS config-file generator.
-Features a sync and config reading feature with LensObject class.
-Can be used to write config files for LensObject class instances, or to extract config files from LensObject class instances.
+Features a sync and config reading feature with ~LensObject~ class.
+Can be used to write config files for ~LensObject~ class instances, or to extract config files from ~LensObject~ class instances.
 - TODO: Write a main method for use as a script!
 
-*** gleam/app.py
-- TODO: all, including TEST
-    
+*** gleam.gui
+- TODO
+
+*** gleam.app
+Components of ~gleam.gui~
+- ~gleam.app.prototype~
+- ~gleam.app.menubar~
+- ~gleam.app.navbar~
+- ~gleam.app.statusbar~
+- ~gleam.app.toolbar~
+- ~gleam.app.window~
+
+*** gleam.model
+
+**** gleam.model.sersic
+Two dimensional, Sersic mapper. Calculates and visualizes profiles and maps.
+
+**** gleam.model.spep
+Two dimensional, softened power-law elliptical potential SPEP mapper. Calculates and visualizes profiles and maps.
+
+**** gleam.model.spemd
+Two dimensional, softened power-law elliptical mass distribution mapper. Calculates and visualizes profiles and maps.
+
+
+*** gleam.utils
+- TODO
+
 ** More
-  + standardize docstrings and use sphinx to auto-generate Documentation page
-  + update closest_node in cutsky.py to comply with python 3
+  + standardize docstrings and use sphinx to auto-generate documentation page

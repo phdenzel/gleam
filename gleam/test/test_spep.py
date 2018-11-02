@@ -8,7 +8,6 @@ Singular Power-law Elliptical Potential
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.model.spep import SPEP
 import os
 import numpy as np
@@ -22,7 +21,6 @@ class TestSPEP(UnitTestPrototype):
         # arguments and keywords
         self.model_kwargs = {
             'phi_G': 1.731,
-            'phi': 1.731,
             'q': .787,
             'e': 1.-.787,
             'theta_E': 1.161,
@@ -60,7 +58,7 @@ class TestSPEP(UnitTestPrototype):
         cosPA = self.spep.cosPA
         self.assertIsNotNone(cosPA)
         self.assertIsInstance(cosPA, np.float64)
-        self.assertEqual(cosPA, np.cos(self.model_kwargs['phi']))
+        self.assertEqual(cosPA, np.cos(np.pi/2-self.model_kwargs['phi_G']))
         print(cosPA)
 
     def test_sinPA(self):
@@ -69,7 +67,7 @@ class TestSPEP(UnitTestPrototype):
         sinPA = self.spep.sinPA
         self.assertIsNotNone(sinPA)
         self.assertIsInstance(sinPA, np.float64)
-        self.assertEqual(sinPA, np.sin(self.model_kwargs['phi']))
+        self.assertEqual(sinPA, np.sin(np.pi/2-self.model_kwargs['phi_G']))
         print(sinPA)
 
     def test_model_parameters(self):
@@ -82,7 +80,6 @@ class TestSPEP(UnitTestPrototype):
         """ # model_parameters.setter """
         kwargs = {  # double all parameters except for gamma
             'phi_G': 2*self.model_kwargs['phi_G'],
-            'phi': 2*self.model_kwargs['phi'],
             'q': 2*self.model_kwargs['q'],
             'theta_E': 2*self.model_kwargs['theta_E'],
             'gamma': 2.044
@@ -102,7 +99,6 @@ class TestSPEP(UnitTestPrototype):
         """ # set_model_parameters """
         kwargs = {  # double all parameters except for gamma
             'phi_G': 2*self.model_kwargs['phi_G'],
-            'phi': 2*self.model_kwargs['phi'],
             'q': 2*self.model_kwargs['q'],
             'theta_E': 2*self.model_kwargs['theta_E'],
             'gamma': 2.044

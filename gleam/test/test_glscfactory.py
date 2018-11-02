@@ -8,7 +8,6 @@ Feed the glass config factory with information
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.lensobject import LensObject
 from gleam.glscfactory import GLSCFactory
 import os

@@ -8,7 +8,6 @@ Find your way in the sky with SkyCoords
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skycoords import SkyCoords
 from gleam.test.utils import UnitTestPrototype
 

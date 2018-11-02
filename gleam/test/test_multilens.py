@@ -8,7 +8,6 @@ MultiLens sees same lens in different bands
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skycoords import SkyCoords
 from gleam.multilens import MultiLens
 import os

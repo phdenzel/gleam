@@ -14,8 +14,7 @@ Note:
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
-import gleam  # avoids cyclic imports this way
+import gleam  # avoids cyclic imports with gleam.lensobject this way
 from gleam.utils.makedir import mkdir_p
 
 import sys

@@ -7,7 +7,6 @@ Phase through a region in the sky with SkyPatch
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skyf import SkyF
 from gleam.utils.rgb_map import lupton_like
 

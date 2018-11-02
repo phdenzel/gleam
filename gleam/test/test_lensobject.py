@@ -8,7 +8,6 @@ Gravitational lenses and all their properties
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skycoords import SkyCoords
 from gleam.lensobject import LensObject
 import os
@@ -172,3 +171,6 @@ class TestLensObject(UnitTestPrototype):
         print(">>> {}".format(self.lobject))
         fig, ax = self.lobject.plot_f(plt.figure(), lens=True, source_images=True, **self.v)
         self.assertIsNotNone(fig, ax)
+
+if __name__ == "__main__":
+    TestLensObject.main(verbosity=1)

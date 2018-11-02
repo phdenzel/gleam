@@ -20,7 +20,6 @@ elif sys.version_info.major == 3:
     # import tkinter.ttk as ttk
 else:
     raise ImportError("Could not import Tkinter")
-import __init__
 from gleam.app.prototype import FramePrototype
 from gleam.app.menubar import Menubar
 from gleam.app.navbar import Navbar

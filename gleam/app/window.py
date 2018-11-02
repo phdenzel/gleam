@@ -14,7 +14,6 @@ A window into another univ... well actually OUR Universe
 #     import tkinter as tk
 # else:
 #     raise ImportError("Could not import Tkinter")
-import __init__
 from gleam.app.prototype import FramePrototype, CanvasPrototype
 
 

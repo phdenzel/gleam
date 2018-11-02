@@ -7,7 +7,6 @@ Find your way through the matrix with the Navbar
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.app.prototype import FramePrototype
 
 

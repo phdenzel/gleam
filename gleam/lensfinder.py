@@ -11,9 +11,6 @@ TODO:
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
-# from gleam.lensobject import LensObject
-
 import sys
 import os
 import numpy as np

@@ -7,7 +7,6 @@ The Toolbar provides what you need, to do what you want
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.app.prototype import FramePrototype
 
 

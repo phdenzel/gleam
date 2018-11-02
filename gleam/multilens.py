@@ -7,7 +7,6 @@ MultiLens sees same lens in different bands
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skypatch import SkyPatch
 from gleam.lensobject import LensObject
 from gleam.utils import colors as glmc

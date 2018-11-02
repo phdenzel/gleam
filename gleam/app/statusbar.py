@@ -14,7 +14,6 @@ elif sys.version_info.major == 3:
     import tkinter as tk
 else:
     raise ImportError("Could not import Tkinter")
-import __init__
 from gleam.app.prototype import FramePrototype
 
 

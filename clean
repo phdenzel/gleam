@@ -3,6 +3,10 @@ ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo "Currently in $ROOT";
 set -x;
 
+cd $ROOT;
+find gleam -type f -name "*.pyc" -delete;
+find gleam -type d -name "__pycache__" -delete;
+
 [ -e "$ROOT/activate" ] && rm $ROOT/activate;
 for f in $ROOT/{build,dist,include,lib,venv}; do
     [ -d "$f" ] && rm -r "$f"

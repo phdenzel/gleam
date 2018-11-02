@@ -8,7 +8,6 @@ Climb every peak in search for lens and source candidates
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.gui import App
 import os
 from gleam.test.utils import UnitTestPrototype

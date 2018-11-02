@@ -8,7 +8,6 @@ Phase through a region in the sky with SkyPatch
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skypatch import SkyPatch
 import os
 import matplotlib.pyplot as plt

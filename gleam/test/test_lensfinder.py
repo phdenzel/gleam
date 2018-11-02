@@ -8,7 +8,6 @@ Climb every peak in search for lens and source candidates
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skycoords import SkyCoords
 from gleam.lensobject import LensObject
 from gleam.lensfinder import LensFinder

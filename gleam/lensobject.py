@@ -8,7 +8,6 @@ Gravitational lenses and all their properties
 ###############################################################################
 # Imports
 ###############################################################################
-import __init__
 from gleam.skycoords import SkyCoords
 from gleam.skyf import SkyF
 from gleam.lensfinder import LensFinder

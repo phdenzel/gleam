@@ -20,7 +20,6 @@ Image parameters (see modelbase.py):
 Notes:
     - total number of model parameters is 8
 """
-import __init__
 from gleam.model.modelbase import _BaseModel
 import numpy as np
 
@@ -65,7 +64,7 @@ class SPEP(_BaseModel):
         self.gamma = gamma
         self.s2 = s*s
         # Base parameters
-        kwargs['phi'] = self.phi_G
+        kwargs['phi'] = np.pi/2-self.phi_G
         kwargs['e'] = 1 - q
         super(SPEP, self).__init__(**kwargs)
         # finally apply parameter constraints
@@ -167,6 +166,32 @@ class SPEP(_BaseModel):
         return 2 * E2/self.eta**2 * ((a*a + self.s2)/E2)**(self.eta/2.)
 
 
+def parse_arguments():
+    """
+    Parse command line arguments
+    """
+    from argparse import ArgumentParser, RawTextHelpFormatter
+    parser = ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
+    # main args
+    # TODO
+    # mode args
+    parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
+                        help="Run program in verbose mode",
+                        default=False)
+    parser.add_argument("-t", "--test", "--test-mode", dest="test_mode", action="store_true",
+                        help="Run program in testing mode",
+                        default=False)
+    args = parser.parse_args()
+    return parser, args
+
+
 if __name__ == "__main__":
-    from gleam.test.test_spep import TestSPEP
-    TestSPEP.main(verbosity=1)
+    import sys
+    parser, args = parse_arguments()
+    no_input = len(sys.argv) <= 1
+    if no_input:
+        parser.print_help()
+    elif args.test_mode:
+        sys.argv = sys.argv[:1]
+        from gleam.test.test_spep import TestSPEP
+        TestSPEP.main(verbosity=1)
