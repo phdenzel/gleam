@@ -11,7 +11,6 @@ Learn everything about .fits files with SkyF
 from gleam.skyf import SkyF
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 from gleam.test.utils import UnitTestPrototype
 
 
@@ -53,6 +52,24 @@ class TestSkyF(UnitTestPrototype):
         copy = self.skyf.deepcopy(**self.v)
         self.assertEqual(copy, self.skyf)
         self.assertFalse(copy is self.skyf)
+
+    def test_from_json(self):
+        """ # from_json """
+        filename = 'test.json'
+        self.skyf.photzp = 25.67
+        filename = self.skyf.jsonify(save=True)
+        print(">>> {}".format(filename))
+        with open(filename, 'r') as j:
+            SkyF.from_json(j, **self.v)
+        try:
+            os.remove(filename)
+        except OSError:
+            pass
+
+    def test_jsonify(self):
+        """ # jsonify """
+        print(">>> {}".format(self.skyf))
+        self.skyf.jsonify(**self.v)
 
     def test_check_path(self):
         """ # check_path """
@@ -143,12 +160,13 @@ class TestSkyF(UnitTestPrototype):
         formula = SkyF.mag_formula_from_hdr(self.skyf.hdr, **self.v)
         self.assertTrue(hasattr(formula, '__call__'))
 
-    def test_plot_f(self):
+    def test_show_f(self):
         """ # plot_f """
         print(">>> {}".format(self.skyf))
-        fig, ax = self.skyf.plot_f(plt.figure(), **self.v)
-        self.assertIsNotNone(fig, ax)
-        
+        fig, ax = self.skyf.show_f(**self.v)
+        self.assertIsNotNone(fig)
+        self.assertIsNotNone(ax)
+
 
 if __name__ == "__main__":
     TestSkyF.main(verbosity=1)

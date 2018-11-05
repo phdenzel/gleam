@@ -1,6 +1,6 @@
 * GLEAM
 
-\textbf{G}ravitational \textbf{LE}ns \textbf{A}nalysis \textbf{M}odule
+<b>G<\b>ravitational <b>LE<\b>ns <b>A<\b>nalysis <b>M<\b>odule
 
 ** Binaries
 
@@ -86,5 +86,5 @@ Two dimensional, softened power-law elliptical mass distribution mapper. Calcula
 *** gleam.utils
 - TODO
 
-** More
+** TODO
   + standardize docstrings and use sphinx to auto-generate documentation page

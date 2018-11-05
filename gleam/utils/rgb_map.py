@@ -49,13 +49,13 @@ def lupton_like(i, r, g, method='standard'):
         s_g = 1.7
         alpha = 0.09
         Q = 1.0
-    I = i*s_i + r*s_r + g*s_g
+    intensity = i*s_i + r*s_r + g*s_g
     # reds
-    stack[:, :, 0] = i*s_i*np.arcsinh(alpha*Q*I)/(Q*I)
+    stack[:, :, 0] = i*s_i*np.arcsinh(alpha*Q*intensity)/(Q*intensity)
     # greens
-    stack[:, :, 1] = r*s_r*np.arcsinh(alpha*Q*I)/(Q*I)
+    stack[:, :, 1] = r*s_r*np.arcsinh(alpha*Q*intensity)/(Q*intensity)
     # blues
-    stack[:, :, 2] = g*s_g*np.arcsinh(alpha*Q*I)/(Q*I)
+    stack[:, :, 2] = g*s_g*np.arcsinh(alpha*Q*intensity)/(Q*intensity)
     # alphas
     stack[:, :, 3] = 1
     # limit numbers outside of range [0, 1]

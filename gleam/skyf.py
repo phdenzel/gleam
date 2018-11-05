@@ -12,17 +12,16 @@ TODO:
 ###############################################################################
 from gleam.skycoords import SkyCoords
 from gleam.megacam_fields import MEGACAM_FPROPS
+from gleam.utils.encode import GLEAMEncoder
 
 import sys
 import os
 import re
 import copy
 import math
-import warnings
 import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
-warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 __all__ = ['SkyF']
@@ -33,10 +32,13 @@ class SkyF(object):
     """
     Framework for patches of the sky (.fits files) of a single band
     """
+    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp']
     hdr_keys = ['FILTER', 'NAXIS1', 'NAXIS2', 'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
                 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'OBJECT', 'PHOTZP']
 
-    def __init__(self, filepath, px2arcsec=None, refpx=None, refval=None, photzp=None,
+    def __init__(self, filepath, data=None, hdr=None,
+                 px2arcsec=None, refpx=None, refval=None,
+                 photzp=None,
                  verbose=False):
         """
         Initialize parsing of a fits file with a file name
@@ -45,6 +47,8 @@ class SkyF(object):
             filepath <str> - path to .fits file (shortcuts are automatically resolved)
 
         Kwargs:
+            data <list/np.ndarray> - add the data of the .fits file directly
+            hdr <dict> - add the header of the .fits file directly
             px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
             refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
             refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
@@ -57,6 +61,10 @@ class SkyF(object):
         # .fits file data
         self.filepath = self.check_path(filepath)
         self.data, self.hdr = self.parse_fitsfile(filepath)  # data[Dec, RA] and .fits header
+        if data is not None:
+            self.data = np.array(data)
+        if hdr is not None:
+            self.hdr = hdr
         if px2arcsec is not None and len(px2arcsec) == 2:
             self.px2arcsec = px2arcsec
         if refpx is not None and len(refpx) == 2:
@@ -65,6 +73,7 @@ class SkyF(object):
             self.refval = refval
         if photzp is not None:
             self.photzp = photzp
+        # rederive center coordinates
         self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=self.photzp)
         # get rid of methods when inherited
         if self.__class__.__name__ != SkyF.__name__ and hasattr(SkyF, 'show_fullsky'):
@@ -75,31 +84,110 @@ class SkyF(object):
 
     def __eq__(self, other):
         if isinstance(other, SkyF):
-            return self.filepath == other.filepath
-        elif isinstance(other, str):
-            return self.filepath == other
+            return self.center == other.center
         else:
             NotImplemented
 
+    def encode(self):
+        """
+        Using md5 to encode specific information
+        """
+        import hashlib
+        j = self.__json__
+        s = ', '.join([
+            str(j[k]) for k in self.__class__.params if not isinstance(j[k], dict)
+        ]).encode('utf-8')
+        code = hashlib.md5(s).hexdigest()
+        return code
+
+    def __hash__(self):
+        """
+        Using encode to create hash
+        """
+        return hash(self.encode())
+
     def __copy__(self):
         args = (self.filepath,)
-        kwargs = {
-            'px2arcsec': self.px2arcsec,
-            'refval': self.refval,
-            'refpx': self.refpx,
-            'photzp': self.photzp
-        }
+        kwargs = {k: self.__getattribute__(k) for k in self.__class__.params}
         return SkyF(*args, **kwargs)
 
     def __deepcopy__(self, memo):
         args = (copy.deepcopy(self.filepath, memo),)
-        kwargs = {
-            'px2arcsec': copy.deepcopy(self.px2arcsec, memo),
-            'refval': copy.deepcopy(self.refval, memo),
-            'refpx': copy.deepcopy(self.refpx, memo),
-            'photzp': copy.deepcopy(self.photzp, memo)
-        }
+        kwargs = {k: copy.deepcopy(self.__getattribute__(k), memo)
+                  for k in self.__class__.params}
         return SkyF(*args, **kwargs)
+
+    def copy(self, verbose=False):
+        cpy = copy.copy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    def deepcopy(self, verbose=False):
+        cpy = copy.deepcopy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    @classmethod
+    def from_dict(cls, paramdict, filepath=None, verbose=False):
+        self = cls(None, **paramdict)
+        self.data = np.array(self.data)
+        if filepath:
+            self.filepath = filepath
+        if verbose:
+            print(self.__v__)
+        return self
+
+    @property
+    def __json__(self):
+        pardict = {}
+        for k in self.__class__.params:
+            val = self.__getattribute__(k)
+            if isinstance(val, np.ndarray):
+                val = val.tolist()
+            pardict[k] = val
+        return pardict
+
+    @classmethod
+    def from_json(cls, jsn, verbose=False):
+        import json
+        j = json.load(jsn)
+        self = cls.from_dict(j, filepath=os.path.realpath(jsn.name))
+        if verbose:
+            print(self.__v__)
+        return self
+
+    def jsonify(self, save=False, verbose=False):
+        """
+        Export instance to JSON
+
+        Args:
+            None
+
+        Kwargs:
+            save <bool> - save the JSON as file
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            json <str> - a JSON string output if save is False
+            filename <str> - filename with which the JSON file is saved, if save is True
+        """
+        import json
+        jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
+        if save:
+            filename = []
+            if 'skyf' not in filename:
+                filename += ['skyf#{}'.format(self.encode()[:-3])]
+            if 'json' not in filename:
+                filename += ['json']
+            filename = '.'.join(filename)
+            with open(filename, 'w') as output:
+                json.dump(self, output, cls=GLEAMEncoder, sort_keys=True, indent=4)
+            return filename
+        if verbose:
+            print(jsn)
+        return jsn
 
     def __str__(self):
         return "SkyF({}@[{:.4f}, {:.4f}])".format(self.band, *self.center)
@@ -134,18 +222,6 @@ class SkyF(object):
             <str> - test of SkyF attributes
         """
         return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in self.tests])
-
-    def copy(self, verbose=False):
-        cpy = copy.copy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
-
-    def deepcopy(self, verbose=False):
-        cpy = copy.deepcopy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
 
     @property
     def filename(self):
@@ -220,6 +296,8 @@ class SkyF(object):
         if header_only:
             header = True
         filepath = SkyF.check_path(filepath)
+        if filepath is None:
+            return None, None
         # get data and header
         data, hdrobj = fits.getdata(filepath, header=True)
         # make a dict out of the header object
@@ -346,7 +424,7 @@ class SkyF(object):
     @property
     def naxis_plus(self):
         """
-        Length of axis 3 and more
+        Length of axis 3 and onwards
 
         Args/Kwargs:
             None

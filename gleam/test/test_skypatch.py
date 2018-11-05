@@ -10,7 +10,7 @@ Phase through a region in the sky with SkyPatch
 ###############################################################################
 from gleam.skypatch import SkyPatch
 import os
-import matplotlib.pyplot as plt
+import numpy as np
 from gleam.test.utils import UnitTestPrototype
 
 
@@ -52,11 +52,42 @@ class TestSkyPatch(UnitTestPrototype):
         self.assertEqual(copy, self.skyp)
         self.assertFalse(copy is self.skyp)
 
+    def test_from_json(self):
+        """ # from_json """
+        filename = 'test.json'
+        filename = self.skyp.jsonify(save=True)
+        print(">>> {}".format(filename))
+        with open(filename, 'r') as j:
+            SkyPatch.from_json(j, **self.v)
+        try:
+            os.remove(filename)
+        except OSError:
+            pass
+
+    def test_jsonify(self):
+        """ # jsonify """
+        print(">>> {}".format(self.skyp))
+        self.skyp.jsonify(**self.v)
+
     def test_find_files(self):
         """ # find_files """
         print(">>> {}".format(self.test_fits))
         fpaths = SkyPatch.find_files(self.test_fits, **self.v)
         self.assertTrue([self.test_fits in fpaths])
+
+    def test_structure(self):
+        """ # structure """
+        print(">>> {}".format(()))
+        shape = self.skyp.structure
+        self.assertIsInstance(shape, tuple)
+        print(shape)
+
+    def test_data(self):
+        """ # data """
+        print(">>> {}".format(()))
+        dta = self.skyp.data
+        self.assertIsInstance(dta, np.ndarray)
+        print(dta)
 
     def test_add_to_patch(self):
         """ # add_to_patch """
@@ -85,11 +116,20 @@ class TestSkyPatch(UnitTestPrototype):
         self.assertEqual(len(before), len(after))
         self.assertEqual(before[::-1], after)
 
-    def test_plot_composite(self):
-        """ # plot_composite """
+    def test_show_composite(self):
+        """ # show_composite """
         print(">>> {}".format(self.skyp))
-        fig, ax = self.skyp.plot_composite(plt.figure(), **self.v)
-        self.assertIsNotNone(fig, ax)
+        fig, ax = self.skyp.show_composite(**self.v)
+        self.assertIsNotNone(fig)
+        self.assertIsNotNone(ax)
+
+    def test_show_patch(self):
+        """ # show_patch """
+        print(">>> {}".format(self.skyp))
+        fig, axes = self.skyp.show_patch(**self.v)
+        self.assertIsNotNone(fig)
+        for ax in axes:
+            self.assertIsNotNone(ax)
 
 
 if __name__ == "__main__":

@@ -191,7 +191,6 @@ if __name__ == "__main__":
     import sys
     parser, args = parse_arguments()
     no_input = len(sys.argv) <= 1
-    print(parser, args)
     if no_input:
         parser.print_help()
     elif args.test_mode:

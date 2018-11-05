@@ -2,8 +2,25 @@
 """
 @author: phdenzel
 
-Make really, really sure you know...
+Make really, really sure you can choose amongst all shapes...
 What are you interested in? Squares, circles, polygons, or an amorph collection of pixels...
+
+Features:
+  - select
+    + circle
+    + square
+    + rect
+    + polygon
+    + amorph
+    + by_color
+  - focus
+    o use a buffer to save selections and switch between them with focus
+    + circle
+    + square
+    + rect
+    + polygon
+    + amorph
+    + by_color
 """
 ###############################################################################
 # Imports
@@ -38,15 +55,28 @@ class TestROISelector(UnitTestPrototype):
 
     def test_ROISelector(self):
         """ # ROISelector """
+        print(">>> {}".format(None))
+        select = ROISelector(None, **self.v)
+        self.assertIsInstance(select, ROISelector)
+        self.assertIsNone(select.data)
         print(">>> {}".format(self.skyf.data))
+        select = ROISelector(self.skyf.data, **self.v)
+        self.assertIsInstance(select, ROISelector)
+        self.assertIsNotNone(select.data)
 
     def test_from_skyf(self):
         """ # from_skyf """
         print(">>> {}".format(self.skyf))
+        select = ROISelector.from_skyf(self.skyf, **self.v)
+        self.assertIsInstance(select, ROISelector)
+        self.assertIsNotNone(select.data)
 
     def test_from_skypatch(self):
         """ # from_skypatch """
         print(">>> {}".format(self.skypatch))
+        select = ROISelector.from_skypatch(self.skypatch, **self.v)
+        self.assertIsInstance(select, ROISelector)
+        self.assertIsNotNone(select.data)
 
 
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ class TestGLSCFactory(UnitTestPrototype):
         self.assertGreater(os.stat(filename).st_size, 0)
         try:
             os.remove(filename)
-        except:
+        except OSError:
             pass
 
     def test_append(self):
@@ -82,7 +82,7 @@ class TestGLSCFactory(UnitTestPrototype):
         self.assertGreater(os.stat(filename).st_size, 0)
         try:
             os.remove(filename)
-        except:
+        except OSError:
             pass
 
 

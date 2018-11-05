@@ -9,16 +9,14 @@ Phase through a region in the sky with SkyPatch
 ###############################################################################
 from gleam.skyf import SkyF
 from gleam.utils.rgb_map import lupton_like
+from gleam.utils.encode import GLEAMEncoder
 
 import sys
 import os
 import copy
 import math
-import warnings
 import numpy as np
 import matplotlib.pyplot as plt
-
-warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 __all__ = ['SkyPatch']
@@ -29,6 +27,8 @@ class SkyPatch(object):
     """
     Framework for a set of sky patches (.fits files)
     """
+    params = ['fs']
+
     def __init__(self, files, verbose=False, **kwargs):
         """
         Initialize parsing of a fits file with a directory name
@@ -37,29 +37,38 @@ class SkyPatch(object):
             files <str/list(str)> - list of .fits files or directory string containing the files
 
         Kwargs:
-            px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
-            refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
-            refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
-            photzp <float> - overwrite photometric zero-point information
+            data <list(list/np.ndarray)> - add the data of the .fits file directly
+            hdr <list(dict)> - add the header of the .fits file directly
+            px2arcsec <list(float,float)> - overwrite the pixel scale in the .fits header (in arcsecs)
+            refpx <list(int,int)> - overwrite reference pixel coordinates in .fits header (in pixels)
+            refval <list(float,float)> - overwrite reference pixel values in .fits header (in degrees)
+            photzp <list(float)> - overwrite photometric zero-point information
             verbose <bool> - verbose mode; print command line statements
 
         Return:
             <SkyPatch object> - standard initializer
         """
-        # input as list of files
-        if isinstance(files, list):
+        # collect all files
+        if isinstance(files, list):  # input as list of files
             self.filepaths = self.find_files(files)
-        # single file input
         elif isinstance(files, str) and any([files.endswith(ext) for ext in (
-                '.fits', '.fit', '.fts')]):
+                '.fits', '.fit', '.fts')]):  # single file input
             self.filepaths = self.find_files([files])
-        # input as directory string
-        elif isinstance(files, str):
+        elif isinstance(files, str):  # input as directory string
             self.filepaths = self.find_files(files)
-        # if there even is such a case
-        else:
+        else:  # if there even is such a case
             self.filepaths = self.find_files(files)
-        self.fs = [SkyF(f, **kwargs) for f in self.filepaths]
+        # keyword defaults
+        for k in SkyF.params:
+            kwargs.setdefault(k, [None]*self.N)
+        # handle collective keyword inputs
+        for k in SkyF.params:
+            if not isinstance(kwargs[k], list) or len(kwargs[k]) != self.N:
+                kwargs[k] = [kwargs[k]]*self.N
+        # skyf instances for all files
+        self.fs = [None]*self.N
+        for i, f in enumerate(self.filepaths):
+            self.fs[i] = SkyF(f, **{k: kwargs[k][i] for k in SkyF.params})
         if verbose:
             print(self.__v__)
 
@@ -88,25 +97,98 @@ class SkyPatch(object):
         else:
             NotImplemented
 
+    def encode(self):
+        """
+        Using md5 to encode specific information
+        """
+        import hashlib
+        s = ', '.join([f.encode() for f in self.fs]).encode('utf-8')
+        code = hashlib.md5(s).hexdigest()
+        return code
+
+    def __hash__(self):
+        """
+        Using encode to create hash
+        """
+        return hash(self.encode())
+
     def __copy__(self):
         args = (self.filepaths,)
-        kwargs = {
-            'px2arcsec': self.fs[0].px2arcsec,
-            'refpx': self.fs[0].refpx,
-            'refval': self.fs[0].refval,
-            'photzp': self.fs[0].photzp
-        }
+        kwargs = {k: [f.__getattribute__(k) for f in self.fs if hasattr(f, k)]
+                  for k in self.__class__.params}
         return SkyPatch(*args, **kwargs)
 
     def __deepcopy__(self, memo):
         args = (copy.deepcopy(self.filepaths, memo),)
-        kwargs = {
-            'px2arcsec': copy.deepcopy(self.fs[0].px2arcsec, memo),
-            'refpx': copy.deepcopy(self.fs[0].refpx, memo),
-            'refval': copy.deepcopy(self.fs[0].refval, memo),
-            'photzp': copy.deepcopy(self.fs[0].photzp, memo)
-        }
+        kwargs = {k: [copy.deepcopy(f.__getattribute__(k), memo) for f in self.fs if hasattr(f, k)]
+                  for k in self.fs[0].__class__.params}
         return SkyPatch(*args, **kwargs)
+
+    def copy(self, verbose=False):
+        cpy = copy.copy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    def deepcopy(self, verbose=False):
+        cpy = copy.deepcopy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    @property
+    def __json__(self):
+        pardict = {}
+        for k in self.__class__.params:
+            if hasattr(self, k):
+                val = self.__getattribute__(k)
+                if isinstance(val, np.ndarray):
+                    val = val.tolist()
+                pardict[k] = val
+        return pardict
+
+    @classmethod
+    def from_json(cls, jsn, verbose=False):
+        import json
+        j = json.load(jsn)
+        self = cls.__new__(cls)
+        self.fs = [SkyF.from_dict(pd, filepath=os.path.realpath(jsn.name))
+                   for pd in j['fs']]
+        self.filepaths = [os.path.realpath(jsn.name)]*len(self.fs)
+        if verbose:
+            print(self.__v__)
+        return self
+
+    def jsonify(self, save=False, verbose=False):
+        """
+        Export instance to JSON
+
+        Args:
+            None
+
+        Kwargs:
+            save <bool> - save the JSON as file
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            json <str> - a JSON string output if save is False
+            filename <str> - filename with which the JSON file is saved, if save is True
+        """
+        import json
+        jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
+        if save:
+            filename = []
+            if 'skypatch' not in filename:
+                filename += ['skypatch#{}'.format(self.encode()[:-3])]
+            if 'json' not in filename:
+                filename += ['json']
+            filename = '.'.join(filename)
+            with open(filename, 'w') as output:
+                json.dump(self, output, cls=GLEAMEncoder, sort_keys=True, indent=4)
+            return filename
+        if verbose:
+            print(jsn)
+        return jsn
 
     def __str__(self):
         return "SkyPatch({})".format(", ".join(self.bands))
@@ -125,7 +207,8 @@ class SkyPatch(object):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return ['N', 'filepaths', 'files', 'fs', 'bands', 'naxis1', 'naxis2']
+        return ['N', 'filepaths', 'files', 'fs', 'bands', 'naxis1', 'naxis2', 'naxis_plus',
+                'structure']
 
     @property
     def __v__(self):
@@ -139,18 +222,6 @@ class SkyPatch(object):
             <str> - test of SkyPatch attributes
         """
         return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in self.tests])
-
-    def copy(self, verbose=False):
-        cpy = copy.copy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
-
-    def deepcopy(self, verbose=False):
-        cpy = copy.deepcopy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
 
     @property
     def N(self):
@@ -218,6 +289,37 @@ class SkyPatch(object):
         return [nu.naxis2 for nu in self.fs]
 
     @property
+    def naxis_plus(self):
+        """
+        Length of axis 3 and onwards
+
+        Args/Kwargs:
+            None
+
+        Return:
+            naxis_plus <list(list(int))> - pixels along each additional axis of each .fits file
+        """
+        return [nu.naxis_plus for nu in self.fs]
+
+    @property
+    def structure(self):
+        """
+        Shape of the data array depending on N, naxis1, naxis2, etc.
+
+        Args/Kwargs:
+            None
+
+        Return:
+            structure <tuple> - a shape tuple as (naxis1, naxis2, naxis..., N)
+        """
+        if self.N > 0:
+            structure = (max(self.naxis1), max(self.naxis2),)
+            if None in self.naxis_plus:
+                return structure + (self.N,)
+            else:
+                return structure + tuple(max(x) for x in self.naxis_plus) + (self.N,)
+
+    @property
     def data(self):
         """
         Data from the list of .fits files
@@ -228,7 +330,14 @@ class SkyPatch(object):
         Return:
             data <list(np.ndarray)> - list of .fits data maps
         """
-        return [nu.data for nu in self.fs]
+        if hasattr(self, '_data'):
+            if not self.structure == self._data.shape:
+                self._data = np.zeros(self.structure)
+        else:
+            self._data = np.zeros(self.structure)
+        for i in range(self.N):
+            self._data[:, :, i] = self.fs[i].data
+        return self._data
 
     @property
     def magnitudes(self):
@@ -316,15 +425,15 @@ class SkyPatch(object):
                 if s in f:
                     return i
 
-        # single file input
-        if isinstance(d_o_f, str):
+        if d_o_f is None:
+            return [None]
+        if isinstance(d_o_f, str):  # single file input
             if any([d_o_f.endswith(ext) for ext in ('.fits', '.fit', '.fts')]):
                 d_o_f = [d_o_f]
             else:
                 d_o_f = ['/'.join([d_o_f, f]) for f in os.listdir(d_o_f) if True
                          in [f.endswith(x) for x in ('.fits', '.fit', '.fts')]]
-        # input as list of files
-        elif isinstance(d_o_f, list) and len(d_o_f) == 1:
+        elif isinstance(d_o_f, list) and len(d_o_f) == 1:  # input as list of files
             if not any([d_o_f[0].endswith(ext) for ext in ('.fits', '.fit', '.fts')]):
                 folder = d_o_f[0]
                 d_o_f = ['/'.join([folder, f]) for f in os.listdir(folder) if True
@@ -483,7 +592,7 @@ class SkyPatch(object):
         Kwargs:
             method <str> - method description; chooses the set of weights for the stacking
             scalebar <bool> - if True, add scalebar plot (15% of the image's width)
-            savefig <str> - save figure in file string instead of showing it
+            savefig <str> - save figure in file string instead of showing it in a window
             verbose <bool> -  verbose mode; print command line statements
             kwargs **<dict> - keywords for the imshow function
 
@@ -518,7 +627,7 @@ class SkyPatch(object):
             as_magnitudes <bool> - if True, plot data as magnitudes
             scalebar <bool> - if True, add scalebar plot (15% of the image's width)
             colorbar <bool> - if True, add colorbar plot
-            savefig <str> - save figure in file string instead of showing it
+            savefig <str> - save figure in file string instead of showing it in a window
             verbose <bool> -  verbose mode; print command line statements
             kwargs **<dict> - keywords for the imshow function
 

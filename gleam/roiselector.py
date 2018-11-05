@@ -9,6 +9,7 @@ collection of pixels...
 ###############################################################################
 # Imports
 ###############################################################################
+import numpy as np
 
 __all__ = ['ROISelector']
 
@@ -18,6 +19,9 @@ class ROISelector(object):
     """
     Selects pixels from fits files
     """
+
+    selection_modes = ['circle', 'rect', 'polygon', 'amorph']
+
     def __init__(self, data, verbose=False):
         """
         Initialize from a pure data array
@@ -31,10 +35,39 @@ class ROISelector(object):
         Return:
            <ROISelector object> - standard initializer (also see other classmethod initializers)
         """
-        self.data = data
+        self.data = np.array(data) if data is not None else data
+        self._buffer = {k: [] for k in ROISelector.selection_modes}
+        if verbose:
+            print(self.__v__)
+
+    @property
+    def __v__(self):
+        """
+        Info string for test printing
+
+        Args/Kwargs:
+            None
+
+        Return:
+            <str> - test of ROISelector attributes
+        """
+        return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in self.tests])
+
+    @property
+    def tests(self):
+        """
+        A list of attributes being tested when calling __v__
+
+        Args/Kwargs:
+            None
+
+        Return:
+            tests <list(str)> - a list of test variable strings
+        """
+        return ['data', 'shape', '_buffer']
 
     @classmethod
-    def from_skyf(self, skyf, verbose=False):
+    def from_skyf(cls, skyf, **kwargs):
         """
         Initialize from a gleam.SkyF instance
 
@@ -47,10 +80,10 @@ class ROISelector(object):
         Return:
            <ROISelector object> - initializer with SkyF
         """
-        pass
+        return cls(skyf.data, **kwargs)
 
     @classmethod
-    def from_skypatch(self, skypatch, verbose=False):
+    def from_skypatch(cls, skypatch, **kwargs):
         """
         Initialize from a gleam.SkyPatch instance
 
@@ -63,7 +96,21 @@ class ROISelector(object):
         Return:
            <ROISelector object> - initializer with SkyPatch
         """
-        pass
+        cls(skypatch.data, **kwargs)
+
+    @property
+    def shape(self):
+        """
+        The data shape of the selector
+
+        Args/Kwargs:
+            None
+
+        Return:
+            shape
+        """
+        if self.data is not None:
+            return self.data.shape
 
     @property
     def select(self):
