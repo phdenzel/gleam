@@ -16,6 +16,8 @@ import os
 import numpy as np
 import scipy.ndimage as ndimg
 
+from gleam.skycoords import SkyCoords
+
 
 __all__ = ['LensFinder']
 
@@ -48,27 +50,31 @@ class LensFinder(object):
         self.min_q = min_q  # peak separation % of the whole image
         self.min_d = (self.min_q*self.lensobject.naxis1, self.min_q*self.lensobject.naxis2)
         self.sigma = sigma
-        # estimate threshold
-        self.threshold = self.threshold_estimate(self.lensobject.data, sigma=self.sigma)
-        # find peaks
-        self.peak_positions, self.peak_values = \
-            self.peak_candidates(self.lensobject.data, self.threshold, n=self.n, min_d=self.min_d,
-                                 centroid=centroid)
-        self.peaks = [self.lensobject.p2skycoords(p, unit='pixel', relative=False) for p
-                      in self.peak_positions]
-        # choose lens in peaks
-        self.lens_candidate, self.lens_value, self.lens_index = \
-            self.detect_lens(self.peaks, self.peak_values)
-        # sources are all the rest
-        self.source_candidates, self.source_values, self.source_indices = \
-            [self.peaks[i] for i in range(len(self.peaks))
-             if i != self.lens_index], \
-            [self.peak_values[i] for i in range(len(self.peak_values))
-             if i != self.lens_index], \
-            [i for i in range(len(self.peak_positions))
-             if i != self.lens_index]
-        #if self.source_candidates is not None and self.lens_candidate is not None:
-        #    self.order_by_distance(self.source_candidates, self.lens_candidate)
+        self.threshold = None
+        self.peak_positions, self.peak_values = [], []
+        self.peaks = [SkyCoords.empty()]
+        self.lens_candidate, self.lens_value, self.lens_index = None, None, None
+        self.source_candidates, self.source_values, self.source_indices = [], [], []
+        if self.lensobject.data is not None:
+            # estimate threshold
+            self.threshold = self.threshold_estimate(self.lensobject.data, sigma=self.sigma)
+            # find peaks
+            self.peak_positions, self.peak_values = self.peak_candidates(
+                self.lensobject.data, self.threshold, n=self.n, min_d=self.min_d,
+                centroid=centroid)
+            self.peaks = [self.lensobject.p2skycoords(p, unit='pixel', relative=False) for p
+                          in self.peak_positions]
+            # choose lens in peaks
+            self.lens_candidate, self.lens_value, self.lens_index = self.detect_lens(
+                self.peaks, self.peak_values)
+            # sources are all the rest
+            self.source_candidates, self.source_values, self.source_indices = (
+                [self.peaks[i] for i in range(len(self.peaks)) if i != self.lens_index],
+                [self.peak_values[i] for i in range(len(self.peak_values))
+                 if i != self.lens_index],
+                [i for i in range(len(self.peak_positions)) if i != self.lens_index])
+            # if self.source_candidates is not None and self.lens_candidate is not None:
+            #     self.order_by_distance(self.source_candidates, self.lens_candidate)
         # some verbosity
         if verbose:
             print(self.__v__)

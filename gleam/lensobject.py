@@ -32,9 +32,13 @@ class LensObject(SkyF):
     """
     An object representing a gravitational lens
     """
-    def __init__(self, filepath, lens=None, srcimgs=None, auto=False,
-                 n=5, min_q=0.1, sigma=(4, 4),
-                 data=None, text_file=None, text=None, filter_=True,
+    params = SkyF.params + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr']
+
+    def __init__(self, filepath, lens=None, srcimgs=None, zl=None, zs=None,
+                 tdelay=None, tderr=None,
+                 auto=False,
+                 n=5, min_q=0.1, sigma=(4, 4), centroid=5,
+                 parameter=None, text_file=None, text=None, filter_=True,
                  output=None, name=None, reorder=None, verbose=False, **kwargs):
         """
         Initialize parsing of a fits file with a file name
@@ -43,23 +47,28 @@ class LensObject(SkyF):
             filepath <str> - path to .fits file (shortcuts are automatically resolved)
 
         Kwargs:
+            data <list/np.ndarray> - add the data of the .fits file directly
+            hdr <dict> - add the header of the .fits file directly
             px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
             refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
             refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
+            photzp <float> - overwrite photometric zero-point information
             lens <int,int> - overwrite the lens pixel coordinates
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
-            photzp <float> - overwrite photometric zero-point information
-            auto <bool> - (finder) use automatic image recognition (can be unreliable)
-            n <int> - (finder) number of peak candidates allowed
-            min_q <float> - (finder) a percentage quotient for the min. peak separation
-            sigma <int(,int)> - (finder) lower/upper sigma for signal-to-noise estimate
-            data <dict> - (glscg) data for the GLASS config generation
+            parameter <dict> - various parameters like redshifts, time delays, etc.;
+                               (glscg) also contains parameters for the GLASS config generation
             text_file <str> - (glscg) path to .txt file; shortcuts automatically resolved
             text <list(str)> - (glscg) alternative to text_file; direct text input
             filter_ <bool> - (glscg) apply filter from GLSCFactory.key_filter to text information
             reorder <str> - (glscg) reorder the image positions relative to ABCD ordered bottom-up
             output <str> - (glscg) output name of the .gls file
             name <str> - (glscg) object name in the .gls file (extracted from output by default)
+            auto <bool> - (finder) use automatic image recognition (can be unreliable)
+            n <int> - (finder) number of peak candidates allowed
+            min_q <float> - (finder) a percentage quotient for the min. peak separation
+            sigma <int(,int)> - (finder) lower/upper sigma for signal-to-noise estimate
+            centroid <int> - use COM positions around a pixel slice of size of centroid
+                             around peak center if centroid > 1
 
         Return:
             <LensObject object> - standard initializer
@@ -73,68 +82,57 @@ class LensObject(SkyF):
         # assume lens is in the center of the .fits file afterwards if auto is False
         self._lens = None
         self.srcimgs = []  # source image positions
-
-        # initialize glass config factory
-        self.glsc_factory = GLSCFactory(lens_object=self, data=data, verbose=False,
+        # GLASS config factory for parsing text and config files
+        self.glsc_factory = GLSCFactory(lens_object=self, parameter=parameter, verbose=False,
                                         text_file=text_file, text=text, filter_=filter_,
                                         output=output, name=name, reorder=reorder)
-        # load lens parameters from text file
-        self.glsc_factory.sync_lens_params(verbose=False)
-
-        # initialize automatic lens finder
-        self._lens = self.center
-        self.finder = LensFinder(self, n=n, min_q=min_q, sigma=sigma)
+        self.glsc_factory.sync_lens_params(verbose=False)  # load parameters from text file or dict
+        # LensFinder for automatic search of lens and source image positions
+        self.lens = self.center
+        self.finder = LensFinder(self, n=n, min_q=min_q, sigma=sigma, centroid=centroid)
         if auto:
             if self.finder.lens_candidate is not None:
-                self._lens = self.finder.lens_candidate
+                self.lens = self.finder.lens_candidate
             for p in self.finder.source_candidates:
                 self.srcimgs.append(p)
-
-        # set lens and/or source images manually
+        # set lens parameters manually
         if lens is not None:
             self.lens = lens
         if srcimgs is not None:
             self.srcimgs_xy = srcimgs
+        if zl is not None:
+            self.zl = zl
+        if zs is not None:
+            self.zs = zs
+        if tdelay is not None:
+            self.tdelay = tdelay
+        if tderr is not None:
+            self.tderr = tderr
 
         # some verbosity
         if verbose:
             print(self.__v__)
 
-    def __copy__(self):
-        args = (self.filepath,)
-        kwargs = {
-            'px2arcsec': self.px2arcsec,
-            'refpx': self.refpx,
-            'refval': self.refval,
-            'photzp': self.photzp,
-            'lens': self.lens.xy,
-            'srcimgs': self.srcimgs_xy,
-            'data': {
-                'zl': self.zl,
-                'zs': self.zs,
-                'tdelay': self.tdelay,
-                'tderr': self.tderr
-            }
-        }
-        return LensObject(*args, **kwargs)
+    def __eq__(self, other):
+        if isinstance(other, LensObject):
+            return \
+                super(LensObject, self).__eq__(other) \
+                and self.lens == other.lens \
+                and self.srcimgs == other.srcimgs \
+                and self.zl == other.zl \
+                and self.zs == other.zs \
+                and self.tdelay == other.tdelay \
+                and self.tderr == other.tderr
+        else:
+            NotImplemented
 
-    def __deepcopy__(self, memo):
-        args = (copy.deepcopy(self.filepath, memo),)
-        kwargs = {
-            'px2arcsec': copy.deepcopy(self.px2arcsec, memo),
-            'refpx': copy.deepcopy(self.refpx, memo),
-            'refval': copy.deepcopy(self.refval, memo),
-            'photzp': copy.deepcopy(self.photzp, memo),
-            'lens': copy.deepcopy(self.lens.xy, memo),
-            'srcimgs': copy.deepcopy(self.srcimgs_xy, memo),
-            'data': {
-                'zl': copy.deepcopy(self.zl, memo),
-                'zs': copy.deepcopy(self.zs, memo),
-                'tdelay': copy.deepcopy(self.tdelay, memo),
-                'tderr': copy.deepcopy(self.tderr, memo)
-            }
-        }
-        return LensObject(*args, **kwargs)
+    # @classmethod
+    # def from_jdict(cls, paramdict, filepath=None, verbose=False):
+    #     pass
+
+    # @classmethod
+    # def from_json(self):
+    #     pass
 
     def __str__(self):
         return "LensObject({}@[{:.4f}, {:.4f}])".format(self.band, *self.center)
@@ -151,19 +149,7 @@ class LensObject(SkyF):
             tests <list(str)> - a list of test variable strings
         """
         return super(LensObject, self).tests \
-            + ['zl', 'zs', 'tdelay', 'tderr', 'lens', 'srcimgs', 'glsc_factory', 'finder']
-
-    def copy(self, verbose=False):
-        cpy = copy.copy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
-
-    def deepcopy(self, verbose=False):
-        cpy = copy.deepcopy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
+            + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr', 'glsc_factory', 'finder']
 
     @property
     def lens(self):
@@ -184,12 +170,15 @@ class LensObject(SkyF):
         Lens position setter in the .fits file (in pixels)
 
         Args:
-            lens <int/float,int/float> - lens position (in pixels)
+            lens <SkyCoords object | int/float,int/float> - lens position (in pixels)
 
         Kwargs/Return:
             None
         """
-        self._lens = SkyCoords.from_pixels(*lens, **self.center.coordkw)
+        if isinstance(lens, SkyCoords):
+            self._lens = lens
+        elif isinstance(lens, (tuple, list)):
+            self._lens = SkyCoords.from_pixels(*lens, **self.center.coordkw)
 
     @property
     def srcimgs_xy(self):

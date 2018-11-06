@@ -41,9 +41,11 @@ class TestSkyPatch(UnitTestPrototype):
     def test_copy(self):
         """ # copy """
         print(">>> {}".format(self.skyp))
+        self.skyp.fs[5].photzp = 25.67
         copy = self.skyp.copy(**self.v)
         self.assertEqual(copy, self.skyp)
         self.assertFalse(copy is self.skyp)
+        self.assertEqual(copy.fs[5].photzp, self.skyp.fs[5].photzp)
 
     def test_deepcopy(self):
         """ # deepcopy """
@@ -55,10 +57,14 @@ class TestSkyPatch(UnitTestPrototype):
     def test_from_json(self):
         """ # from_json """
         filename = 'test.json'
+        self.skyp.fs[5].photzp = 25.67
         filename = self.skyp.jsonify(save=True)
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
-            SkyPatch.from_json(j, **self.v)
+            jcopy = SkyPatch.from_json(j, **self.v)
+            self.assertEqual(jcopy, self.skyp)
+            self.assertFalse(jcopy is self.skyp)
+            self.assertEqual(jcopy.fs[5].photzp, self.skyp.fs[5].photzp)
         try:
             os.remove(filename)
         except OSError:
@@ -67,7 +73,8 @@ class TestSkyPatch(UnitTestPrototype):
     def test_jsonify(self):
         """ # jsonify """
         print(">>> {}".format(self.skyp))
-        self.skyp.jsonify(**self.v)
+        jsnstr = self.skyp.jsonify(**self.v)
+        self.assertIsInstance(jsnstr, str)
 
     def test_find_files(self):
         """ # find_files """

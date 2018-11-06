@@ -40,20 +40,48 @@ class TestLensObject(UnitTestPrototype):
         lobject = LensObject(self.test_fits, **self.v)
         self.assertIsInstance(lobject, LensObject)
         self.assertEqual(lobject, self.lobject)
+        kwargs = {'auto': True,
+                  'n': 5,
+                  'min_q': 0.1,
+                  'sigma': (1, 3),
+                  'centroid': 5}
+        print(">>> {}, {}".format(self.test_fits, kwargs))
+        lobject = LensObject(self.test_fits, **dict(kwargs, **self.v))
+        self.assertIsInstance(lobject, LensObject)
+        print(">>> {}".format(None))
+        lobject = LensObject(None, **self.v)
+        self.assertIsInstance(lobject, LensObject)
 
     def test_copy(self):
         """ # copy """
         print(">>> {}".format(self.lobject))
+        self.lobject.zl = 0.5
         copy = self.lobject.copy(**self.v)
         self.assertEqual(copy, self.lobject)
         self.assertFalse(copy is self.lobject)
+        self.assertEqual(copy.zl, self.lobject.zl)
 
     def test_deepcopy(self):
         """ # deepcopy """
         print(">>> {}".format(self.lobject))
+        self.lobject.zl = 0.5
         copy = self.lobject.deepcopy(**self.v)
         self.assertEqual(copy, self.lobject)
         self.assertFalse(copy is self.lobject)
+        self.assertEqual(copy.zl, self.lobject.zl)
+
+    def test_from_json(self):
+        """ # from_json """
+        filename = 'test.json'
+        self.lobject.zl = 0.5
+        filename = self.lobject.jsonify(save=True)
+        print(">>> {}".format(filename))
+
+    def test_jsonify(self):
+        """ # jsonify """
+        print(">>> {}".format(self.lobject))
+        jsnstr = self.lobject.jsonify(**self.v)
+        self.assertIsInstance(jsnstr, str)
 
     def test_check_path(self):
         """ # check_path """

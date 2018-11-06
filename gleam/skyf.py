@@ -12,7 +12,7 @@ TODO:
 ###############################################################################
 from gleam.skycoords import SkyCoords
 from gleam.megacam_fields import MEGACAM_FPROPS
-from gleam.utils.encode import GLEAMEncoder
+from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
 
 import sys
 import os
@@ -73,8 +73,9 @@ class SkyF(object):
             self.refval = refval
         if photzp is not None:
             self.photzp = photzp
-        # rederive center coordinates
-        self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=self.photzp)
+        self.mag_formula = None
+        if self.hdr is not None:
+            self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=self.photzp)
         # get rid of methods when inherited
         if self.__class__.__name__ != SkyF.__name__ and hasattr(SkyF, 'show_fullsky'):
             del SkyF.show_fullsky
@@ -84,7 +85,10 @@ class SkyF(object):
 
     def __eq__(self, other):
         if isinstance(other, SkyF):
-            return self.center == other.center
+            return \
+                np.array_equal(self.data, other.data) \
+                and self.center == other.center \
+                and self.photzp == other.photzp
         else:
             NotImplemented
 
@@ -109,13 +113,13 @@ class SkyF(object):
     def __copy__(self):
         args = (self.filepath,)
         kwargs = {k: self.__getattribute__(k) for k in self.__class__.params}
-        return SkyF(*args, **kwargs)
+        return self.__class__(*args, **kwargs)
 
     def __deepcopy__(self, memo):
         args = (copy.deepcopy(self.filepath, memo),)
         kwargs = {k: copy.deepcopy(self.__getattribute__(k), memo)
                   for k in self.__class__.params}
-        return SkyF(*args, **kwargs)
+        return self.__class__(*args, **kwargs)
 
     def copy(self, verbose=False):
         cpy = copy.copy(self)
@@ -129,9 +133,46 @@ class SkyF(object):
             print(cpy.__v__)
         return cpy
 
+    @property
+    def __json__(self):
+        """
+        Select attributes for json write
+
+        Args/Kwargs:
+            None
+
+        Return:
+            jsn_dict <dict> - a first-layer serialized json dictionary
+        """
+        jsn_dict = {}
+        for k in self.__class__.params:
+            if hasattr(self, k):
+                val = self.__getattribute__(k)
+                if isinstance(val, np.ndarray):
+                    val = val.tolist()
+                jsn_dict[k] = val
+        jsn_dict['__type__'] = self.__class__.__name__
+        return jsn_dict
+
     @classmethod
-    def from_dict(cls, paramdict, filepath=None, verbose=False):
-        self = cls(None, **paramdict)
+    def from_jdict(cls, jdict, filepath=None, verbose=False):
+        """
+        Initialize from a json-originated dictionary
+
+        Args:
+            jdict <dict> - serialized object dictionary
+
+        Kwargs:
+            filepath <str> - separate filepath setter
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            <cls object> - initializer from a json-originated dictionary
+
+        Note:
+            - used by GLEAMDecoder in from_json
+        """
+        self = cls(None, **jdict)
         self.data = np.array(self.data)
         if filepath:
             self.filepath = filepath
@@ -139,21 +180,11 @@ class SkyF(object):
             print(self.__v__)
         return self
 
-    @property
-    def __json__(self):
-        pardict = {}
-        for k in self.__class__.params:
-            val = self.__getattribute__(k)
-            if isinstance(val, np.ndarray):
-                val = val.tolist()
-            pardict[k] = val
-        return pardict
-
     @classmethod
     def from_json(cls, jsn, verbose=False):
         import json
-        j = json.load(jsn)
-        self = cls.from_dict(j, filepath=os.path.realpath(jsn.name))
+        GLEAMDecoder.decoding_kwargs['filepath'] = os.path.realpath(jsn.name)
+        self = json.load(jsn, object_hook=GLEAMDecoder.decode)
         if verbose:
             print(self.__v__)
         return self
@@ -234,7 +265,8 @@ class SkyF(object):
         Return:
             filename <str> - Base name of the file path
         """
-        return os.path.basename(self.filepath)
+        if self.filepath:
+            return os.path.basename(self.filepath)
 
     @staticmethod
     def check_path(filepath, check_ext=True, extensions=['.fits', '.fit', '.fts'],
@@ -386,7 +418,7 @@ class SkyF(object):
         Return:
             band <str> - simplified string of the image's band
         """
-        if self.hdr['FILTER'] is not None:
+        if self.hdr and self.hdr['FILTER'] is not None:
             return self.hdr['FILTER'].split('.')[0]
 
     @property
@@ -400,10 +432,12 @@ class SkyF(object):
         Return:
             naxis1 <int> - number of pixels along axis 1
         """
-        if self.hdr['NAXIS1'] is None:
+        if self.hdr and 'NAXIS1' in self.hdr and self.hdr['NAXIS1'] is not None:
+            return self.hdr['NAXIS1']
+        elif self.data:
             return self.data.shape[0]
         else:
-            return self.hdr['NAXIS1']
+            return 0
 
     @property
     def naxis2(self):
@@ -416,10 +450,12 @@ class SkyF(object):
         Return:
             naxis2 <int> - number of pixels along axis 2
         """
-        if self.hdr['NAXIS2'] is None:
+        if self.hdr and 'NAXIS2' in self.hdr and self.hdr['NAXIS2'] is not None:
+            return self.hdr['NAXIS2']
+        elif self.data:
             return self.data.shape[1]
         else:
-            return self.hdr['NAXIS2']
+            return 0
 
     @property
     def naxis_plus(self):
@@ -432,9 +468,10 @@ class SkyF(object):
         Return:
             naxis_plus <list(int)> - number of pixels along each additional axis
         """
-        if 'NAXIS' in self.hdr.keys():
+        naxis = 2
+        if self.hdr and 'NAXIS' in self.hdr:
             naxis = self.hdr['NAXIS']
-        else:
+        elif self.hdr:
             naxis = sum(['NAXIS' in k for k in self.hdr.keys()])
         if naxis > 2:
             plus = []
@@ -455,7 +492,8 @@ class SkyF(object):
         Return:
             refval <float,float> - reference pixel coordinates in degrees
         """
-        return self.refpx_from_hdr(self.hdr, as_radec=True)
+        if self.hdr:
+            return self.refpx_from_hdr(self.hdr, as_radec=True)
 
     @refval.setter
     def refval(self, refval):
@@ -485,7 +523,8 @@ class SkyF(object):
         Return:
             refpx <int,int> - reference pixel coordinates in pixels
         """
-        return self.refpx_from_hdr(self.hdr, as_radec=False)
+        if self.hdr:
+            return self.refpx_from_hdr(self.hdr, as_radec=False)
 
     @refpx.setter
     def refpx(self, refpx):
@@ -515,7 +554,8 @@ class SkyF(object):
         Return:
             px2deg <float,float> - pixel-to-degrees conversion factor in units of degrees/pixels
         """
-        return self.pxscale_from_hdr(self.hdr, as_degrees=True)
+        if self.hdr:
+            return self.pxscale_from_hdr(self.hdr, as_degrees=True)
 
     @px2deg.setter
     def px2deg(self, pxscale):
@@ -547,7 +587,8 @@ class SkyF(object):
         Return:
             pxscale <float,float> - pixel-to-arcsec conversion factor in units of arcsecs/pixels
         """
-        return self.pxscale_from_hdr(self.hdr, as_degrees=False)
+        if self.hdr:
+            return self.pxscale_from_hdr(self.hdr, as_degrees=False)
 
     @px2arcsec.setter
     def px2arcsec(self, pxscale):
@@ -579,7 +620,8 @@ class SkyF(object):
         Return:
             photzp <float> - photometric zero-point needed for AB magnitude conversion
         """
-        return self.hdr['PHOTZP']
+        if self.hdr:
+            return self.hdr['PHOTZP']
 
     @photzp.setter
     def photzp(self, photzp):
@@ -608,7 +650,7 @@ class SkyF(object):
         Return:
             field <str> - Field signature
         """
-        if self.hdr['OBJECT'] is not None:
+        if self.hdr and self.hdr['OBJECT'] is not None:
             field = re.sub("\.", "", self.hdr['OBJECT'].upper())
             # standardize, i.e. if field ends with 0, switch ...-0 => ...+0
             if field[-1] == '0' and field[-2] == '-':
@@ -628,7 +670,7 @@ class SkyF(object):
         """
         try:
             field_props = MEGACAM_FPROPS[self.field]
-        except:
+        except KeyError:
             print("Properties of that field are unknown [{}]".format(self.field))
             return None
         # get field size
@@ -651,8 +693,12 @@ class SkyF(object):
         Return:
             center <Skycoords object> - center coordinate of the .fits file's image
         """
-        return SkyCoords.from_pixels(self.naxis1/2, self.naxis2/2, px2arcsec_scale=self.px2arcsec,
-                                     reference_pixel=self.refpx, reference_value=self.refval)
+        if self.hdr:
+            return SkyCoords.from_pixels(self.naxis1/2, self.naxis2/2,
+                                         px2arcsec_scale=self.px2arcsec,
+                                         reference_pixel=self.refpx, reference_value=self.refval)
+        else:
+            return SkyCoords.empty()
 
     @property
     def magnitudes(self):
@@ -789,7 +835,7 @@ class SkyF(object):
         Return:
             cdelt1 <float>, cdelt2 <float> - pixel scales for RA and Dec
         """
-        if any([hdr[k] is None for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
+        if any([(k not in hdr) or (hdr[k] is None) for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
             return [None, None]
         if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
             print("Warning! In the WCS rotation East is not to the left!")
@@ -828,7 +874,7 @@ class SkyF(object):
         Return:
             crota2 <float>, skew <float> - rotation angle and skew of pixel grid
         """
-        if any([hdr[k] is None for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
+        if any([(k not in hdr) or (hdr[k] is None) for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
             return [None, None]
         if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
             print("Warning! In the WCS rotation East is not to the left!")
@@ -863,6 +909,8 @@ class SkyF(object):
         Return:
             refx <int/float>, refy <int/float> - reference pixel coordinates
         """
+        if any([(k not in hdr) or (hdr[k] is None) for k in ['CRPIX1', 'CRPIX2']]):
+            return [None, None]
         refx, refy = hdr['CRPIX1'], hdr['CRPIX2']
         if as_radec:
             refx, refy = hdr['CRVAL1'], hdr['CRVAL2']

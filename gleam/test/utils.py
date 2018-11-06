@@ -9,6 +9,7 @@ Testing utility module
 ###############################################################################
 import unittest
 
+
 ###############################################################################
 class UnitTestPrototype(unittest.TestCase):
     OKAY = u'\033[92m'+u'\u2713'+u'\x1b[0m'
@@ -35,3 +36,11 @@ class UnitTestPrototype(unittest.TestCase):
     def main(cls, **kwargs):
         v = kwargs.pop('verbosity', 1)
         unittest.main(verbosity=v, **kwargs)
+
+
+class SequentialTestLoader(unittest.TestLoader):
+    def getTestCaseNames(self, testCaseClass):
+        test_names = super(SequentialTestLoader, self).getTestCaseNames(testCaseClass)
+        testcase_methods = list(testCaseClass.__dict__.keys())
+        test_names.sort(key=testcase_methods.index)
+        return test_names

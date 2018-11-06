@@ -67,7 +67,7 @@ class GLSCFactory(object):
     # default index labeling of the positions
     labeling = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8}
 
-    def __init__(self, data=None, text_file=None, text=None, filter_=True, sync=True,
+    def __init__(self, parameter=None, text_file=None, text=None, filter_=True, sync=True,
                  lens_object=None, fits_file=None,
                  template_single=os.path.abspath(os.path.dirname(__file__)) \
                  + '/' + 'template.single.gls',
@@ -81,7 +81,7 @@ class GLSCFactory(object):
             None
 
         Kwargs:
-            data <dict> - data directly for the GLASS config generation
+            parameter <dict> - parameter directly for the GLASS config generation
             text_file <str> - path to .txt file (shortcuts are automatically resolved)
             text <list(str)> - alternatively to text_file the text can be input directly
             lens_object <LensObject object> - a lens object for basic information about lens
@@ -108,11 +108,11 @@ class GLSCFactory(object):
             self.name = name
         else:
             self.name = self.fname
-        self._data = data
-        self.data = {'name': "'{}'".format(self.name),
-                     'fname': "'{}'".format(self.fname),
-                     'dpath': "'{}'".format(""),
-                     'reorder': reorder}
+        self._parameter = parameter
+        self.parameter = {'name': "'{}'".format(self.name),
+                          'fname': "'{}'".format(self.fname),
+                          'dpath': "'{}'".format(""),
+                          'reorder': reorder}
 
         # read text input
         if text is None:
@@ -141,7 +141,7 @@ class GLSCFactory(object):
             print(self.__v__)
 
     def __str__(self):
-        return "GLSCFactory({}, {}, {}, {}...)".format(*list(self.data.keys())[:4])
+        return "GLSCFactory({}, {}, {}, {}...)".format(*list(self.parameter.keys())[:4])
 
     @property
     def __v__(self):
@@ -154,48 +154,48 @@ class GLSCFactory(object):
         Return:
             <str> - test of GLSCFactory attributes
         """
-        tests = ['lens_object', 'text', 'directory', 'name', 'data',
+        tests = ['lens_object', 'text', 'directory', 'name', 'parameter',
                  'template', 'config']
         return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in tests])
 
     @property
-    def data(self):
+    def parameter(self):
         """
-        Data gathered from text and lens matching search parameters
+        Parameter gathered from text and lens matching search parameters
 
         Args/Kwargs:
             None
 
         Return:
-            data <dict> - a dictionary of information from text and lens
+            parameter <dict> - a dictionary of information from text and lens
         """
-        if self._data is None:
-            self._data = dict()
+        if self._parameter is None:
+            self._parameter = dict()
         text_info = self.text_extract(self.text, filter_=True)
         lens_info = self.lens_extract(self.lens_object)
-        self._data.update(text_info)
-        self._data.update(lens_info)
-        return self._data
+        self._parameter.update(text_info)
+        self._parameter.update(lens_info)
+        return self._parameter
 
-    @data.setter
-    def data(self, data):
+    @parameter.setter
+    def parameter(self, parameter):
         """
-        Update data extracted from both text and lens by search parameters
+        Update parameter extracted from both text and lens by search parameters
 
         Args:
-            data <dict> - a dictionary of information intended for glass config file
+            parameter <dict> - a dictionary of information intended for glass config file
 
         Kwargs/Return:
             None
         """
-        if self._data is None:
-            self._data = dict()
-        self._data.update(data)
+        if self._parameter is None:
+            self._parameter = dict()
+        self._parameter.update(parameter)
 
     @property
     def config(self):
         """
-        Configurations based on text and lens data for the glass config file
+        Configurations based on text and lens parameter for the glass config file
 
         Args/Kwargs:
             None
@@ -205,19 +205,19 @@ class GLSCFactory(object):
         """
         if self._config is None:  # only copy if necessary
             self._config = dict(self.template)
-        data = self.data  # update data by calling property
-        # fill configs with data
-        data_reordered = False
+        parameter = self.parameter  # update parameter by calling property
+        # fill configs with parameter
+        parameter_reordered = False
         for k in self._config.keys():
             for i, line in enumerate(self._config[k]):
                 param = line[1:].split("=")[0].strip()
-                if line[0] == "_" and param in data:
-                    if param == 'ABCD' and data['reorder'] is not None and not data_reordered:
-                        topbottom = list(data['ABCD'])  # not yet ABCD
-                        data_reordered = True
-                        for j, x in enumerate(data['reorder']):
-                            data['ABCD'][GLSCFactory.labeling[x]] = topbottom[j]
-                    self._config[k][i] = param+" = "+str(data[param])+"\n"
+                if line[0] == "_" and param in parameter:
+                    if param == 'ABCD' and parameter['reorder'] is not None and not parameter_reordered:
+                        topbottom = list(parameter['ABCD'])  # not yet ABCD
+                        parameter_reordered = True
+                        for j, x in enumerate(parameter['reorder']):
+                            parameter['ABCD'][GLSCFactory.labeling[x]] = topbottom[j]
+                    self._config[k][i] = param+" = "+str(parameter[param])+"\n"
         return self._config
 
     @staticmethod
@@ -359,7 +359,7 @@ class GLSCFactory(object):
 
     def sync_lens_params(self, verbose=False):
         """
-        Override attributes of the lens object with info from text data
+        Override attributes of the lens object with info from text parameters
 
         Args:
             None
@@ -370,9 +370,9 @@ class GLSCFactory(object):
         Return:
             None
         """
-        for k in self.data.keys():
+        for k in self.parameter.keys():
             if k in dir(self.lens_object):
-                self.lens_object.__setattr__(k, self.data[k])
+                self.lens_object.__setattr__(k, self.parameter[k])
                 if verbose:
                     print(self.lens_object.__getattribute__(k))
 
@@ -401,7 +401,7 @@ class GLSCFactory(object):
         elif len(lo.srcimgs) == 2:
             parity = ['min', 'sad']
         else:
-            ABCD = [ABCD[i] if len(ABCD)>i else [] for i in range(4)]
+            ABCD = [ABCD[i] if len(ABCD) > i else [] for i in range(4)]
             parity = ['min', 'min', 'sad', 'sad']
         # gather info and return it
         info.update({'ABCD': ABCD, 'parity': parity})

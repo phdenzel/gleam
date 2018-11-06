@@ -42,16 +42,20 @@ class TestSkyF(UnitTestPrototype):
     def test_copy(self):
         """ # copy """
         print(">>> {}".format(self.skyf))
+        self.skyf.photzp = 25.67
         copy = self.skyf.copy(**self.v)
         self.assertEqual(copy, self.skyf)
         self.assertFalse(copy is self.skyf)
+        self.assertEqual(copy.photzp, self.skyf.photzp)
 
     def test_deepcopy(self):
         """ # deepcopy """
         print(">>> {}".format(self.skyf))
+        self.skyf.photzp = 25.67
         copy = self.skyf.deepcopy(**self.v)
         self.assertEqual(copy, self.skyf)
         self.assertFalse(copy is self.skyf)
+        self.assertEqual(copy.photzp, self.skyf.photzp)
 
     def test_from_json(self):
         """ # from_json """
@@ -60,7 +64,10 @@ class TestSkyF(UnitTestPrototype):
         filename = self.skyf.jsonify(save=True)
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
-            SkyF.from_json(j, **self.v)
+            jcopy = SkyF.from_json(j, **self.v)
+            self.assertEqual(jcopy, self.skyf)
+            self.assertFalse(jcopy is self.skyf)
+            self.assertEqual(jcopy.photzp, self.skyf.photzp)
         try:
             os.remove(filename)
         except OSError:
@@ -69,7 +76,8 @@ class TestSkyF(UnitTestPrototype):
     def test_jsonify(self):
         """ # jsonify """
         print(">>> {}".format(self.skyf))
-        self.skyf.jsonify(**self.v)
+        jsnstr = self.skyf.jsonify(**self.v)
+        self.assertIsInstance(jsnstr, str)
 
     def test_check_path(self):
         """ # check_path """

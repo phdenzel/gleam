@@ -9,7 +9,7 @@ Phase through a region in the sky with SkyPatch
 ###############################################################################
 from gleam.skyf import SkyF
 from gleam.utils.rgb_map import lupton_like
-from gleam.utils.encode import GLEAMEncoder
+from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
 
 import sys
 import os
@@ -39,9 +39,9 @@ class SkyPatch(object):
         Kwargs:
             data <list(list/np.ndarray)> - add the data of the .fits file directly
             hdr <list(dict)> - add the header of the .fits file directly
-            px2arcsec <list(float,float)> - overwrite the pixel scale in the .fits header (in arcsecs)
-            refpx <list(int,int)> - overwrite reference pixel coordinates in .fits header (in pixels)
-            refval <list(float,float)> - overwrite reference pixel values in .fits header (in degrees)
+            px2arcsec <list(float,float)> - overwrite the pixel scale in the .fits header (in arcs)
+            refpx <list(int,int)> - overwrite reference pixel coordinates in .fits header (in px)
+            refval <list(float,float)> - overwrite reference pixel values in .fits header (in deg)
             photzp <list(float)> - overwrite photometric zero-point information
             verbose <bool> - verbose mode; print command line statements
 
@@ -91,9 +91,7 @@ class SkyPatch(object):
 
     def __eq__(self, other):
         if isinstance(other, SkyPatch):
-            return self.filepaths == other.filepaths
-        elif isinstance(other, str):
-            return self.filepath == other
+            return self.fs == other.fs
         else:
             NotImplemented
 
@@ -115,14 +113,14 @@ class SkyPatch(object):
     def __copy__(self):
         args = (self.filepaths,)
         kwargs = {k: [f.__getattribute__(k) for f in self.fs if hasattr(f, k)]
-                  for k in self.__class__.params}
-        return SkyPatch(*args, **kwargs)
+                  for k in self.__getattribute__(self.__class__.params[0])[0].__class__.params}
+        return self.__class__(*args, **kwargs)
 
     def __deepcopy__(self, memo):
         args = (copy.deepcopy(self.filepaths, memo),)
         kwargs = {k: [copy.deepcopy(f.__getattribute__(k), memo) for f in self.fs if hasattr(f, k)]
-                  for k in self.fs[0].__class__.params}
-        return SkyPatch(*args, **kwargs)
+                  for k in self.__getattribute__(self.__class__.params[0])[0].__class__.params}
+        return self.__class__(*args, **kwargs)
 
     def copy(self, verbose=False):
         cpy = copy.copy(self)
@@ -138,23 +136,62 @@ class SkyPatch(object):
 
     @property
     def __json__(self):
-        pardict = {}
+        """
+        Select attributes for json write
+
+        Args/Kwargs:
+            None
+
+        Return:
+            jsn_dict <dict> - a first-layer serialized json dictionary
+        """
+        jsn_dict = {}
         for k in self.__class__.params:
             if hasattr(self, k):
                 val = self.__getattribute__(k)
-                if isinstance(val, np.ndarray):
-                    val = val.tolist()
-                pardict[k] = val
-        return pardict
+                jsn_dict[k] = val
+        jsn_dict['__type__'] = self.__class__.__name__
+        return jsn_dict
+
+    @classmethod
+    def from_jdict(cls, jdict, filepath=None, verbose=False):
+        """
+        Initialize from a json-originated dictionary
+
+        Args:
+            jdict <dict> - serialized object dictionary
+
+        Kwargs:
+            filepaths <list(str)> - separate filepaths setter
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            <cls object> - initializer from a json-originated dictionary
+
+        Note:
+            - used by GLEAMDecoder in from_json
+        """
+        self = cls.__new__(cls)
+        self.fs = [jd for jd in jdict[cls.params[0]]]
+        self.filepaths = [filepath]*len(self.fs)
+        return self
 
     @classmethod
     def from_json(cls, jsn, verbose=False):
+        """
+        Initialize from a json file object
+
+        Args:
+            jsn <File object>
+
+        Note:
+            - use as
+              `with open('dummy.json', 'r') as f:
+                  skypatch = SkyPatch.from_json(f)`
+        """
         import json
-        j = json.load(jsn)
-        self = cls.__new__(cls)
-        self.fs = [SkyF.from_dict(pd, filepath=os.path.realpath(jsn.name))
-                   for pd in j['fs']]
-        self.filepaths = [os.path.realpath(jsn.name)]*len(self.fs)
+        GLEAMDecoder.decoding_kwargs['filepath'] = os.path.realpath(jsn.name)
+        self = json.load(jsn, object_hook=GLEAMDecoder.decode)
         if verbose:
             print(self.__v__)
         return self

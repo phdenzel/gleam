@@ -24,6 +24,8 @@ class SkyCoords(object):
     """
     Framework for sky coordinates, particularly from .fits files
     """
+    params = ['ra', 'dec', 'px2arcsec_scale', 'reference_pixel', 'reference_value']
+
     def __init__(self, ra, dec, px2arcsec_scale=[None, None],
                  reference_pixel=[None, None], reference_value=[None, None], verbose=False):
         """
@@ -185,25 +187,65 @@ class SkyCoords(object):
         return abs(self.ra), abs(self.dec)
 
     def __copy__(self):
-        args = self.ra, self.dec
-        kwargs = {
-            'px2arcsec_scale': self.px2arcsec_scale,
-            'reference_pixel': self.reference_pixel,
-            'reference_value': self.reference_value
-        }
-        return SkyCoords(*args, **kwargs)
+        kwargs = {k: self.__getattribute__(k) for k in self.__class__.params}
+        return self.__class__(**kwargs)
 
     def __deepcopy__(self, memo):
-        args = copy.deepcopy(self.ra, memo), copy.deepcopy(self.dec, memo)
-        kwargs = {
-            'px2arcsec_scale': copy.deepcopy(self.px2arcsec_scale, memo),
-            'reference_pixel': copy.deepcopy(self.reference_pixel, memo),
-            'reference_value': copy.deepcopy(self.reference_value, memo)
-        }
-        return SkyCoords(*args, **kwargs)
+        kwargs = {k: copy.deepcopy(self.__getattribute__(k), memo)
+                  for k in self.__class__.params}
+        return self.__class__(**kwargs)
 
+    def copy(self, verbose=False):
+        cpy = copy.copy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    def deepcopy(self, verbose=False):
+        cpy = copy.deepcopy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    @property
+    def __json__(self):
+        """
+        Select attributes for json write
+
+        Args/Kwargs:
+            None
+
+        Return:
+            jsn_dict <dict> - a first-layer serialized json dictionary
+        """
+        jsn_dict = {k: self.__getattribute__(k) for k in self.__class__.params}
+        jsn_dict['__type__'] = self.__class__.__name__
+        return jsn_dict
+
+    @classmethod
+    def empty(cls, *args, **kwargs):
+        """
+        Initialize empty instance
+
+        Args:
+            None (any argument will be ignored)
+
+        Kwargs:
+            px2arcsec_scale <float,float> - conversion factor from pixels to arcsecs
+            reference_pixel <int,int> - reference pixel from .fits file
+            reference_value <float,float> - reference coordinates in the .fits file (in degrees)
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            <SkyCoords object> - empty SkyCoords instance
+        """
+        return cls(None, None, **kwargs)
+    
     def __str__(self):
-        return "<"+str(self.ra)+", "+str(self.dec)+">"
+        if self.ra is not None and self.dec is not None:
+            return "<{:.4f}, {:.4f}>".format(self.ra, self.dec)
+        else:
+            return "<{}, {}>".format(self.ra, self.dec)
 
     def __repr__(self):
         return self.__str__()
@@ -235,37 +277,6 @@ class SkyCoords(object):
             <str> - test of SkyCoords attributes
         """
         return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in self.tests])
-
-    @classmethod
-    def empty(cls, *args, **kwargs):
-        """
-        Initialize empty instance
-
-        Args:
-            None (any argument will be ignored)
-
-        Kwargs:
-            px2arcsec_scale <float,float> - conversion factor from pixels to arcsecs
-            reference_pixel <int,int> - reference pixel from .fits file
-            reference_value <float,float> - reference coordinates in the .fits file (in degrees)
-            verbose <bool> - verbose mode; print command line statements
-
-        Return:
-            <SkyCoords object> - empty SkyCoords instance
-        """
-        return cls(None, None, **kwargs)
-
-    def copy(self, verbose=False):
-        cpy = copy.copy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
-
-    def deepcopy(self, verbose=False):
-        cpy = copy.deepcopy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
 
     @classmethod
     def from_J2000(cls, J2000, dec_as_hms=False, **kwargs):
