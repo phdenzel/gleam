@@ -145,7 +145,7 @@ class TestSPEP(UnitTestPrototype):
     def test_plot_map(self):
         """ # plot_map """
         self.spep.calc_map()
-        fig = self.spep.plot_map(contours=True, show=True)
+        fig = self.spep.plot_map(contours=True, show=False)
         print(fig)
 
 

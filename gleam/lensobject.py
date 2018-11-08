@@ -37,9 +37,8 @@ class LensObject(SkyF):
     def __init__(self, filepath, lens=None, srcimgs=None, zl=None, zs=None,
                  tdelay=None, tderr=None,
                  auto=False,
-                 n=5, min_q=0.1, sigma=(4, 4), centroid=5,
-                 parameter=None, text_file=None, text=None, filter_=True,
-                 output=None, name=None, reorder=None, verbose=False, **kwargs):
+                 glscfactory_options={}, finder_options={},
+                 verbose=False, **kwargs):
         """
         Initialize parsing of a fits file with a file name
 
@@ -55,20 +54,23 @@ class LensObject(SkyF):
             photzp <float> - overwrite photometric zero-point information
             lens <int,int> - overwrite the lens pixel coordinates
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
-            parameter <dict> - various parameters like redshifts, time delays, etc.;
-                               (glscg) also contains parameters for the GLASS config generation
-            text_file <str> - (glscg) path to .txt file; shortcuts automatically resolved
-            text <list(str)> - (glscg) alternative to text_file; direct text input
-            filter_ <bool> - (glscg) apply filter from GLSCFactory.key_filter to text information
-            reorder <str> - (glscg) reorder the image positions relative to ABCD ordered bottom-up
-            output <str> - (glscg) output name of the .gls file
-            name <str> - (glscg) object name in the .gls file (extracted from output by default)
-            auto <bool> - (finder) use automatic image recognition (can be unreliable)
-            n <int> - (finder) number of peak candidates allowed
-            min_q <float> - (finder) a percentage quotient for the min. peak separation
-            sigma <int(,int)> - (finder) lower/upper sigma for signal-to-noise estimate
-            centroid <int> - use COM positions around a pixel slice of size of centroid
-                             around peak center if centroid > 1
+            auto <bool> - use LensFinder for automatic image recognition (can be unreliable)
+            verbose <bool> - verbose mode; print command line statements
+            glscfactory_options <dict> - options for the GLSCFactory encompassing the following:
+                parameter <dict> - various parameters like redshifts, time delays, etc.;
+                                   also contains parameters for the GLASS config generation
+                text_file <str> - path to .txt file; shortcuts automatically resolved
+                text <list(str)> - alternative to text_file; direct text input
+                filter_ <bool> - apply filter from GLSCFactory.key_filter to text information
+                reorder <str> - reorder the images relative to ABCD ordered bottom-up
+                output <str> - output name of the .gls file
+                name <str> - object name in the .gls file (extracted from output by default)
+            finder_options <dict> - options for the LensFinder encompassing the following:
+                n <int> - number of peak candidates allowed
+                min_q <float> - a percentage quotient for the min. peak separation
+                sigma <int(,int)> - lower/upper sigma for signal-to-noise estimate
+                centroid <int> - use COM positions around a pixel slice of size of centroid
+                                 around peak center if centroid > 1
 
         Return:
             <LensObject object> - standard initializer
@@ -83,13 +85,11 @@ class LensObject(SkyF):
         self._lens = None
         self.srcimgs = []  # source image positions
         # GLASS config factory for parsing text and config files
-        self.glsc_factory = GLSCFactory(lens_object=self, parameter=parameter, verbose=False,
-                                        text_file=text_file, text=text, filter_=filter_,
-                                        output=output, name=name, reorder=reorder)
-        self.glsc_factory.sync_lens_params(verbose=False)  # load parameters from text file or dict
+        self.glscfactory = GLSCFactory(lens_object=self, **glscfactory_options)
+        self.glscfactory.sync_lens_params(verbose=False)  # load parameters from text file or dict
         # LensFinder for automatic search of lens and source image positions
         self.lens = self.center
-        self.finder = LensFinder(self, n=n, min_q=min_q, sigma=sigma, centroid=centroid)
+        self.finder = LensFinder(self, **finder_options)
         if auto:
             if self.finder.lens_candidate is not None:
                 self.lens = self.finder.lens_candidate
@@ -99,7 +99,7 @@ class LensObject(SkyF):
         if lens is not None:
             self.lens = lens
         if srcimgs is not None:
-            self.srcimgs_xy = srcimgs
+            self.srcimgs = srcimgs
         if zl is not None:
             self.zl = zl
         if zs is not None:
@@ -126,14 +126,6 @@ class LensObject(SkyF):
         else:
             NotImplemented
 
-    # @classmethod
-    # def from_jdict(cls, paramdict, filepath=None, verbose=False):
-    #     pass
-
-    # @classmethod
-    # def from_json(self):
-    #     pass
-
     def __str__(self):
         return "LensObject({}@[{:.4f}, {:.4f}])".format(self.band, *self.center)
 
@@ -149,7 +141,7 @@ class LensObject(SkyF):
             tests <list(str)> - a list of test variable strings
         """
         return super(LensObject, self).tests \
-            + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr', 'glsc_factory', 'finder']
+            + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr', 'glscfactory', 'finder']
 
     @property
     def lens(self):
@@ -235,8 +227,7 @@ class LensObject(SkyF):
             p = SkyCoords.arcsec2deg(*position)
         elif unit in ['degree', 'degrees']:
             p = position
-        else:
-            unit = 'degree'
+        else:  # unit = 'degree' by default
             p = position
         if relative:
             skyc = self.lens.shift(p, right_increase=True)
@@ -359,9 +350,9 @@ def main(case, args):
                   scalebar=args.scalebar, colorbar=args.colorbar,
                   savefig=args.savefig, verbose=args.verbose)
     if args.config_single is not None:
-        sp.glsc_factory.write(verbose=args.verbose)
+        sp.glscfactory.write(verbose=args.verbose)
     elif args.config_multi is not None:
-        sp.glsc_factory.append(last=args.finish_config, verbose=args.verbose)
+        sp.glscfactory.append(last=args.finish_config, verbose=args.verbose)
 
 
 def parse_arguments():

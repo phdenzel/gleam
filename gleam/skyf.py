@@ -1058,10 +1058,10 @@ class SkyF(object):
         ax = fig.add_subplot(111)
         fig, ax = self.plot_f(fig, ax, **kwargs)
         if savefig is not None:
-            if not savefig.endswith(".pdf") and not savefig.endswith(".jpg") \
-               and not savefig.endswith(".png") and not savefig.endswith(".eps"):
-                savefig = savefig + ".pdf"
-            plt.savefig(savefig)
+            savename = savefig
+            if not any([savefig.endswith(ext) for ext in [".pdf", ".jpg", ".png", ".eps"]]):
+                savename = savefig + ".pdf"
+            plt.savefig(savename)
         else:
             plt.show()
         # some verbosity
@@ -1115,10 +1115,10 @@ class SkyF(object):
                  cmap=cmap)
         ax = fig.axes[0]
         if savefig is not None:
-            if not savefig.endswith(".pdf") and not savefig.endswith(".jpg") \
-               and not savefig.endswith(".png") and not savefig.endswith(".eps"):
-                savefig = savefig + ".pdf"
-            plt.savefig(savefig, facecolor=bg)
+            savename = savefig
+            if not any([savefig.endswith(ext) for ext in [".pdf", ".jpg", ".png", ".eps"]]):
+                savename = savefig + ".pdf"
+            plt.savefig(savename, facecolor=bg)
         else:
             plt.show()
         # some verbosity

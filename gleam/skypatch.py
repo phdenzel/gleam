@@ -90,8 +90,9 @@ class SkyPatch(object):
             raise IndexError
 
     def __eq__(self, other):
-        if isinstance(other, SkyPatch):
-            return self.fs == other.fs
+        if isinstance(other, self.__class__):
+            return self.__getattribute__(self.__class__.params[0]) \
+                == other.__getattribute__(other.__class__.params[0])
         else:
             NotImplemented
 
@@ -100,9 +101,9 @@ class SkyPatch(object):
         Using md5 to encode specific information
         """
         import hashlib
-        s = ', '.join([f.encode() for f in self.fs]).encode('utf-8')
-        code = hashlib.md5(s).hexdigest()
-        return code
+        s = ', '.join([o.encode()
+                       for o in self.__getattribute__(self.__class__.params[0])]).encode('utf-8')
+        return hashlib.md5(s).hexdigest()
 
     def __hash__(self):
         """
@@ -112,13 +113,15 @@ class SkyPatch(object):
 
     def __copy__(self):
         args = (self.filepaths,)
-        kwargs = {k: [f.__getattribute__(k) for f in self.fs if hasattr(f, k)]
+        kwargs = {k: [o.__getattribute__(k)
+                      for o in self.__getattribute__(self.__class__.params[0]) if hasattr(o, k)]
                   for k in self.__getattribute__(self.__class__.params[0])[0].__class__.params}
         return self.__class__(*args, **kwargs)
 
     def __deepcopy__(self, memo):
         args = (copy.deepcopy(self.filepaths, memo),)
-        kwargs = {k: [copy.deepcopy(f.__getattribute__(k), memo) for f in self.fs if hasattr(f, k)]
+        kwargs = {k: [copy.deepcopy(o.__getattribute__(k), memo)
+                      for o in self.__getattribute__(self.__class__.params[0]) if hasattr(o, k)]
                   for k in self.__getattribute__(self.__class__.params[0])[0].__class__.params}
         return self.__class__(*args, **kwargs)
 
@@ -172,8 +175,8 @@ class SkyPatch(object):
             - used by GLEAMDecoder in from_json
         """
         self = cls.__new__(cls)
-        self.fs = [jd for jd in jdict[cls.params[0]]]
-        self.filepaths = [filepath]*len(self.fs)
+        self.__setattr__(cls.params[0], [jd for jd in jdict[cls.params[0]]])
+        self.filepaths = [filepath]*len(self.__getattribute__(cls.params[0]))
         return self
 
     @classmethod
@@ -498,6 +501,8 @@ class SkyPatch(object):
 
         Kwargs:
             index <int> -  list index at which the file is inserted; default -1
+            data <list/np.ndarray> - add the data of the .fits file directly
+            hdr <dict> - add the header of the .fits file directly
             px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
             refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
             refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
@@ -613,7 +618,7 @@ class SkyPatch(object):
         ax.set_aspect('equal')
         # no axis tick labels
         plt.axis('off')
-        #plt.tight_layout()
+        # plt.tight_layout()
         # some verbosity
         if verbose:
             print(ax)
@@ -644,7 +649,9 @@ class SkyPatch(object):
         ax = fig.add_subplot(111)
         fig, ax = self.plot_composite(fig, ax, **kwargs)
         if savefig is not None:
-            savename = savefig + ".pdf"
+            savename = savefig
+            if not any([savefig.endswith(ext) for ext in [".pdf", ".jpg", ".png", ".eps"]]):
+                savename = savefig + ".pdf"
             plt.savefig(savename)
         else:
             plt.show()
@@ -679,13 +686,14 @@ class SkyPatch(object):
         axes = []
         for b in range(self.N):
             ax = fig.add_subplot(2-int(self.N == 1), math.ceil(self.N/2.), b+1)
-            fig, ax = self.fs[b].plot_f(fig, ax, **kwargs)
+            fig, ax = self.__getattribute__(self.__class__.params[0])[b].plot_f(fig, ax, **kwargs)
             axes.append(ax)
         plt.subplots_adjust(wspace=0.003, hspace=0.003)
         if savefig is not None:
-            if not savefig.endswith(".pdf"):
-                savefig = savefig + ".pdf"
-            plt.savefig(savefig)
+            savename = savefig
+            if not any([savefig.endswith(ext) for ext in [".pdf", ".jpg", ".png", ".eps"]]):
+                savename = savefig + ".pdf"
+            plt.savefig(savename)
         else:
             plt.show()
         # some verbosity

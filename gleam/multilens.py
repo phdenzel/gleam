@@ -7,6 +7,7 @@ MultiLens sees same lens in different bands
 ###############################################################################
 # Imports
 ###############################################################################
+from gleam.skyf import SkyF
 from gleam.skypatch import SkyPatch
 from gleam.lensobject import LensObject
 from gleam.utils import colors as glmc
@@ -29,8 +30,9 @@ class MultiLens(SkyPatch):
     """
     Framework for a set of sky patches (.fits files)
     """
-    def __init__(self, files, lens=None, srcimgs=None, auto=False, n=5, min_q=0.1, sigma=(4, 4),
-                 data=None, text_file=None, text=None, filter_=True, output=None,
+    params = ['lens_objects']
+
+    def __init__(self, files, auto=None, glscfactory_options=None, finder_options=None,
                  verbose=False, **kwargs):
         """
         Initialize parsing of a fits file with a directory name
@@ -39,53 +41,67 @@ class MultiLens(SkyPatch):
             files <str/list(str)> - list of .fits files or directory string containing the files
 
         Kwargs:
-            px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
-            refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
-            refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
-            lens <int,int> - overwrite the lens pixel coordinates
+            data <list(list/np.ndarray)> - add the data of the .fits file directly
+            hdr <list(dict)> - add the header of the .fits file directly
+            px2arcsec <list(float,float)> - overwrite the pixel scale in the .fits header (in arcs)
+            refpx <list(int,int)> - overwrite reference pixel coordinates in .fits header (in px)
+            refval <list(float,float)> - overwrite reference pixel values in .fits header (in deg)
+            photzp <list(float)> - overwrite photometric zero-point information
+
+            lens <list(int,int)> - overwrite the lens pixel coordinates
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
-            photzp <float> - overwrite photometric zero-point information
-            auto <bool> - (finder) use automatic image recognition (can be unreliable)
-            n <int> - (finder) number of peak candidates allowed
-            min_q <float> - (finder) a percentage quotient for the min. peak separation
-            sigma <int(,int)> - (finder) lower/upper sigma for signal-to-noise estimate
-            data <dict> - (glscg) data for the GLASS config generation
-            text_file <str> - (glscg) path to .txt file; shortcuts automatically resolved
-            text <list(str)> - (glscg) alternative to text_file; direct text input
-            filter_ <bool> - apply filters from GLSCFactory.key_filter to text information
-            output <str> - (glscg) output name of the .config.gls file
+            auto <list(bool)> - (finder) use automatic image recognition (can be unreliable)
             verbose <bool> - verbose mode; print command line statements
+
+            glscfactory_options <list(dict)> - options for the GLSCFactory:
+                parameter <dict> - various parameters like redshifts, time delays, etc.;
+                                   also contains parameters for the GLASS config generation
+                text_file <str> - path to .txt file; shortcuts automatically resolved
+                text <list(str)> - alternative to text_file; direct text input
+                filter_ <bool> - apply filter from GLSCFactory.key_filter to text information
+                reorder <str> - reorder the images relative to ABCD ordered bottom-up
+                output <str> - output name of the .gls file
+                name <str> - object name in the .gls file (extracted from output by default)
+            finder_options <list(dict)> - options for the LensFinder:
+                n <int> - number of peak candidates allowed
+                min_q <float> - a percentage quotient for the min. peak separation
+                sigma <int(,int)> - lower/upper sigma for signal-to-noise estimate
+                centroid <int> - use COM positions around a pixel slice of size of centroid
+                                 around peak center if centroid > 1
+
 
         Return:
             <MultiLens object> - standard initializer
         """
-        super(MultiLens, self).__init__(files, verbose=False, **kwargs)
-        self.lens_objects = \
-            [LensObject(f, lens=lens, srcimgs=srcimgs,
-                        auto=auto, n=n, min_q=min_q, sigma=sigma, data=data, output=output,
-                        text_file=text_file, text=text, filter_=filter_, **kwargs)
-             for f in self.filepaths]
+        super(MultiLens, self).__init__(files, verbose=False,
+                                        **{k: kwargs[k] for k in SkyF.params if k in kwargs})
+        # keyword defaults
+        for k in LensObject.params:
+            kwargs.setdefault(k, [None]*self.N)
+        if auto is None:
+            auto = [False]*self.N
+        if glscfactory_options is None:
+            glscfactory_options = [{}]*self.N
+        if finder_options is None:
+            finder_options = [{}]*self.N
+        # handle collective keyword inputs
+        for k in LensObject.params:
+            if not isinstance(kwargs[k], list):
+                kwargs[k] = [kwargs[k]]*self.N
+        if isinstance(auto, bool):
+            auto = [auto]*self.N
+        if isinstance(glscfactory_options, dict):
+            glscfactory_options = [glscfactory_options]*self.N
+        if isinstance(finder_options, dict):
+            finder_options = [finder_options]*self.N
+        # lensobject instances for all files
+        self.lens_objects = [None]*self.N
+        for i, f in enumerate(self.filepaths):
+            self.lens_objects[i] = LensObject(
+                f, glscfactory_options=glscfactory_options[i], finder_options=finder_options[i],
+                **{k: kwargs[k][i] for k in kwargs})
 
-        #TODO
-        # unify different lens objects to have uniform information
-        # if unify:
-        #     pass
-        # difflines = [i for i in self.lens_objects[0].glsc_factory.config['single']
-        #              if i not in self.lens_objects[1].glsc_factory.config['single']]
-        # print(len([tuple(i) for imgs in self.srcimgs_xy for i in imgs]))
-        # i = 2
-        # print([l.xy for l in self.lens])
-        # for i, lens in enumerate(self.lens):
-        #     shifts = [self.lens[i].get_shift_to(p, unit='pixel')
-        #               for p in self.lens[:i]+self.lens[i+1:]]
-        #     print(shifts)
-        # for imgs in self.srcimgs_xy:
-        #     print(imgs)
-        # if difflines:
-        #     print(difflines)
-        # else:
-        #     print("No diffs")
-        #TODO end
+        #TODO: unify different lens objects to have uniform information
 
         if verbose:
             print(self.__v__)
@@ -107,42 +123,6 @@ class MultiLens(SkyPatch):
         else:
             raise IndexError
 
-    def __copy__(self):
-        args = (self.filepaths,)
-        kwargs = {
-            'px2arcsec': self.fs[0].px2arcsec,
-            'refpx': self.lens_objects[0].refpx,
-            'refval': self.lens_objects[0].refval,
-            'photzp': self.lens_objects[0].photzp,
-            'lens': self.lens[0].xy,
-            'srcimgs': self.srcimgs_xy[0],
-            'data': {
-                'zl': self.lens_objects[0].zl,
-                'zs': self.lens_objects[0].zs,
-                'tdelay': self.lens_objects[0].tdelay,
-                'tderr': self.lens_objects[0].tderr
-            }
-        }
-        return MultiLens(*args, **kwargs)
-
-    def __deepcopy__(self, memo):
-        args = (copy.deepcopy(self.filepaths, memo),)
-        kwargs = {
-            'px2arcsec': copy.deepcopy(self.fs[0].px2arcsec, memo),
-            'refpx': copy.deepcopy(self.lens_objects[0].refpx, memo),
-            'refval': copy.deepcopy(self.lens_objects[0].refval, memo),
-            'photzp': copy.deepcopy(self.lens_objects[0].photzp, memo),
-            'lens': copy.deepcopy(self.lens[0].xy, memo),
-            'srcimgs': copy.deepcopy(self.srcimgs_xy[0], memo),
-            'data': {
-                'zl': copy.deepcopy(self.lens_objects[0].zl, memo),
-                'zs': copy.deepcopy(self.lens_objects[0].zs, memo),
-                'tdelay': copy.deepcopy(self.lens_objects[0].tdelay, memo),
-                'tderr': copy.deepcopy(self.lens_objects[0].tderr, memo)
-            }
-        }
-        return MultiLens(*args, **kwargs)
-
     def __str__(self):
         return "MultiLens({})".format(", ".join(self.bands))
 
@@ -159,17 +139,34 @@ class MultiLens(SkyPatch):
         """
         return super(MultiLens, self).tests + ['lens_objects', 'lens', 'srcimgs', 'srcimgs_xy']
 
-    def copy(self, verbose=False):
-        cpy = copy.copy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
+    @property
+    def fs(self):
+        """
+        Override fs with lens_objects super-instances (if possible)
 
-    def deepcopy(self, verbose=False):
-        cpy = copy.deepcopy(self)
-        if verbose:
-            print(cpy.__v__)
-        return cpy
+        Args/Kwargs:
+            None
+
+        Return:
+            fs <super: LensObject object> - the from lens_objects derived instances
+        """
+        if hasattr(self, 'lens_objects'):
+            return [super(LensObject, l) for l in self.lens_objects]
+        else:
+            return self._fs
+
+    @fs.setter
+    def fs(self, fs):
+        """
+        Setter for overriden fs
+
+        Args:
+            fs <list(SkyF objects)> - dummy SkyF objects to be overridden by lens_objects
+
+        Kwargs/Return:
+            None
+        """
+        self._fs = fs
 
     @property
     def lens(self):
@@ -264,32 +261,38 @@ class MultiLens(SkyPatch):
 
         Kwargs:
             index <int> -  list index at which the file is inserted; default -1
+            data <list/np.ndarray> - add the data of the .fits file directly
+            hdr <dict> - add the header of the .fits file directly
             px2arcsec <float,float> - overwrite the pixel scale in the .fits header (in arcsecs)
             refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
             refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
-            lens <int,int> - overwrite the lens pixel coordinates
             photzp <float> - overwrite photometric zero-point information
-            auto <bool> - (finder) use automatic image recognition (can be unreliable)
-            n <int> - (finder) number of peak candidates allowed
-            min_q <float> - (finder) a percentage quotient for the min. peak separation
-            sigma <int/(int,int)> - (finder) lower/upper sigma for signal-to-noise estimate
-            data <dict> - (glscg) data for the GLASS config generation
-            text_file <str> - (glscg) path to .txt file; shortcuts automatically resolved
-            text <list(str)> - (glscg) alternative to text_file; direct text input
-            filter_ <bool> - apply filters from GLSCFactory.key_filter to text information
-            output <str> - (glscg) output name of the .config.gls file
+            lens <int,int> - overwrite the lens pixel coordinates
+            srcimgs <list(int,int)> - overwrite the source image pixel coordinates
+            auto <bool> - use LensFinder for automatic image recognition (can be unreliable)
             verbose <bool> - verbose mode; print command line statements
+            glscfactory_options <dict> - options for the GLSCFactory encompassing the following:
+                parameter <dict> - various parameters like redshifts, time delays, etc.;
+                                   also contains parameters for the GLASS config generation
+                text_file <str> - path to .txt file; shortcuts automatically resolved
+                text <list(str)> - alternative to text_file; direct text input
+                filter_ <bool> - apply filter from GLSCFactory.key_filter to text information
+                reorder <str> - reorder the images relative to ABCD ordered bottom-up
+                output <str> - output name of the .gls file
+                name <str> - object name in the .gls file (extracted from output by default)
+            finder_options <dict> - options for the LensFinder encompassing the following:
+                n <int> - number of peak candidates allowed
+                min_q <float> - a percentage quotient for the min. peak separation
+                sigma <int(,int)> - lower/upper sigma for signal-to-noise estimate
+                centroid <int> - use COM positions around a pixel slice of size of centroid
+                                 around peak center if centroid > 1
 
         Return:
             filepath <str> - validated filepath which was added to the patch
         """
-        super_kwargs = {}
-        super_kwargs['px2arcsec'] = kwargs.get('px2arcsec', None)
-        super_kwargs['refpx'] = kwargs.get('refpx', None)
-        super_kwargs['refval'] = kwargs.get('refval', None)
-        super_kwargs['photzp'] = kwargs.get('photzp', None)
-        filepath = super(MultiLens, self).add_to_patch(filepath, index=index, verbose=False,
-                                                       **super_kwargs)
+        filepath = super(MultiLens, self).add_to_patch(
+            filepath, index=index, verbose=False,
+            **{k: kwargs[k] for k in SkyF.params if k in kwargs})
         if index is None or index == -1:
             self.lens_objects.append(LensObject(filepath, **kwargs))
         else:
@@ -372,84 +375,6 @@ class MultiLens(SkyPatch):
         if verbose:
             print(ax)
         return fig, ax
-
-    def show_patch(self, savefig=None, **kwargs):
-        """
-        Plot and show all the bands on a new figure
-
-        Args:
-            None
-
-        Kwargs:
-            as_magnitudes <bool> - if True, plot data as magnitudes
-            lens <bool> - indicate the lens position as scatter point
-            source_images <bool> - indicate the source image positions as scatter points
-            scalebar <bool> - if True, add scalebar plot (15% of the image's width)
-            colorbar <bool> - if True, add colorbar plot
-            savefig <str> - save figure in file string instead of showing it
-            verbose <bool> -  verbose mode; print command line statements
-            kwargs **<dict> - keywords for the imshow function
-
-        Return:
-            fig <figure object> - figure with the image's plots
-            axes <list(matplotlib.axes.Axes object)> - list of axes on which the imgs were plotted
-        """
-        verbose = kwargs.get('verbose', False)
-        fsize = kwargs.pop('figsize', (12, 8.27))
-        # open a new figure
-        fig = plt.figure(figsize=fsize)
-        axes = []
-        for b in range(self.N):
-            ax = fig.add_subplot(2-int(self.N == 1), math.ceil(self.N/2), b+1)
-            fig, ax = self.lens_objects[b].plot_f(fig, ax, **kwargs)
-            axes.append(ax)
-        plt.subplots_adjust(wspace=0.003, hspace=0.003)
-        if savefig is not None:
-            if not savefig.endswith(".pdf"):
-                savefig = savefig + ".pdf"
-            plt.savefig(savefig)
-        else:
-            plt.show()
-        # some verbosity
-        if verbose:
-            print(fig)
-        return fig, axes
-
-
-# CLASS TESTING ###############################################################
-def test(case, args):
-    """
-    File test
-
-    Args: ignored
-
-    Kwargs:
-        end_message <str> - optional message for printing at the end
-
-    Return:
-        None
-    """
-    # initializer tests
-    t = testing(MultiLens, case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
-                lens=args.lens, photzp=args.photzp,
-                auto=args.auto, n=args.n, sigma=args.sigma, min_q=args.min_q,
-                text_file=args.text_file, filter_=args.filter_)
-    # methods tests
-    if args.show == 'bands':
-        testing(t.show_patch, as_magnitudes=args.mags, figsize=args.figsize,
-                lens=args.show_lens, source_images=args.show_sources,
-                scalebar=args.scalebar, colorbar=args.colorbar)
-    elif args.show == 'composite':
-        testing(t.show_composite, figsize=args.figsize, method=args.method,
-                lens=args.show_lens, source_images=args.show_sources,
-                scalebar=args.scalebar)
-    elif args.show == 'both':
-        testing(t.show_patch, as_magnitudes=args.mags, figsize=args.figsize,
-                lens=args.show_lens, source_images=args.show_sources,
-                scalebar=args.scalebar, colorbar=args.colorbar)
-        testing(t.show_composite, figsize=args.figsize, method=args.method,
-                lens=args.show_lens, source_images=args.show_sources,
-                scalebar=args.scalebar)
 
 
 # MAIN FUNCTION ###############################################################

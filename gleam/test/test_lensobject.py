@@ -46,7 +46,8 @@ class TestLensObject(UnitTestPrototype):
                   'sigma': (1, 3),
                   'centroid': 5}
         print(">>> {}, {}".format(self.test_fits, kwargs))
-        lobject = LensObject(self.test_fits, **dict(kwargs, **self.v))
+        auto = kwargs.pop('auto')
+        lobject = LensObject(self.test_fits, auto=auto, finder_options=kwargs, **self.v)
         self.assertIsInstance(lobject, LensObject)
         print(">>> {}".format(None))
         lobject = LensObject(None, **self.v)
@@ -74,12 +75,25 @@ class TestLensObject(UnitTestPrototype):
         """ # from_json """
         filename = 'test.json'
         self.lobject.zl = 0.5
+        self.lobject.add_srcimg((24, 36), unit='pixels')
         filename = self.lobject.jsonify(save=True)
         print(">>> {}".format(filename))
+        with open(filename, 'r') as j:
+            jcopy = LensObject.from_json(j, **self.v)
+            self.assertEqual(jcopy, self.lobject)
+            self.assertFalse(jcopy is self.lobject)
+            self.assertEqual(jcopy.zl, self.lobject.zl)
+            self.assertEqual(jcopy.srcimgs, self.lobject.srcimgs)
+        try:
+            os.remove(filename)
+        except OSError:
+            pass
 
     def test_jsonify(self):
         """ # jsonify """
         print(">>> {}".format(self.lobject))
+        self.lobject.zl = 0.5
+        self.lobject.add_srcimg((24, 36), unit='pixels')
         jsnstr = self.lobject.jsonify(**self.v)
         self.assertIsInstance(jsnstr, str)
 
@@ -194,11 +208,16 @@ class TestLensObject(UnitTestPrototype):
         shifts = self.lobject.src_shifts(unit='arcsec', **self.v)
         self.assertIsInstance(shifts, list)
 
-    def test_plot_f(self):
+    def test_show_f(self):
         """ # plot_f """
         print(">>> {}".format(self.lobject))
-        fig, ax = self.lobject.plot_f(plt.figure(), lens=True, source_images=True, **self.v)
-        self.assertIsNotNone(fig, ax)
+        fig, ax = self.lobject.show_f(savefig='test.pdf', lens=True, source_images=True, **self.v)
+        self.assertIsNotNone(fig)
+        self.assertIsNotNone(ax)
+        try:
+            os.remove('test.pdf')
+        except OSError:
+            pass
 
 if __name__ == "__main__":
     TestLensObject.main(verbosity=1)

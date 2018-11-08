@@ -144,7 +144,7 @@ class TestSPEMD(UnitTestPrototype):
     def test_plot_map(self):
         """ # plot_map """
         self.spemd.calc_map(smooth_center=True)
-        fig = self.spemd.plot_map(log=True, show=True)
+        fig = self.spemd.plot_map(log=True, show=False)
         print(fig)
 
 if __name__ == "__main__":

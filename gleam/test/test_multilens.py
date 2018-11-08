@@ -53,6 +53,30 @@ class TestMultiLens(UnitTestPrototype):
         self.assertEqual(copy, self.ml)
         self.assertFalse(copy is self.ml)
 
+    def test_from_json(self):
+        """ # from_json """
+        filename = 'test.json'
+        self.ml.lens_objects[5].photzp = 25.67
+        filename = self.ml.jsonify(save=True)
+        print(">>> {}".format(filename))
+        with open(filename, 'r') as j:
+            jcopy = MultiLens.from_json(j, **self.v)
+            self.assertEqual(jcopy, self.ml)
+            self.assertFalse(jcopy is self.ml)
+            self.assertEqual(jcopy.lens_objects[0], self.ml.lens_objects[0])
+            self.assertEqual(jcopy.lens_objects[5].photzp, self.ml.lens_objects[5].photzp)
+        try:
+            os.remove(filename)
+        except OSError:
+            pass
+
+    def test_jsonify(self):
+        """ # jsonify """
+        self.ml.lens_objects[5].photzp = 25.67
+        print(">>> {}".format(self.ml))
+        jsnstr = self.ml.jsonify(**self.v)
+        self.assertIsInstance(jsnstr, str)
+
     def test_find_files(self):
         """ # find_files """
         print(">>> {}".format(self.test_fits))
@@ -100,9 +124,12 @@ class TestMultiLens(UnitTestPrototype):
     def test_plot_composite(self):
         """ # plot_composite """
         print(">>> {}".format(self.ml))
-        fig, ax = self.ml.plot_composite(plt.figure(), **self.v)
+        fig, ax = self.ml.show_composite(savefig='test.pdf', **self.v)
         self.assertIsNotNone(fig, ax)
-
+        try:
+            os.remove('test.pdf')
+        except OSError:
+            pass
 
 if __name__ == "__main__":
     TestMultiLens.main(verbosity=1)

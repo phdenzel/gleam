@@ -81,7 +81,7 @@ class TestSersic(UnitTestPrototype):
 
     def test_model_parameters_setter(self):
         """ # model_parameters.setter """
-        kwargs = { # double all parameters except for half-light radius
+        kwargs = {  # double all parameters except for half-light radius
             'x': 200,
             'y': 200,
             'phi': 2*np.pi,
@@ -100,10 +100,10 @@ class TestSersic(UnitTestPrototype):
         print(Sersic.parameter_keys)
         print(before)
         print(after)
-        
+
     def test_set_model_parameters(self):
         """ # set_model_parameters """
-        kwargs = { # double all parameters except for half-light radius
+        kwargs = {  # double all parameters except for half-light radius
             'x': 200,
             'y': 200,
             'phi': 2*np.pi,
@@ -142,12 +142,11 @@ class TestSersic(UnitTestPrototype):
         """ # calc_map """
         print(">>> {}".format(()))
         print("TODO")
-        
+
     def test_calc_pixel(self):
         """ # calc_pixel """
         print(">>> {}".format((self.sersic.x, self.sersic.y)))
         print("TODO")
-
 
 
 if __name__ == "__main__":

@@ -50,9 +50,11 @@ class TestSkyPatch(UnitTestPrototype):
     def test_deepcopy(self):
         """ # deepcopy """
         print(">>> {}".format(self.skyp))
+        self.skyp.fs[5].photzp = 25.67
         copy = self.skyp.deepcopy(**self.v)
         self.assertEqual(copy, self.skyp)
         self.assertFalse(copy is self.skyp)
+        self.assertEqual(copy.fs[5].photzp, self.skyp.fs[5].photzp)
 
     def test_from_json(self):
         """ # from_json """
@@ -64,6 +66,7 @@ class TestSkyPatch(UnitTestPrototype):
             jcopy = SkyPatch.from_json(j, **self.v)
             self.assertEqual(jcopy, self.skyp)
             self.assertFalse(jcopy is self.skyp)
+            self.assertEqual(jcopy.fs[0], self.skyp.fs[0])
             self.assertEqual(jcopy.fs[5].photzp, self.skyp.fs[5].photzp)
         try:
             os.remove(filename)
@@ -72,6 +75,7 @@ class TestSkyPatch(UnitTestPrototype):
 
     def test_jsonify(self):
         """ # jsonify """
+        self.skyp.fs[5].photzp = 25.67
         print(">>> {}".format(self.skyp))
         jsnstr = self.skyp.jsonify(**self.v)
         self.assertIsInstance(jsnstr, str)
@@ -126,17 +130,25 @@ class TestSkyPatch(UnitTestPrototype):
     def test_show_composite(self):
         """ # show_composite """
         print(">>> {}".format(self.skyp))
-        fig, ax = self.skyp.show_composite(**self.v)
+        fig, ax = self.skyp.show_composite(savefig='test.pdf', **self.v)
         self.assertIsNotNone(fig)
         self.assertIsNotNone(ax)
+        try:
+            os.remove('test.pdf')
+        except OSError:
+            pass
 
     def test_show_patch(self):
         """ # show_patch """
         print(">>> {}".format(self.skyp))
-        fig, axes = self.skyp.show_patch(**self.v)
+        fig, axes = self.skyp.show_patch(savefig='test.pdf', **self.v)
         self.assertIsNotNone(fig)
         for ax in axes:
             self.assertIsNotNone(ax)
+        try:
+            os.remove('test.pdf')
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

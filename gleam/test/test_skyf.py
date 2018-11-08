@@ -171,9 +171,13 @@ class TestSkyF(UnitTestPrototype):
     def test_show_f(self):
         """ # plot_f """
         print(">>> {}".format(self.skyf))
-        fig, ax = self.skyf.show_f(**self.v)
+        fig, ax = self.skyf.show_f(savefig='test.pdf', **self.v)
         self.assertIsNotNone(fig)
         self.assertIsNotNone(ax)
+        try:
+            os.remove('test.pdf')
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
