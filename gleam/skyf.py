@@ -62,7 +62,7 @@ class SkyF(object):
         self.filepath = self.check_path(filepath)
         self.data, self.hdr = self.parse_fitsfile(filepath)  # data[Dec, RA] and .fits header
         if data is not None:
-            self.data = np.array(data)
+            self.data = np.asarray(data)
         if hdr is not None:
             self.hdr = hdr
         if px2arcsec is not None and len(px2arcsec) == 2:
@@ -173,7 +173,7 @@ class SkyF(object):
             - used by GLEAMDecoder in from_json
         """
         self = cls(None, **jdict)
-        self.data = np.array(self.data)
+        self.data = np.asarray(self.data)
         if filepath:
             self.filepath = filepath
         if verbose:
@@ -354,11 +354,11 @@ class SkyF(object):
         if 'COMMENT' not in hdr.keys():
             hdr['COMMENT'] = []
         # standardize data list/array
-        if hasattr(data[0], 'field'):  # data rows are FITS_record > np.array
+        if hasattr(data[0], 'field'):  # data rows are FITS_record > np.ndarray
             standard = []
             for i in range(len(data[0])):
                 standard.append(np.asarray(data.field(i)))
-            data = np.array(standard)
+            data = np.asarray(standard)
         data = data.squeeze()
         # deal with data if pixeltype is healpix
         if 'PIXTYPE' in hdr and 'HEALPIX' in hdr['PIXTYPE']:
@@ -699,6 +699,61 @@ class SkyF(object):
                                          reference_pixel=self.refpx, reference_value=self.refval)
         else:
             return SkyCoords.empty()
+
+    @property
+    def indices(self):
+        """
+        A grid of indices
+
+        Args/Kwargs:
+            None
+
+        Return:
+            indices <np.ndarray> - index array with shape (2+len(naxis_plus), naxis1, naxis2)
+        """
+        if self.naxis_plus is None:
+            idx = np.indices((self.naxis1, self.naxis2))
+            idx = np.flip(idx.T, 2)
+        else:
+            naxes = (self.naxis1, self.naxis2)+self.naxis_plus
+            idx = np.indices(naxes)
+            idx = np.flip(idx.T, len(naxes))
+        return idx
+
+    @property
+    def idcs_flat(self):
+        """
+        A flat array with index positions (e.g. for iterating over indices)
+
+        Args/Kwargs:
+            None
+
+        Return:
+            idx <np.ndarray> - the flattened indices array
+        """
+        if self.naxis_plus is None:
+            return self.indices.reshape(self.naxis1*self.naxis2, 2)
+        else:
+            naxes = (self.naxis1, self.naxis2)+self.naxis_plus
+            return self.indices.reshape(self.naxis1*self.naxis2, len(naxes))
+
+    @property
+    def grid(self):
+        """
+        A SkyCoords grid with RA,Dec coordinates (in degrees) corresponding to data indices
+
+        Args/Kwargs:
+            None
+
+        Return:
+            grid <np.ndarray(SkyCoords, dict)> - grid with SkyF coordinates and keyword info
+        """
+        return np.array(
+            [SkyCoords.from_pixels(x, y, px2arcsec_scale=self.px2arcsec,
+                                   reference_pixel=self.refpx, reference_value=self.refval)
+             for (x, y) in self.idcs_flat],
+            dtype=object
+        ).reshape(self.naxis1, self.naxis2, 2)
 
     @property
     def magnitudes(self):

@@ -372,9 +372,9 @@ class SkyPatch(object):
         """
         if hasattr(self, '_data'):
             if not self.structure == self._data.shape:
-                self._data = np.zeros(self.structure)
+                self._data = np.empty(self.structure)
         else:
-            self._data = np.zeros(self.structure)
+            self._data = np.empty(self.structure)
         for i in range(self.N):
             self._data[:, :, i] = self.fs[i].data
         return self._data

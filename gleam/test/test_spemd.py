@@ -28,7 +28,7 @@ class TestSPEMD(UnitTestPrototype):
         }
         self.v = {'verbose': 1}
         # __init__ test
-        self.spemd = SPEMD(Nx=100, Ny=100, **self.model_kwargs)
+        self.spemd = SPEMD(Nx=200, Ny=200, **self.model_kwargs)
         # verbosity
         print("")
         print(self.separator)
