@@ -5,6 +5,13 @@
 
 What are you interested in? Is it squares, circles, polygons, or an amorph
 collection of pixels...
+
+Usage example:
+    data = np.empty((128, 128))
+    s = ROISelector(data)
+    s.select['circle']((64, 64), 10)
+    data[s()]
+
 """
 ###############################################################################
 # Imports
@@ -21,7 +28,7 @@ class ROISelector(object):
     Selects pixels from fits files
     """
 
-    selection_modes = ['circle', 'rect', 'polygon', 'amorph']
+    selection_modes = ['circle', 'rect', 'square', 'polygon', 'amorph', 'color']
 
     def __init__(self, data, verbose=False):
         """
@@ -36,10 +43,33 @@ class ROISelector(object):
         Return:
            <ROISelector object> - standard initializer (also see other classmethod initializers)
         """
-        self.data = np.asarray(data) if data is not None else data
+        if data is not None:
+            if len(data.shape) > 3:
+                raise IndexError("ROISelector requires data shape of (N, M, D), "
+                                 + "NxM grid with D dimensional points!")
+            self.data = np.asarray(data)
+            # height, widht = a.shape, i.e. matrix coordinates i, j = y, x and not x, y!
+            self.yidcs, self.xidcs = np.indices(self.shape[0:2])
+        else:
+            self.data = data
+            self.idcs = data
         self._buffer = {k: [] for k in ROISelector.selection_modes}
         if verbose:
             print(self.__v__)
+
+    def __call__(self, key=None):
+        if key in self._buffer:
+            return self._buffer[key][-1]
+        elif hasattr(self, '_focus') and hasattr(self, '_selection'):
+            return self._buffer[self._selection][self._focus]
+        else:
+            NotImplemented
+
+    def __getitem__(self, key):
+        if key == 0:
+            return self()
+        else:
+            raise IndexError('Not a valid key "{}"!'.format(key))
 
     @property
     def __v__(self):
@@ -65,7 +95,7 @@ class ROISelector(object):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return ['data', 'shape', '_buffer']
+        return ['shape', '_buffer']
 
     @classmethod
     def from_gleamobj(cls, gleam, **kwargs):
@@ -120,7 +150,7 @@ class ROISelector(object):
 
     def select_circle(self, center, radius, verbose=False):
         """
-        Select all pixels within a circle
+        Select all pixels within the circle
 
         Args:
             center <float,float> - center coordinates of the selection circle
@@ -130,13 +160,20 @@ class ROISelector(object):
             verbose <bool> - verbose mode; print command line statements
 
         Return:
-            selection <np.ndarray(bool)> - boolean array
+            selection <np.ndarray(bool)> - boolean array with same shape as data
         """
-        pass
+        circle = ROISelector.Circle(center, radius)
+        selection = circle.contains(self.xidcs, self.yidcs)
+        self._selection = 'circle'
+        self._buffer[self._selection].append(selection)
+        self._focus = -1
+        if verbose:
+            print(self.__v__)
+        return selection
 
-    def select_rect(self, anchor, dv, verbose=False):
+    def select_rect(self, anchor, dv=None, corner=None, verbose=False):
         """
-        Select all pixels within a rectangle
+        Select all pixels within the rectangle
 
         Args:
             anchor <float,float> - anchor coordinates of the selection rectangle
@@ -146,33 +183,90 @@ class ROISelector(object):
             verbose <bool> - verbose mode; print command line statements
 
         Return:
-            selection <np.ndarray(bool)> - boolean array
+            selection <np.ndarray(bool)> - boolean array with same shape as data
         """
-        pass
+        rect = ROISelector.Rectangle(anchor, dv=dv, corner=corner)
+        selection = rect.contains(self.xidcs, self.yidcs)
+        self._selection = 'rect'
+        self._buffer[self._selection].append(selection)
+        self._focus = -1
+        if verbose:
+            print(self.__v__)
+        return selection
 
-    def select_square(self, anchor, dv, verbose=False):
+    def select_square(self, anchor, dv=None, corner=None, verbose=False):
         """
+        Select all pixels within the square
+
+        Args:
+            anchor <float,float> - anchor coordinates of the selection square
+            dv <float> - diagonal vector of the selection rectangle
+
+        Kwargs:
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            selection <np.ndarray(bool)> - boolean array with same shape as data
         """
-        pass
+        square = ROISelector.Square(anchor, dv=dv, corner=corner)
+        selection = square.contains(self.xidcs, self.yidcs)
+        self._selection = 'square'
+        self._buffer[self._selection].append(selection)
+        self._focus = -1
+        if verbose:
+            print(self.__v__)
+        return selection
 
     def select_polygon(self, *polygon, **kwargs):
         """
+        Select all pixels within the polygon
+
+        Args:
+            polygon <list(float,float)> - vertices of the selection polygon
+
+        Kwargs:
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            selection <np.ndarray(bool)> - boolean array with same shape as data
         """
         verbose = kwargs.pop('verbose', False)
+        polygon = ROISelector.Polygon(*polygon, **kwargs)
+        polygon = polygon.close()
+        selection = polygon.contains(self.xidcs, self.yidcs)
+        self._selection = 'polygon'
+        self._buffer[self._selection].append(selection)
+        self._focus = -1
         if verbose:
-            pass
-        pass
+            print(self.__v__)
+        return selection
 
     def select_amorph(self, *points, **kwargs):
         """
+        Select all pixels belonging to a set of points
+
+        Args:
+            points <list(float,float)> - point coordinates of the selection set
+
+        Kwargs:
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            selection <np.ndarray(bool)> - boolean array with same shape as data
         """
         verbose = kwargs.pop('verbose', False)
+        amorph = ROISelector.Amorph(*points, **kwargs)
+        selection = amorph.contains(self.xidcs, self.yidcs)
+        self._selection = 'amorph'
+        self._buffer[self._selection].append(selection)
+        self._focus = -1
         if verbose:
-            pass
-        pass
+            print(self.__v__)
+        return selection
 
     def select_by_color(self, **kwargs):
         """
+        TODO
         """
         verbose = kwargs.pop('verbose', False)
         if verbose:
@@ -193,37 +287,19 @@ class ROISelector(object):
         return {
             'circle': self.focus_circle,
             'rect': self.focus_rect,
-            'square': self.focus_rect,
+            'square': self.focus_square,
             'polygon': self.focus_polygon,
             'amorph': self.focus_amorph,
-            'color': self.focus_amorph
+            'color': self.focus_color
         }
 
-    @staticmethod
-    def inside_polygon(point, polygon, verbose=False):
+    def mpl_interface(self):
         """
-        Test whether point is inside polygon
-
-        Args:
-            point <float,float> - point to be tested
-            polygon <list(float,float)> - set of points connecting to a polygon
-
-        Kwargs:
-            verbose <bool> - verbose mode; print command line statements
+        Plot the data and provide a GUI to select ROIs manually
         """
-        n_edges = len(polygon)
-        inside = False
-        x, y = point
-        p1x, p1y = polygon[0]
-        for i in range(n_edges+1):
-            p2x, p2y = polygon[i % n_edges]
-            if y > min(p1y, p2y) and y <= max(p1y, p2y) and x <= max(p1x, p2x):
-                if p1y != p2y:
-                    xinters = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
-                if p1x == p2x or x <= xinters:
-                    inside = not inside
-            p1x, p1y = p2x, p2y
-        return inside
+        import matplotlib as mpl
+        from matplotlib import pyplot as plt
+        mpl.pyplot.plot(self.data)
 
 ###############################################################################
     class Polygon(object):
@@ -348,6 +424,8 @@ class ROISelector(object):
             Kwargs/Return:
                 None
             """
+            if len(points) == 1 and len(points[0]) > 2:
+                points = points[0]
             self.x = np.array([p[0] for p in points])
             self.y = np.array([p[1] for p in points])
 
@@ -599,16 +677,14 @@ class ROISelector(object):
             area = self.determinant([self.x[j], self.x[j+1], xp], [self.y[j], self.y[j+1], yp])
             mindst[snear] = np.copysign(mindst, area)[snear]
             mindst[np.fabs(mindst) < small_dist] = 0
-            if scalar:
-                mindst = float(mindst)
 
             if verbose:
-                reslt = mindst
-                if scalar:
-                    reslt = np.array([mindst])
-                msg = ''.join(['({}, {}) \t{}\n'.format(xp[i], yp[i], reslt[i])
-                               for i in range(len(reslt))])
+                msg = ''.join(['({}, {}) \t{}\n'.format(xp[i], yp[i], mindst[i])
+                               for i in range(len(mindst))])
                 print(msg)
+
+            if scalar:
+                mindst = float(mindst)
             return mindst
 
         def contains(self, xp, yp, small_dist=1e-12, verbose=False):
@@ -624,7 +700,7 @@ class ROISelector(object):
                 verbose <bool> - verbose mode; print command line statements
 
             Return:
-                mindst <np.ndarray(float)> - distance from (xp, yp) to nearest side
+                contained <np.ndarray(bool)> - boolean array of points which are within
 
             Note:
                 if mindst < 0: point (xp, yp) is outside the polygon
@@ -638,9 +714,11 @@ class ROISelector(object):
             if xp.shape is tuple():
                 xp = np.array([xp])
                 yp = np.array([yp])
-                contained = [contained]
+                ctemp = [contained]
+            else:
+                ctemp = contained
             if verbose:
-                is_inside = ['is inside' if c else 'is outside' for c in contained]
+                is_inside = ['is inside' if c else 'is outside' for c in ctemp]
                 msg = ''.join(['({}, {}) {}\n'.format(xp[i], yp[i], is_inside[i])
                                for i in range(len(is_inside))])
                 print(msg)
@@ -1011,7 +1089,26 @@ class ROISelector(object):
             Return:
                 mindst <np.ndarray(float)> - distance from (xp, yp) to the center + radius
             """
-            pass
+            xp = np.asfarray(xp)
+            yp = np.asfarray(yp)
+            if xp.shape is tuple():
+                xp = np.array([xp])
+                yp = np.array([yp])
+                scalar = True
+            else:
+                scalar = False
+
+            dx = xp - self.center[0]
+            dy = yp - self.center[1]
+            mindst = self.r2 - (dx**2 + dy**2)
+            mindst[np.fabs(mindst) < small_dist] = 0
+            if verbose:
+                msg = ''.join(['({}, {}) \t{}\n'.format(xp[i], yp[i], mindst[i])
+                               for i in range(len(mindst))])
+                print(msg)
+            if scalar:
+                mindst = float(mindst)
+            return mindst
 
         def contains(self, xp, yp, small_dist=1e-12, verbose=False):
             """
@@ -1026,7 +1123,7 @@ class ROISelector(object):
                 verbose <bool> - verbose mode; print command line statements
 
             Return:
-                mindst <np.ndarray(float)> - distance from (xp, yp) to nearest side
+                contained <np.ndarray(bool)> - boolean array of points which are within
 
             Note:
                 if mindst < 0: point (xp, yp) is outside the polygon
@@ -1035,16 +1132,260 @@ class ROISelector(object):
             """
             xp = np.asfarray(xp)
             yp = np.asfarray(yp)
+
+            contained = self.mindst(xp, yp, small_dist=small_dist) >= 0
             if xp.shape is tuple():
                 xp = np.array([xp])
                 yp = np.array([yp])
-
-            contained = None #TODO
+                ctemp = [contained]
+            else:
+                ctemp = contained
             if verbose:
-                is_inside = ['is inside' if c else 'is outside' for c in contained]
+                is_inside = ['is inside' if c else 'is outside' for c in ctemp]
                 msg = ''.join(['({}, {}) {}\n'.format(xp[i], yp[i], is_inside[i])
                                for i in range(len(is_inside))])
                 print(msg)
+            return contained
+
+###############################################################################
+    class Amorph(np.ndarray):
+        """
+        A data structure describing a non-shaped assembly of points
+        (in contrast to the other geometrical shape classes in ROISelector)
+        """
+
+        def __new__(cls, *arrlike, **kwargs):
+            if len(arrlike) == 1:
+                obj = np.asarray(*arrlike).view(cls)
+            else:
+                obj = np.asarray(arrlike).view(cls)
+            # obj.info = kwargs.pop('info', None)
+            return obj
+
+        def __init__(self, *arrlike, **kwargs):
+            """
+            Initialize an amorph data structure (sub-classed from nupy.ndarray)
+
+            Args:
+                arrlike <tuple/list/np.ndarray> - collection of points covertible into a np.ndarray
+                                                  (last dimension needs to be 2!)
+
+            Kwargs:
+                verbose <bool> - verbose mode; print command line statements
+
+            Return:
+                <ROISelector.Amorph object> - standard initializer
+            """
+            shape = self.shape
+            if shape[-1] != 2:
+                raise IndexError("Wrong input shape! Amorph requires axis[-1] = 2!")
+            if kwargs.pop('verbose', False):
+                print(self.__v__)
+
+        def __array_finalize__(self, obj):
+            if obj is None:
+                return
+            # self.info = getattr(obj, 'info', None)
+
+        def __array_prepare__(self, out_arr, context=None):
+            return super(ROISelector.Amorph, self).__array_prepare(self, out_arr, context)
+
+        def __array_wrap__(self, out_arr, context=None):
+            return super(ROISelector.Amorph, self).__array_wrap__(self, out_arr, context)
+
+        def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+            args = []
+            in_no = []
+            for i, input_ in enumerate(inputs):
+                if isinstance(input_, ROISelector.Amorph):
+                    in_no.append(i)
+                    args.append(input_.view(np.ndarray))
+                else:
+                    args.append(input_)
+
+            outputs = kwargs.pop('out', None)
+            out_no = []
+            if outputs:
+                out_args = []
+                for j, output in enumerate(outputs):
+                    if isinstance(output, ROISelector.Amorph):
+                        out_no.append(j)
+                        out_args.append(output.view(np.ndarray))
+                    else:
+                        out_args.append(output)
+                kwargs['out'] = tuple(out_args)
+            else:
+                outputs = (None,) * ufunc.nout
+
+            results = super(ROISelector.Amorph, self).__array_ufunc__(ufunc, method,
+                                                                      *args, **kwargs)
+            if results is NotImplemented:
+                return NotImplemented
+
+            if method == 'at':
+                return
+
+            if ufunc.nout == 1:
+                results = (results,)
+
+            results = tuple((np.asarray(result).view(ROISelector.Amorph)
+                             if output is None else output)
+                            for result, output in zip(results, outputs))
+
+            return results[0] if len(results) == 1 else results
+
+        def encode(self):
+            """
+            Using md5 to encode specific information
+            """
+            import hashlib
+            s = ', '.join([str(p) for p in self]).encode('utf-8')
+            code = hashlib.md5(s).hexdigest()
+            return code
+
+        @property
+        def __v__(self):
+            """
+            Info string for test printing
+
+            Args/Kwargs:
+                None
+
+            Return:
+                <str> - test of ROISelector attributes
+            """
+            return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t))
+                              for t in self.tests])
+
+        @property
+        def tests(self):
+            """
+            A list of attributes being tested when calling __v__
+
+            Args/Kwargs:
+                None
+
+            Return:
+                tests <list(str)> - a list of test variable strings
+            """
+            return ['str', 'N', 'x', 'y']
+
+        def __str__(self):
+            if self.N > 8:
+                return '{}({})#{}'.format(self.__class__.__name__, self.N, self.encode())
+            else:
+                return '{}({})'.format(
+                    self.__class__.__name__, super(ROISelector.Amorph, self).tolist().__str__())
+
+        def __repr__(self):
+            return '{}({})#{}'.format(self.__class__.__name__, self.N, self.encode())
+
+        @property
+        def str(self):
+            return str(self)
+
+        @property
+        def x(self):
+            """
+            The x coordinates of the array of points
+            """
+            if len(self.shape) > 1:
+                return np.array(self.reshape(np.prod(self.shape[:-1]), 2)[:, 0])
+            else:
+                return self[0]
+
+        @property
+        def y(self):
+            """
+            The y coordinatse of the array of points
+            """
+            if len(self.shape) > 1:
+                return np.array(self.reshape(np.prod(self.shape[:-1]), 2)[:, 1])
+            else:
+                return self[1]
+
+        @property
+        def N(self):
+            """
+            The number of points in point collection
+
+            Args/Kwargs:
+                None
+
+            Return:
+                N <int> - the number of points
+            """
+            shape = self.shape
+            if len(shape) == 1:
+                return 1
+            if len(shape) > 2:
+                return np.prod(shape[:-1])
+            return shape[0]
+
+        def add_point(self, p, verbose=False):
+            """
+            Add a point to the polygon
+
+            Args:
+                p <float,float> - the point's x and y coordinates
+
+            Kwargs
+                verbose <bool> - verbose mode; print command line statements
+
+            Return:
+                added <ROISelector.Amorph object> - copy of instance with point added
+            """
+            if len(p) != 2:
+                raise IndexError("Point has wrong dimensions!")
+            if len(self.shape) > 2:
+                if verbose:
+                    print(self.__v__)
+                return self
+            self = ROISelector.Amorph(np.append(self, [p], axis=0))
+            if verbose:
+                print(self.__v__)
+            return self
+
+        def contains(self, xp, yp, verbose=False):
+            """
+            Check whether given points are in or outside of the circle
+
+            Args:
+                xp <np.ndarray(float)> - x coordinate of the point(s)
+                yp <np.ndarray(float)> - y coordinate of the point(s)
+
+            Kwargs:
+                small_dist <float> - threshold distance to determine limit
+                verbose <bool> - verbose mode; print command line statements
+
+            Return:
+                contained <np.ndarray(bool)> - boolean array of points which are within
+
+            Note:
+                How it works:
+                - Amorph instance holds a set of unordered points of shape (N, 2) or (N, M, 2)
+                - input can be of shape (K,), (K,)
+                - return: boolean array of shape (N,) or (N, M) (matching Amorph instance shape)
+                  where True values indicate a match
+            """
+            xp = np.asarray(xp)
+            yp = np.asarray(yp)
+            if xp.shape == tuple():
+                xp = np.array([xp])
+                yp = np.array([yp])
+                scalar = True
+            else:
+                scalar = False
+
+            if len(xp.shape) == len(self.x.shape) and len(xp.shape) < 3:
+                contained = np.isin(xp, self.x) * np.isin(yp, self.y)
+            else:
+                contained = np.full(xp.shape[0:2], False)
+                contained[(self.y, self.x)] = True
+            if scalar:
+                return bool(contained)
+            if verbose:
+                print(contained)
             return contained
 
 
@@ -1076,9 +1417,10 @@ if __name__ == "__main__":
     elif args.test_mode:
         sys.argv = sys.argv[:1]
         from gleam.test.test_roiselector \
-            import TestROISelector, TestPolygon, TestRectangle, TestSquare, TestCircle
+            import TestROISelector, TestPolygon, TestRectangle, TestSquare, TestCircle, TestAmorph
         TestROISelector.main(verbosity=1)
         TestPolygon.main(verbosity=1)
         TestRectangle.main(verbosity=1)
         TestSquare.main(verbosity=1)
         TestCircle.main(verbosity=1)
+        TestAmorph.main(verbosity=1)

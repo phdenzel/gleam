@@ -30,6 +30,7 @@ from gleam.skypatch import SkyPatch
 from gleam.roiselector import ROISelector
 import os
 import numpy as np
+from matplotlib import pyplot as plt
 from gleam.test.utils import UnitTestPrototype
 
 
@@ -44,6 +45,7 @@ class TestROISelector(UnitTestPrototype):
         # __init__ test
         self.skyf = SkyF(self.test_fits)
         self.skyp = SkyPatch(self.test_ftss)
+        self.roi = ROISelector(self.skyf.data)
         # verbosity
         self.v = {'verbose': 1}
         print("")
@@ -53,31 +55,172 @@ class TestROISelector(UnitTestPrototype):
     def tearDown(self):
         print("")
 
-    # def test_ROISelector(self):
-    #     """ # ROISelector """
-    #     print(">>> {}".format(None))
-    #     select = ROISelector(None, **self.v)
-    #     self.assertIsInstance(select, ROISelector)
-    #     self.assertIsNone(select.data)
-    #     print(">>> {}".format(self.skyf.data))
-    #     select = ROISelector(self.skyf.data, **self.v)
-    #     self.assertIsInstance(select, ROISelector)
-    #     self.assertIsNotNone(select.data)
-    #     print(">>> {}".format(self.skyp.data))
-    #     select = ROISelector(self.skyp.data, **self.v)
-    #     self.assertIsInstance(select, ROISelector)
-    #     self.assertIsNotNone(select.data)
+    def test_ROISelector(self):
+        """ # ROISelector """
+        # None
+        print(">>> {}".format(None))
+        roi = ROISelector(None, **self.v)
+        self.assertIsInstance(roi, ROISelector)
+        self.assertIsNone(roi.data)
+        # with data shape (128, 128)
+        print(">>> {}".format(self.skyf.data))
+        roi = ROISelector(self.skyf.data, **self.v)
+        self.assertIsInstance(roi, ROISelector)
+        self.assertIsNotNone(roi.data)
+        # with data shape (128, 128, 2)
+        print(">>> {}".format(self.skyp.data))
+        roi = ROISelector(self.skyp.data, **self.v)
+        self.assertIsInstance(roi, ROISelector)
+        self.assertIsNotNone(roi.data)
 
-    # def test_from_gleamobj(self):
-    #     """ # from_gleamobj """
-    #     print(">>> {}".format(self.skyf))
-    #     select = ROISelector.from_gleamobj(self.skyf, **self.v)
-    #     self.assertIsInstance(select, ROISelector)
-    #     self.assertIsNotNone(select.data)
-    #     print(">>> {}".format(self.skyp))
-    #     select = ROISelector.from_gleamobj(self.skyp, **self.v)
-    #     self.assertIsInstance(select, ROISelector)
-    #     self.assertIsNotNone(select.data)
+    def test_from_gleamobj(self):
+        """ # from_gleamobj """
+        # from skyf
+        print(">>> {}".format(self.skyf))
+        roi = ROISelector.from_gleamobj(self.skyf, **self.v)
+        self.assertIsInstance(roi, ROISelector)
+        self.assertIsNotNone(roi.data)
+        # from skypatch
+        print(">>> {}".format(self.skyp))
+        roi = ROISelector.from_gleamobj(self.skyp, **self.v)
+        self.assertIsInstance(roi, ROISelector)
+        self.assertIsNotNone(roi.data)
+
+    def test_select_circle(self):
+        """ # select_circle """
+        # on shape (128, 128)
+        center, radius = (0, 128), 30
+        print(">>> {}, {}".format(center, radius))
+        s = self.roi.select_circle(center, radius, **self.v)
+        self.assertIsInstance(s, np.ndarray)
+        self.assertEqual(s.dtype, bool)
+        self.assertTrue(np.any(s))
+        self.roi.data[self.roi()] = 100
+        plt.imshow(self.roi.data, cmap='bone', origin='lower')
+        plt.show()
+        plt.close()
+        # on shape (200, 300, 4)
+        W, H = 300, 200
+        e = np.ones((H, W, 4), dtype=float)
+        center, radius = (50, 150), 40
+        print(">>> {}, {}".format(center, radius))
+        roi = ROISelector(e)
+        s = roi.select['circle'](center, radius, **self.v)
+        e[~roi()] = 0
+        e[:, :, 3] = 1
+        plt.imshow(e, origin='lower')
+        plt.show()
+        plt.close()
+
+    def test_select_rect(self):
+        """ # select_rect """
+        # on shape (128, 128)
+        anchor, dv = (0, 0), (32, 64)
+        print(">>> {}, {}".format(anchor, dv))
+        s = self.roi.select_rect(anchor, dv, **self.v)
+        self.assertIsInstance(s, np.ndarray)
+        self.assertEqual(s.dtype, bool)
+        self.assertTrue(np.any(s))
+        self.roi.data[self.roi()] = 100
+        plt.imshow(self.roi.data, cmap='bone', origin='lower')
+        plt.show()
+        plt.close()
+        # on shape (200, 300, 4)
+        W, H = 300, 200
+        e = np.ones((H, W, 4), dtype=float)
+        anchor, dv = (0, 0), (100, 150)
+        print(">>> {}, {}".format(anchor, dv))
+        roi = ROISelector(e)
+        s = roi.select['rect'](anchor, dv, **self.v)
+        e[~roi()] = 0, 0, 1, 0
+        e[:, :, 3] = 1
+        plt.imshow(e, origin='lower')
+        plt.show()
+        plt.close()
+
+    def test_select_square(self):
+        """ # select_square """
+        # on shape (128, 128)
+        anchor, dv = (0, 79), 48
+        print(">>> {}, {}".format(anchor, dv))
+        s = self.roi.select_square(anchor, dv, **self.v)
+        self.assertIsInstance(s, np.ndarray)
+        self.assertEqual(s.dtype, bool)
+        self.assertTrue(np.any(s))
+        self.roi.data[self.roi()] = 100
+        plt.imshow(self.roi.data, cmap='bone', origin='lower')
+        plt.show()
+        plt.close()
+        # on shape (200, 300, 4)
+        W, H = 300, 200
+        e = np.ones((H, W, 4), dtype=float)
+        anchor, dv = (0, 100), 100
+        print(">>> {}, {}".format(anchor, dv))
+        roi = ROISelector(e)
+        s = roi.select['square'](anchor, dv, **self.v)
+        e[~roi()] = 0, 0, 1, 0
+        e[:, :, 3] = 1
+        plt.imshow(e, origin='lower')
+        plt.show()
+        plt.close()
+
+    def test_select_polygon(self):
+        """ # test_polygon """
+        # on shape (128, 128)
+        polygon = [(43, 45), (42, 54), (39, 62), (38, 71), (31, 60), (36, 51)]
+        print(">>> {}".format(polygon))
+        s = self.roi.select_polygon(*polygon, **self.v)
+        self.assertIsInstance(s, np.ndarray)
+        self.assertEqual(s.dtype, bool)
+        self.assertTrue(np.any(s))
+        self.roi.data[self.roi()] = 100
+        plt.imshow(self.roi.data, cmap='bone', origin='lower')
+        plt.show()
+        plt.close()
+        # on shape (200, 300, 4)
+        W, H = 300, 200
+        e = np.ones((H, W, 4), dtype=float)
+        polygon = [(125, 50), (175, 50), (200, 100), (175, 150), (125, 150), (100, 100)]
+        print(">>> {}".format(polygon))
+        roi = ROISelector(e)
+        s = roi.select['polygon'](*polygon, **self.v)
+        e[~roi()] = 0, 0, 1, 0
+        e[:, :, 3] = 1
+        plt.imshow(e, origin='lower')
+        plt.show()
+        plt.close()
+
+    def test_select_amorph(self):
+        """ # test_amorph """
+        # interrupted diagonal on shape (128, 128)
+        points = [(i, i) for i in range(128)]
+        points = points[0:32]+points[-32:]
+        print(">>> {}".format(points))
+        s = self.roi.select_amorph(*points, **self.v)
+        self.assertIsInstance(s, np.ndarray)
+        self.assertEqual(s.dtype, bool)
+        self.assertTrue(np.any(s))
+        self.roi.data[self.roi()] = 100
+        plt.imshow(self.roi.data, cmap='bone', origin='lower')
+        plt.show()
+        plt.close()
+        # scattered points on shape (200, 300, 4)
+        W, H = 300, 200
+        e = np.ones((H, W, 4), dtype=float)
+        points = [(2*i, i) for i in range(128)]
+        points = points[0:32]+points[-32:]
+        print(">>> {}".format(points))
+        roi = ROISelector(e)
+        s = roi.select['amorph'](*points, **self.v)
+        e[~roi()] = 0, 0, 1, 0
+        e[:, :, 3] = 1
+        plt.imshow(e, origin='lower')
+        plt.show()
+        plt.close()
+
+    def test_mpl_interface(self):
+        """ # mpl_interface"""
+        pass
 
 
 class TestPolygon(UnitTestPrototype):
@@ -97,7 +240,17 @@ class TestPolygon(UnitTestPrototype):
 
     def test_Polygon(self):
         """ # ROISelector.Polygon """
+        # from list
         print(">>> {}".format(self.points))
+        p = ROISelector.Polygon(self.points, **self.v)
+        self.assertIsInstance(p, ROISelector.Polygon)
+        self.assertEqual(p, self.polygon)
+        self.assertEqual(p.N, 8)
+        self.assertEqual(p.area, 3.625)
+        self.assertGreater(p.is_ccw, 0)
+        self.assertFalse(p.is_closed)
+        # from tuple
+        print(">>> {}".format(tuple(self.points)))
         p = ROISelector.Polygon(*self.points, **self.v)
         self.assertIsInstance(p, ROISelector.Polygon)
         self.assertEqual(p, self.polygon)
@@ -105,6 +258,7 @@ class TestPolygon(UnitTestPrototype):
         self.assertEqual(p.area, 3.625)
         self.assertGreater(p.is_ccw, 0)
         self.assertFalse(p.is_closed)
+        # from single point
         print(">>> {}".format((1, 1)))
         p = ROISelector.Polygon((1, 1), **self.v)
         self.assertIsInstance(p, ROISelector.Polygon)
@@ -115,9 +269,11 @@ class TestPolygon(UnitTestPrototype):
 
     def test_add_point(self):
         """ # ROISelector.Polygon.add_point """
+        # add point not in polygon
         print(">>> {}".format((0.25, 0.50)))
         self.polygon.add_point((0.25, 0.50), **self.v)
         self.assertEqual(self.polygon.N, 9)
+        # add point closing the polygon
         print(">>> {}".format((0, 0)))
         self.polygon.add_point((0, 0), **self.v)
         self.assertEqual(self.polygon.N, 9)
@@ -131,8 +287,10 @@ class TestPolygon(UnitTestPrototype):
 
     def test_contains(self):
         """ # ROISelector.Polygon.contains """
+        # multi-point input
         print(">>> {} {}".format([0, 3, 2, 7], [4, 3, 5, 2]))
         self.polygon.contains([0, 3, 2, 7], [4, 3, 5, 2], **self.v)
+        # single-point input
         print(">>> {}".format((0, 4)))
         self.polygon.contains(0, 4, **self.v)
 
@@ -154,18 +312,21 @@ class TestRectangle(UnitTestPrototype):
 
     def test_Rectangle(self):
         """ # ROISelector.Rectangle """
+        # with dv
         print(">>> {}, {}".format(self.anchor, (1, 1)))
         r = ROISelector.Rectangle(self.anchor, (1, 1), **self.v)
         self.assertIsInstance(r, ROISelector.Rectangle)
         self.assertEqual(r, self.rectangle)
         self.assertEqual(r.N, 4)
         self.assertEqual(r.area, 1)
+        # with corner
         print(">>> {}, {}".format(self.anchor, {'corner': (1, 1)}))
         r = ROISelector.Rectangle(self.anchor, corner=(1, 1), **self.v)
         self.assertIsInstance(r, ROISelector.Rectangle)
         self.assertEqual(r, self.rectangle)
         self.assertEqual(r.N, 4)
         self.assertEqual(r.area, 1)
+        # no second input
         print(">>> {}".format(self.anchor))
         r = ROISelector.Rectangle(self.anchor, **self.v)
         self.assertIsInstance(r, ROISelector.Rectangle)
@@ -199,9 +360,11 @@ class TestRectangle(UnitTestPrototype):
 
     def test_add_point(self):
         """ # ROISelector.Rectangle.add_point """
+        # add point not in rectangle
         print(">>> {}".format((0.25, 0.50)))
         self.rectangle.add_point((0.25, 0.50), **self.v)
         self.assertEqual(self.rectangle.N, 4)
+        # add point closing the rectangle
         print(">>> {}".format((0, 0)))
         self.rectangle.add_point((0, 0), **self.v)
         self.assertEqual(self.rectangle.N, 4)
@@ -217,8 +380,10 @@ class TestRectangle(UnitTestPrototype):
 
     def test_contains(self):
         """ # ROISelector.Rectangle.contains """
+        # multi-point input
         print(">>> {} {}".format([0, 2, 3, 0.2], [0, 3, 5, 0.6]))
         self.rectangle.contains([0, 2, 3, 0.2], [0, 3, 5, 0.6], **self.v)
+        # single-point input
         print(">>> {}".format((0.25, 0.75)))
         self.rectangle.contains(0.25, 0.75, **self.v)
 
@@ -240,18 +405,21 @@ class TestSquare(UnitTestPrototype):
 
     def test_Square(self):
         """ # ROISelector.Square """
+        # with scalar dv
         print(">>> {}, {}".format(self.anchor, 1))
         s = ROISelector.Square(self.anchor, 1, **self.v)
         self.assertIsInstance(s, ROISelector.Square)
         self.assertEqual(s, self.square)
         self.assertEqual(s.N, 4)
         self.assertEqual(s.area, 1)
+        # with corner
         print(">>> {}, {}".format(self.anchor, {'corner': (1, 2)}))
         s = ROISelector.Square(self.anchor, corner=(1, 2), **self.v)
         self.assertIsInstance(s, ROISelector.Square)
         self.assertNotEqual(s, self.square)
         self.assertEqual(s.N, 4)
         self.assertEqual(s.area, 4)
+        # no second input
         print(">>> {}".format(self.anchor))
         s = ROISelector.Square(self.anchor, **self.v)
         self.assertIsInstance(s, ROISelector.Square)
@@ -285,9 +453,11 @@ class TestSquare(UnitTestPrototype):
 
     def test_add_point(self):
         """ # ROISelector.Square.add_point """
+        # add point not in square
         print(">>> {}".format((0.25, 0.50)))
         self.square.add_point((0.25, 0.50), **self.v)
         self.assertEqual(self.square.N, 4)
+        # add point closing the square
         print(">>> {}".format((0, 0)))
         self.square.add_point((0, 0), **self.v)
         self.assertEqual(self.square.N, 4)
@@ -304,10 +474,13 @@ class TestSquare(UnitTestPrototype):
 
     def test_contains(self):
         """ # ROISelector.Square.contains """
+        # multi-point input
         print(">>> {} {}".format([0, 2, 3, 0.2], [0, 3, 5, 0.6]))
         self.square.contains([0, 2, 3, 0.2], [0, 3, 5, 0.6], **self.v)
+        # single-point input
         print(">>> {}".format((0.25, 0.75)))
         self.square.contains(0.25, 0.75, **self.v)
+
 
 class TestCircle(UnitTestPrototype):
 
@@ -327,14 +500,23 @@ class TestCircle(UnitTestPrototype):
 
     def test_Circle(self):
         """ # ROISelector.Circle """
+        # with no radius
         print(">>> {}".format(self.center))
         circle = ROISelector.Circle(self.center, radius=0, **self.v)
         self.assertIsInstance(circle, ROISelector.Circle)
         self.assertNotEqual(circle, self.circle)
         self.assertEqual(circle.diameter, 0)
         self.assertEqual(circle.area, 0)
+        # with scalar radius
         print(">>> {}".format((self.center, self.radius)))
         circle = ROISelector.Circle(self.center, self.radius, **self.v)
+        self.assertIsInstance(circle, ROISelector.Circle)
+        self.assertEqual(circle, self.circle)
+        self.assertEqual(circle.diameter, 2*self.radius)
+        self.assertEqual(circle.area, np.pi)
+        # with radial point
+        print(">>> {}".format((self.center, (self.radius, 0))))
+        circle = ROISelector.Circle(self.center, (self.radius, 0), **self.v)
         self.assertIsInstance(circle, ROISelector.Circle)
         self.assertEqual(circle, self.circle)
         self.assertEqual(circle.diameter, 2*self.radius)
@@ -342,7 +524,78 @@ class TestCircle(UnitTestPrototype):
 
     def test_contains(self):
         """ ROISelector.Circle.contains """
-        print(">>> {}".format(()))
+        # multi-point input
+        print(">>> {} {}".format([0, 2, 3, 0.2, 1, 1], [0, 3, 5, 0.6, 1, 0]))
+        self.circle.contains([0, 2, 3, 0.2, 1, 1], [0, 3, 5, 0.6, 1, 0], **self.v)
+        # single-point input
+        print(">>> {} {}".format(0, 1))
+        self.circle.contains(0, 1, **self.v)
+
+
+class TestAmorph(UnitTestPrototype):
+
+    def setUp(self):
+        # arguments and keywords
+        self.points = [(0, 0), (1, 0), (0, 2)]
+        self.amorph = ROISelector.Amorph(self.points)
+        # # verbosity
+        self.v = {'verbose': 1}
+        print("")
+        print(self.separator)
+        print(self.shortDescription())
+
+    def tearDown(self):
+        print("")
+
+    def test_Amorph(self):
+        """ # ROISelector.Amorph """
+        # with list
+        print(">>> {}".format(self.points))
+        amorph = ROISelector.Amorph(self.points, **self.v)
+        self.assertIsInstance(amorph, ROISelector.Amorph)
+        self.assertTrue(np.all(amorph == self.amorph))
+        # with tuple
+        print(">>> {}".format(tuple(self.points)))
+        amorph = ROISelector.Amorph(*self.points, **self.v)
+        self.assertIsInstance(amorph, ROISelector.Amorph)
+        self.assertTrue(np.all(amorph == self.amorph))
+        # with numpy array
+        print(">>> {}".format(np.flip(np.indices((3, 3)).T, 2)))
+        amorph = ROISelector.Amorph(np.flip(np.indices((3, 3)).T, 2), **self.v)
+        self.assertIsInstance(amorph, ROISelector.Amorph)
+        self.assertFalse(np.all(amorph == self.amorph))
+        self.assertIsInstance(amorph[:2, :2, :], ROISelector.Amorph)
+        # single-point input (separate)
+        print(">>> {}".format((0, 0)))
+        amorph = ROISelector.Amorph(0, 0, **self.v)
+        self.assertIsInstance(amorph, ROISelector.Amorph)
+        self.assertFalse(np.all(amorph == self.amorph))
+
+    def test_add_point(self):
+        """ # ROISelector.Amorph.add_point """
+        # add point to grid points
+        print(">>> {}".format((5, 5)))
+        amorph = ROISelector.Amorph(np.flip(np.indices((3, 3)).T, 2))
+        amorph = amorph.add_point((5, 5), **self.v)
+        print(amorph.N)
+        self.assertIsInstance(amorph, ROISelector.Amorph)
+        # add point to flat points
+        print(">>> {}".format((5, 5)))
+        self.amorph.add_point((5, 5), **self.v)
+        self.assertIsInstance(self.amorph, ROISelector.Amorph)
+
+    def test_contains(self):
+        """ # ROISelector.Amorph.contains """
+        # in flat points
+        points = np.array([(5, 5), (0, 0), (1, 0)]).T
+        print(">>> {}".format(points))
+        self.amorph = self.amorph.add_point((5, 0), **self.v)
+        self.amorph.contains(*points, **self.v)
+        # in grid points
+        print(">>> {}".format(points))
+        amorph = ROISelector.Amorph(np.flip(np.indices((4, 4)).T, -1), **self.v)
+        print(np.array([(5, 5), (3, 2), (0, 0), (1, 0)]).T)
+        amorph.contains(*np.array([(5, 5), (3, 2), (0, 0), (1, 0)]).T, **self.v)
 
 
 if __name__ == "__main__":
@@ -351,3 +604,4 @@ if __name__ == "__main__":
     TestRectangle.main(verbosity=1)
     TestSquare.main(verbosity=1)
     TestCircle.main(verbosity=1)
+    TestAmorph.main(verbosity=1)
