@@ -57,7 +57,7 @@ class TestMultiLens(UnitTestPrototype):
         """ # from_json """
         filename = 'test.json'
         self.ml.lens_objects[5].photzp = 25.67
-        filename = self.ml.jsonify(save=True)
+        filename = self.ml.jsonify(savename='test.json')
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
             jcopy = MultiLens.from_json(j, **self.v)

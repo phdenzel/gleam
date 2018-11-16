@@ -189,7 +189,7 @@ class SkyF(object):
             print(self.__v__)
         return self
 
-    def jsonify(self, save=False, verbose=False):
+    def jsonify(self, savename=None, no_hash=False, verbose=False):
         """
         Export instance to JSON
 
@@ -197,7 +197,7 @@ class SkyF(object):
             None
 
         Kwargs:
-            save <bool> - save the JSON as file
+            save <str> - save the JSON as file with name save
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -206,11 +206,16 @@ class SkyF(object):
         """
         import json
         jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
-        if save:
-            filename = []
-            if 'skyf' not in filename:
-                filename += ['skyf#{}'.format(self.encode()[:-3])]
-            if 'json' not in filename:
+        if savename:
+            if len(savename.split('.')) > 1:
+                filename = savename.split('.')[:-1]
+            else:
+                filename = savename
+            if not no_hash:
+                if self.__class__.__name__.lower() not in savename:
+                    filename += ['{}#{}'.format(
+                        self.__class__.__name__.lower(), self.encode()[:-3])]
+            if 'json' not in filename[-1]:
                 filename += ['json']
             filename = '.'.join(filename)
             with open(filename, 'w') as output:

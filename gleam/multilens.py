@@ -98,7 +98,8 @@ class MultiLens(SkyPatch):
         self.lens_objects = [None]*self.N
         for i, f in enumerate(self.filepaths):
             self.lens_objects[i] = LensObject(
-                f, glscfactory_options=glscfactory_options[i], finder_options=finder_options[i],
+                f, auto=auto[i],
+                glscfactory_options=glscfactory_options[i], finder_options=finder_options[i],
                 **{k: kwargs[k][i] for k in kwargs})
 
         #TODO: unify different lens objects to have uniform information
@@ -381,9 +382,9 @@ class MultiLens(SkyPatch):
 def main(case, args):
     ml = MultiLens(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
                    lens=args.lens, photzp=args.photzp,
-                   auto=args.auto, n=args.n, sigma=args.sigma, min_q=args.min_q,
-                   output=args.gen_config, text_file=args.text_file, filter_=args.filter_,
-                   verbose=args.verbose)
+                   auto=args.auto, verbose=args.verbose,
+                   finder_options=dict(n=args.n, sigma=args.sigma, min_q=args.min_q),
+                   glscfactory_options=dict(text_file=args.text_file, filter_=args.filter_))
     if args.show == 'bands' or args.savefig:
         ml.show_patch(as_magnitudes=args.mags, figsize=args.figsize,
                       lens=args.show_lens, source_images=args.show_sources,
@@ -399,11 +400,11 @@ def main(case, args):
         ml.show_composite(figsize=args.figsize, method=args.method,
                           lens=args.show_lens, source_images=args.show_sources,
                           scalebar=args.scalebar)
-    if args.gen_config is not None:
-        if args.append_config:
-            pass  #TODO: once a uniform solution has been found
-        else:
-            pass  #TODO: once a uniform solution has been found
+    # if args.gen_config is not None:
+    #     if args.append_config:
+    #         pass  #TODO: once a uniform solution has been found
+    #     else:
+    #         pass  #TODO: once a uniform solution has been found
 
 
 def parse_arguments():

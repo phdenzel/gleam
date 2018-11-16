@@ -64,6 +64,49 @@ def lupton_like(i, r, g, method='standard'):
     return stack
 
 
+def primary_transf(rgba, roundup=0.5):
+    """
+    Pronounce pictures with primary colors
+
+    Args:
+        rgba <np.ndarray> - rbga image data
+
+    Kwargs:
+        roundup <float> - roundup threshold
+
+    Return:
+        primary <np.ndarray> - primary colors of the rgba image array
+    """
+    if len(rgba.shape) != 3 and rgba.shape[-1] != 4:
+        raise IndexError("Wrong input shape! rgba requires shape of (N, M, 4) with axis[-1] = 4!")
+    primary = rgba*1
+    primary[np.greater_equal(primary, roundup)] = 1
+    primary[np.less(primary, roundup)] = 0
+    return primary
+
+
+def primary_mask(primary, r=True, g=True, b=True, verbose=False):
+    """
+    Get a mask where the primary colors are
+    """
+    msk = False
+    if verbose:
+        print("Selected primary color(s)...\t"),
+    if r:
+        msk = np.equal(primary[:, :, 0], 1) | (msk)
+        if verbose:
+            print("red\t"),
+    if g:
+        msk = np.equal(primary[:, :, 1], 1) | (msk)
+        if verbose:
+            print("green\t"),
+    if b:
+        msk = np.equal(primary[:, :, 2], 1) | (msk)
+        if verbose:
+            print("blue\t")
+    return msk
+
+
 # def rgba_map(stellar, total, error=None, Aexp=0.5, fexp=2.5, dexp=0.25,
 #              delta3=1./3, log=False, alpha_mask=False):
 #     """
@@ -260,39 +303,6 @@ def lupton_like(i, r, g, method='standard'):
 #     """
 #     mask = []
 #     return mask
-
-
-# def primary_transf(rgba, roundup=0.5):
-#     """
-#     Pronounce pictures with primary colors
-#     """
-#     width, height, channels = rgba.shape
-#     primary = rgba*1
-#     primary[np.greater_equal(primary, roundup)] = 1
-#     primary[np.less(primary, roundup)] = 0
-#     return primary
-
-
-# def primary_mask(primary, r=True, g=True, b=True, verbose=False):
-#     """
-#     Get a mask where the primary colors are
-#     """
-#     msk = False
-#     if verbose:
-#         print("Selected primary color(s)...\t"),
-#     if r:
-#         msk = np.equal(primary[:, :, 0], 1) | (msk)
-#         if verbose:
-#             print("red\t"),
-#     if g:
-#         msk = np.equal(primary[:, :, 1], 1) | (msk)
-#         if verbose:
-#             print("green\t"),
-#     if b:
-#         msk = np.equal(primary[:, :, 2], 1) | (msk)
-#         if verbose:
-#             print("blue\t")
-#     return msk
 
 
 # def plot_rgbamap(rgba, scalebar=None, **kwargs):

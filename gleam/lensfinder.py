@@ -267,6 +267,8 @@ class LensFinder(object):
                 o some kind of peak number analysis
                 o some manual input like dual/quad/...
         """
+        if not peaks:
+            return peaks, peak_values, None
         if method == 'distances':
             deviations = []
             for p in peaks:

@@ -76,7 +76,7 @@ class TestLensObject(UnitTestPrototype):
         filename = 'test.json'
         self.lobject.zl = 0.5
         self.lobject.add_srcimg((24, 36), unit='pixels')
-        filename = self.lobject.jsonify(save=True)
+        filename = self.lobject.jsonify(savename='test.json')
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
             jcopy = LensObject.from_json(j, **self.v)

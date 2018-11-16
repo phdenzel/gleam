@@ -61,7 +61,7 @@ class TestSkyF(UnitTestPrototype):
         """ # from_json """
         filename = 'test.json'
         self.skyf.photzp = 25.67
-        filename = self.skyf.jsonify(save=True)
+        filename = self.skyf.jsonify(savename='test.json')
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
             jcopy = SkyF.from_json(j, **self.v)

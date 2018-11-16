@@ -199,7 +199,7 @@ class SkyPatch(object):
             print(self.__v__)
         return self
 
-    def jsonify(self, save=False, verbose=False):
+    def jsonify(self, savename=None, no_hash=False, verbose=False):
         """
         Export instance to JSON
 
@@ -216,11 +216,16 @@ class SkyPatch(object):
         """
         import json
         jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
-        if save:
-            filename = []
-            if 'skypatch' not in filename:
-                filename += ['skypatch#{}'.format(self.encode()[:-3])]
-            if 'json' not in filename:
+        if savename:
+            if len(savename.split('.')) > 1:
+                filename = savename.split('.')[:-1]
+            else:
+                filename = savename
+            if not no_hash:
+                if self.__class__.__name__.lower() not in savename:
+                    filename += ['{}#{}'.format(
+                        self.__class__.__name__.lower(), self.encode()[:-3])]
+            if 'json' not in filename[-1]:
                 filename += ['json']
             filename = '.'.join(filename)
             with open(filename, 'w') as output:
@@ -704,7 +709,8 @@ class SkyPatch(object):
 
 # MAIN FUNCTION ###############################################################
 def main(case, args):
-    sp = SkyPatch(case, verbose=args.verbose)
+    sp = SkyPatch(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
+                  lens=args.lens, photzp=args.photzp, verbose=args.verbose)
     if args.show == 'bands' or args.savefig is not None:
         sp.show_patch(as_magnitudes=args.mags, figsize=args.figsize,
                       savefig=args.savefig, scalebar=args.scalebar, colorbar=args.colorbar)
