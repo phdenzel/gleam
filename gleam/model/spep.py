@@ -64,7 +64,7 @@ class SPEP(_BaseModel):
         self.gamma = gamma
         self.s2 = s*s
         # Base parameters
-        kwargs['phi'] = np.pi/2-self.phi_G
+        kwargs['phi'] = self.phi_G
         kwargs['e'] = 1 - q
         super(SPEP, self).__init__(**kwargs)
         # finally apply parameter constraints

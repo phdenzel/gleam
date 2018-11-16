@@ -68,8 +68,8 @@ class _BaseModel(object):
         self.Nx = int(Nx)
         self.Ny = int(Ny)
         self.n_subsamples = int(n_subsamples)
-        self.map2D = np.zeros((self.Nx, self.Ny))
-        self.indices = np.indices((self.Nx, self.Ny))
+        self.map2D = np.zeros((self.Ny, self.Nx))
+        self.indices = np.indices((self.Ny, self.Nx))
 
         if auto_load:
             self.calc_map()
@@ -391,10 +391,10 @@ class _BaseModel(object):
         """
         verbose = kwargs.pop('verbose', False)
         smooth_center = kwargs.pop('smooth_center', False)
-        self.map2D = self.calc_pixel(self.indices[0], self.indices[1], **kwargs)
+        self.map2D = self.calc_pixel(self.indices[1], self.indices[0], **kwargs)
         if smooth_center:
             x0, y0 = self.x, self.y
-            self.map2D[x0, y0] = 2./9*(np.sum(self.map2D[x0-1:x0+2, y0-1:y0+2])-self.map2D[x0, y0])
+            self.map2D[y0, x0] = 2./9*(np.sum(self.map2D[y0-1:y0+2, x0-1:x0+2])-self.map2D[y0, x0])
         if verbose:
             print(self.map2D)
 

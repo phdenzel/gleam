@@ -28,7 +28,7 @@ class TestSPEMD(UnitTestPrototype):
         }
         self.v = {'verbose': 1}
         # __init__ test
-        self.spemd = SPEMD(Nx=200, Ny=200, **self.model_kwargs)
+        self.spemd = SPEMD(Nx=200, Ny=100, **self.model_kwargs)
         # verbosity
         print("")
         print(self.separator)
@@ -58,7 +58,7 @@ class TestSPEMD(UnitTestPrototype):
         cosPA = self.spemd.cosPA
         self.assertIsNotNone(cosPA)
         self.assertIsInstance(cosPA, np.float64)
-        self.assertEqual(cosPA, np.cos(np.pi/2-self.model_kwargs['phi_G']))
+        self.assertEqual(cosPA, np.cos(self.model_kwargs['phi_G']))
         print(cosPA)
 
     def test_sinPA(self):
@@ -67,7 +67,7 @@ class TestSPEMD(UnitTestPrototype):
         sinPA = self.spemd.sinPA
         self.assertIsNotNone(sinPA)
         self.assertIsInstance(sinPA, np.float64)
-        self.assertEqual(sinPA, np.sin(np.pi/2-self.model_kwargs['phi_G']))
+        self.assertEqual(sinPA, np.sin(self.model_kwargs['phi_G']))
         print(sinPA)
 
     def test_model_parameters(self):
@@ -144,7 +144,7 @@ class TestSPEMD(UnitTestPrototype):
     def test_plot_map(self):
         """ # plot_map """
         self.spemd.calc_map(smooth_center=True)
-        fig = self.spemd.plot_map(log=True, show=False)
+        fig = self.spemd.plot_map(log=True, contours=True, show=False)
         print(fig)
 
 if __name__ == "__main__":

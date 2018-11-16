@@ -58,7 +58,7 @@ class TestSPEP(UnitTestPrototype):
         cosPA = self.spep.cosPA
         self.assertIsNotNone(cosPA)
         self.assertIsInstance(cosPA, np.float64)
-        self.assertEqual(cosPA, np.cos(np.pi/2-self.model_kwargs['phi_G']))
+        self.assertEqual(cosPA, np.cos(self.model_kwargs['phi_G']))
         print(cosPA)
 
     def test_sinPA(self):
@@ -67,7 +67,7 @@ class TestSPEP(UnitTestPrototype):
         sinPA = self.spep.sinPA
         self.assertIsNotNone(sinPA)
         self.assertIsInstance(sinPA, np.float64)
-        self.assertEqual(sinPA, np.sin(np.pi/2-self.model_kwargs['phi_G']))
+        self.assertEqual(sinPA, np.sin(self.model_kwargs['phi_G']))
         print(sinPA)
 
     def test_model_parameters(self):
