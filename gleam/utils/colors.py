@@ -8,28 +8,25 @@ Better color module for more beautiful plots
 # Colors
 ###############################################################################
 
-yellow = '#edde45'
-gold = '#c18d1d'
-orange = '#da9605'
-brown = '#d88c4e'
-winered = '#7c3658'
-pink = '#fd4d83'
-red = '#fe4365'
-purple = '#9950cb'
-purpleblue = '#603dd0'
-lightblue = '#39b3e6'
-blue = '#4182c4'
-neongreen = '#0bf759'
-green = '#91c442'
-turquoise = '#00d1a4'
-darkgreen = '#0d8e66'
-greyishgreen = '#57776f'
-textcolor = '#555555'
-slategrey = '#708090'
-gray = '#aab1b7'
-gray2 = '#a9b0b6'
-darkish = '#25232d'
-darkish2 = '#31343f'
+yellow     = '#ffd60a'  # rba(155, 214,  10)
+golden     = '#feb125'  # rba(256, 177,  37)
+orange     = '#ff9f0a'  # rba(255, 159,  10)
+brown      = '#d88c4e'  # rba(172, 142, 104)
+pink       = '#ff375f'  # rba(255,  55,  95)
+red        = '#ff453a'  # rba(255,  69,  58)
+purple     = '#603dd0'  # rba( 96,  61, 208)
+purpleblue = '#7d7de1'  # rba(125, 125, 225)
+blue       = '#6b89ff'  # rba(107, 137, 255)
+turquoise  = '#00d1a4'  # rba( 10, 210, 165)
+green      = '#32d74b'  # rba( 50, 215,  75)
+
+gray       = '#98989d'  # rba(152, 152, 157)
+darkish    = '#666769'  # rba(102, 103, 105)
+dark       = '#3d3e41'  # rba( 61,  62,  65)
+darker     = '#333437'  # rba( 51,  52,  55)
+darkest    = '#212225'  # rba( 33,  34,  37)
+black      = '#090F0F'  # rba(  9,  15,  15)
+textcolor  = '#dddee1'  # rba(221, 222, 225)
 
 
 def color_variant(hex_color, shift=10):
