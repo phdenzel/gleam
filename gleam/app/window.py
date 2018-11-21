@@ -40,9 +40,11 @@ class Window(FramePrototype):
             <Window object> - standard initializer
         """
         FramePrototype.__init__(self, master, *args, **kwargs)
-        self.canvas = CanvasPrototype(self, self.number_of_bands, name='canvas',
-                                      cell_size=cell_size, ncols=ncols,
-                                      borderwidth=0, highlightthickness=0)
+        if N is None:
+            N = self.env.app.lens_patch.N
+        self.canvas = CanvasPrototype(
+            self, N, name='canvas', cell_size=cell_size, ncols=ncols,
+            borderwidth=0, highlightthickness=0, relief='flat')
         if verbose:
             print(self.__v__)
 
@@ -57,20 +59,4 @@ class Window(FramePrototype):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return ['number_of_bands', 'canvas']
-
-    @property
-    def number_of_bands(self):
-        """
-        Number of images (for now use as many as there are in 'lens_patch')
-
-        Args/Kwargs:
-            None
-
-        Return:
-            N <int> - number of images to be projected onto canvas
-        """
-        if 'app' in self.env.elements and hasattr(self.env.app, 'lens_patch'):
-            return self.env.app.lens_patch.N
-        else:
-            return 0
+        return ['canvas']

@@ -8,6 +8,8 @@ Prototypes for mightier app components
 # Imports
 ###############################################################################
 import sys
+import re
+import traceback
 from PIL import ImageTk
 if sys.version_info.major < 3:
     import Tkinter as tk
@@ -273,7 +275,7 @@ class FramePrototype(tk.Frame, object):
         return False
 
 
-# CANVAS PROTOTYPE CLASS ####################################################
+# CANVAS PROTOTYPE CLASS ######################################################
 class CanvasPrototype(tk.Canvas, object):
     """
     A resizeable and zoomable Canvas class with imposed 'matrix' structure
@@ -300,14 +302,13 @@ class CanvasPrototype(tk.Canvas, object):
         Environment.from_tk(self)
 
         # matrix initialization
-        self.N = N
+        self.N = N or 1
         self.cell_size = cell_size
         self.ncols = ncols
-        zoom_keys = list(range(self.N))                        # zoom factor keys
-        zoom_keys += ['c{}'.format(i) for i in range(self.N)]  # zoom position keys
-        zoom_init = [1]*self.N                                 # initial zoom factors
-        zoom_init += [(0.5, 0.5)]*self.N                       # initial zoom positions
-        self.zoom = {k: i for k, i in zip(zoom_keys, zoom_init)}
+
+        self.cursor_index = 0
+        self.cursor_position = 0, 0
+        self.cursor_value = 0
 
         # configure canvas to be resizeable
         self.configure(width=self.matrix_size[0], height=self.matrix_size[1])
@@ -346,7 +347,9 @@ class CanvasPrototype(tk.Canvas, object):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return ['N', 'cell_size', 'ncols', 'zoom', 'img_buffer', '_img_copy']
+        return ['N', 'cell_size', 'ncols',
+                'cursor_index', 'cursor_position', 'cursor_value', 'zoom',
+                'img_buffer', '_img_copy']
 
     @property
     def __v__(self):
@@ -367,7 +370,11 @@ class CanvasPrototype(tk.Canvas, object):
         """
         Number of images in the buffer
 
-        TODO
+        Args/Kwargs:
+            None
+
+        Return:
+            N <int> - number of images in buffer, resp. length if buffer list
         """
         if not hasattr(self, '_img_buffer'):
             return 0
@@ -379,14 +386,18 @@ class CanvasPrototype(tk.Canvas, object):
         """
         Setter for the length of the image buffer
 
-        TODO
+        Args:
+            N <int> - reduce/raise length of buffer list
+
+        Kwargs/Return:
+            None
         """
         if not hasattr(self, '_img_buffer'):
             self.img_buffer = (None, N-1)
         elif N > len(self.img_buffer):
             self.img_buffer = (None, N-1)
         elif N < len(self.img_buffer):
-            self.img_buffer = self._img_buffer[:N]
+            self._img_buffer = self._img_buffer[:N]
 
     @property
     def ncols(self):
@@ -486,12 +497,14 @@ class CanvasPrototype(tk.Canvas, object):
         if not hasattr(self, '_img_buffer'):
             self._img_buffer = []
             self._img_copy = []
+            self._img_data = []
         img, idx = img_n_idx
         # expand buffer list if it's too short
         if idx > len(self._img_buffer)-1:
             tail = [None]*(idx-len(self._img_buffer)+1)
             self._img_buffer = self._img_buffer+tail
             self._img_copy = self._img_copy+tail
+            self._img_data = self._img_data+tail
         self._img_buffer[idx] = img
 
     def matrix_anchor(self, index, loc='NW', verbose=False):
@@ -509,15 +522,17 @@ class CanvasPrototype(tk.Canvas, object):
             matrix_anchor <int,int> - north-west cell position on the matrix at specified index
         """
         # nrows = (self.N//self.ncols+(0 if self.N % self.ncols == 0 else 1))
-        ne = (index % self.ncols)*self.cell_size[0], (index // self.ncols)*self.cell_size[1]
+        nw = (index % self.ncols)*self.cell_size[0], (index // self.ncols)*self.cell_size[1]
         if loc.upper() == 'NW':
-            return ne
+            return nw
+        elif loc.upper() == 'NE':
+            return nw[0]+self.cell_size[0], nw[1]
         elif loc.upper() == 'CENTER':
-            return ne[0]+self.cell_size[0]//2, ne[1]+self.cell_size[1]//2
-        elif loc.upper() == 'SW':
-            return ne[0]+self.cell_size[0], ne[1]
+            return nw[0]+self.cell_size[0]//2, nw[1]+self.cell_size[1]//2
         elif loc.upper() == 'SE':
-            return ne[0]+self.cell_size[0], ne[1]+self.cell_size[1]
+            return nw[0]+self.cell_size[0], nw[1]+self.cell_size[1]
+        elif loc.upper() == 'SW':
+            return nw[0], nw[1]+self.cell_size[1]
 
     def matrix_index(self, position, verbose=False):
         """
@@ -553,17 +568,17 @@ class CanvasPrototype(tk.Canvas, object):
             p_actual <int,int> - transformed positions corrected for scale and zoom
         """
         idx = self.matrix_index(position)
-        anc = self.matrix_anchor(idx, loc='NW')
+        nw_anc = self.matrix_anchor(idx, loc='NW')
         if self._img_copy[idx]:
             w, h = self._img_copy[idx].size
         else:
-            return -1, -1
+            return 0, 0
         # relative to cell corner
-        cell_pos = position[0]-anc[0], position[1]-anc[1]
+        cell_pos = position[0]-nw_anc[0], position[1]-nw_anc[1]
         # correct for scale
         scaled_pos = int(cell_pos[0]*w/self.cell_size[0]), int(cell_pos[1]*h/self.cell_size[1])
         # correct for zoom
-        xmin, ymin, xmax, ymax = self.zoom_image(idx, img_return=False)
+        xmin, ymin, xmax, ymax = self.zoom_image(idx, return_img=False)
         p_actual = (int(xmin+float(scaled_pos[0])/w*(xmax-xmin)),
                     int(ymin+float(scaled_pos[1])/h*(ymax-ymin)))
         if relative:
@@ -571,7 +586,7 @@ class CanvasPrototype(tk.Canvas, object):
         else:
             return p_actual
 
-    def add_image(self, image, index, verbose=False):
+    def add_image(self, image, index, image_data=None, verbose=False):
         """
         Insert image at specified index in buffer and project onto canvas
 
@@ -580,6 +595,7 @@ class CanvasPrototype(tk.Canvas, object):
             index <int> - index of the image in the buffer
 
         Kwargs:
+            image_data <np.ndarray> - image data for correct positional data tracking
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -590,8 +606,9 @@ class CanvasPrototype(tk.Canvas, object):
             self.img_buffer = (None, index)
         # copy original
         self._img_copy[index] = image
+        self._img_data[index] = image_data
         # apply image zoom
-        if self.zoom[index] > 1:
+        if self.zoom_dict[index] > 1:
             image = self.zoom_image(index)
         # move image to buffer and show on canvas
         if image is not None and index < self.N:
@@ -600,7 +617,153 @@ class CanvasPrototype(tk.Canvas, object):
             self.img_buffer = (ImageTk.PhotoImage(image=image), index)
             self.create_image(*pos, image=self.img_buffer[index], anchor=tk.NW)
 
-    def zoom_image(self, index, warp=True, img_return=True, verbose=False):
+    @property
+    def cursor_index(self):
+        """
+        Index over which cell the cursor is hovering
+
+        Args/Kwargs:
+            None
+
+        Return:
+            idx <int> - the index of the cell
+        """
+        if not hasattr(self, '_cursor_index'):
+            self._cursor_index = tk.StringVar()
+            self._cursor_index.set("{{:=2d}}".format(0))
+        return int(self._cursor_index.get())
+
+    @cursor_index.setter
+    def cursor_index(self, idx):
+        """
+        Setter of the cursor index
+
+        Args:
+            idx <int> - the new cursor index
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_cursor_index'):
+            self._cursor_index = tk.StringVar()
+        self._cursor_index.set("{:=2d}".format(idx))
+
+    @property
+    def cursor_position(self):
+        """
+        Position of the cursor within a cell
+
+        Args/Kwargs:
+            None
+
+        Return:
+            pos <float,float> - the position within the cell
+        """
+        if not hasattr(self, '_cursor_position'):
+            self._cursor_position = tk.StringVar()
+            self._cursor_position.set("({:4}, {:4})".format('', ''))
+        return [int(s) for s in re.findall(r'\d+', self._cursor_position.get())]
+
+    @cursor_position.setter
+    def cursor_position(self, pos):
+        """
+        Setter of the cursor position
+
+        Args:
+            pos <int> - the new cursor position
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_cursor_position'):
+            self._cursor_position = tk.StringVar()
+        self._cursor_position.set("({:=4d}, {:=4d})".format(pos[0], pos[1]))
+
+    @property
+    def cursor_value(self):
+        """
+        Value of the data over which the cursor is hovering
+
+        Args/Kwargs:
+            None
+
+        Return:
+            val <float> - the data point value
+        """
+        if not hasattr(self, '_cursor_value'):
+            self._cursor_value = tk.StringVar()
+            self._cursor_value.set("{:.4f}".format(0))
+        return float(self._cursor_value.get())
+
+    @cursor_value.setter
+    def cursor_value(self, val):
+        """
+        Setter of the cursor value
+
+        Args:
+            val <int> - the new cursor value
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_cursor_value'):
+            self._cursor_value = tk.StringVar()
+        self._cursor_value.set("{:.4f}".format(val))
+
+    @property
+    def zoom_dict(self):
+        """
+        Zoom settings for images
+
+        Args/Kwargs:
+            None
+
+        Return:
+            zoom <dict> - dictionary of zoom settings
+        """
+        if not hasattr(self, '_zoom_dict'):
+            zoom_keys = list(range(self.N))                        # zoom factor keys
+            zoom_keys += ['c{}'.format(i) for i in range(self.N)]  # zoom position keys
+            zoom_init = [1]*self.N
+            zoom_init += [(0.5, 0.5)]*self.N
+            self._zoom_dict = {k: i for k, i in zip(zoom_keys, zoom_init)}
+        if not hasattr(self, '_zoom'):
+            self._zoom = tk.StringVar()
+            self._zoom.set("x{:=5.2f}".format(1))
+            self._zoom_center = tk.StringVar()
+            self._zoom_center.set("({:4}, {:4})".format('', ''))
+        return self._zoom_dict
+
+    @zoom_dict.setter
+    def zoom_dict(self, zoom):
+        """
+        Update zoom settings for images
+
+        Args:
+            zoom <dict> - dictionary of zoom settings
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_zoom_dict'):
+            zoom_keys = list(range(self.N))                        # zoom factor keys
+            zoom_keys += ['c{}'.format(i) for i in range(self.N)]  # zoom position keys
+            zoom_init = [1]*self.N
+            zoom_init += [(0.5, 0.5)]*self.N
+            self._zoom_dict = {k: i for k, i in zip(zoom_keys, zoom_init)}
+        if not hasattr(self, '_zoom'):
+            self._zoom = tk.StringVar()
+        if not hasattr(self, '_zoom_center'):
+            self._zoom_center = tk.StringVar()
+        for k in zoom:
+            if isinstance(k, int):
+                self._zoom.set("x{:=5.2f}".format(zoom[k]))
+            if isinstance(k, str):
+                pos = zoom[k]
+                self._zoom_center.set("({:.2f}, {:.2f})".format(pos[0], pos[1]))
+        self._zoom_dict.update(zoom)
+
+    def zoom_image(self, index, warp=True, return_img=True, verbose=False):
         """
         Change zoom specifications for image at specified index in buffer by cropping
 
@@ -608,19 +771,19 @@ class CanvasPrototype(tk.Canvas, object):
             index <int> - index of the image in the buffer
 
         Kwargs:
-            img_return <bool> - return crop-zoomed image; if False return cropping limits
+            return_img <bool> - return crop-zoomed image; if False return cropping limits
             verbose <bool> - verbose mode; print command line statements
 
         Return:
-            crop <PIL.Image object> - TODO
+            crop <PIL.Image object> - cropped PIL image from buffer
         """
         # get zoom image properties
         img = self._img_copy[index]
         z_key = "c{}".format(index)
-        center = (int(img.size[0]*self.zoom[z_key][0]),
-                  int(img.size[1]*self.zoom[z_key][1]))
-        window = (int(img.size[0]/self.zoom[index]),
-                  int(img.size[1]/self.zoom[index]))
+        center = (int(img.size[0]*self.zoom_dict[z_key][0]),
+                  int(img.size[1]*self.zoom_dict[z_key][1]))
+        window = (int(img.size[0]/self.zoom_dict[index]),
+                  int(img.size[1]/self.zoom_dict[index]))
         if window[0] < 1:
             window[0] = 1
         if window[1] < 1:
@@ -640,12 +803,12 @@ class CanvasPrototype(tk.Canvas, object):
                 z_s = img.size[0]
             if z_e > img.size[1]:
                 z_e = img.size[1]
-        if img_return:
+        if return_img:
             return img.crop((z_n, z_w, z_s, z_e))
         else:
             return (z_n, z_w, z_s, z_e)
 
-    def _track_on_move(self, event):
+    def _track_on_move(self, event, origin='SW'):
         """
         Tracking actions applied when mouse moves on canvas
 
@@ -655,14 +818,29 @@ class CanvasPrototype(tk.Canvas, object):
         Kwargs/Return:
             None
         """
-        # get position
-        idx = self.matrix_index((event.x, event.y))
+        # get index
+        self.cursor_index = self.matrix_index((event.x, event.y))
+        # get position relative to origin (matrix_position anchored to NW by default)
         pos = self.matrix_position((event.x, event.y))
-        # ...and value
-        value = self.env.lens_patch.data[idx][pos]
-        # act on info
-        # TODO
-        print("{:} : {:.2f}".format(pos, value))
+        if hasattr(self, '_img_copy') and self._img_copy[self.cursor_index]:
+            w, h = self._img_copy[self.cursor_index].size
+        else:
+            w, h = 0, 0
+        if origin == 'SW':
+            self.cursor_position = min(pos[0], w-1), min(h-1-pos[1], h-1)
+        if origin == 'NW':
+            self.cursor_position = min(pos[0], w-1), min(pos[1], h-1)
+        if origin == 'NE':
+            self.cursor_position = min(w-1-pos[0], w-1), min(pos[1], h-1)
+        if origin == 'SE':
+            self.cursor_position = min(w-1-pos[0], w-1), min(h-1-pos[1], h-1)
+        # get data
+        if self._img_data[self.cursor_index] is not None:
+            p = self.cursor_position
+            val = self._img_data[self.cursor_index][p[1], p[0]]
+        else:
+            val = 0
+        self.cursor_value = val
 
     def _track_on_click(self, event):
         """
@@ -674,14 +852,7 @@ class CanvasPrototype(tk.Canvas, object):
         Kwargs/Return:
             None
         """
-        # get position
-        idx = self.matrix_index((event.x, event.y))
-        pos = self.matrix_position((event.x, event.y))
-        # ...and value
-        value = self.env.lens_patch.data[idx][pos]
-        # act on info
-        # TODO
-        print("{:} : {:.2f}".format(pos, value))
+        self._track_on_move(self, event)
 
     def _resize_on_resize(self, event):
         """
@@ -697,7 +868,7 @@ class CanvasPrototype(tk.Canvas, object):
         self.matrix_size = (self.master.winfo_width(), self.master.winfo_height())
         # redraw canvas
         for i in range(self.N):
-            self.add_image(self._img_copy[i], i)
+            self.add_image(self._img_copy[i], i, image_data=self._img_data[i])
 
     def _zoom_on_scroll(self, event):
         """
@@ -714,22 +885,87 @@ class CanvasPrototype(tk.Canvas, object):
             dzoom = 1.05
         else:
             dzoom = 0.95
-        z_x, z_y = event.x, event.y
-        z_idx = self.matrix_index((z_x, z_y))
-        zoom = self.zoom[z_idx]*dzoom
+        if event.type == '38':  # event coordinates -> BUG?
+            offset = self.scroll_event_offset
+            z_x, z_y = event.x-offset[0], event.y-offset[1]
+        else:
+            z_x, z_y = event.x, event.y
+        self.cursor_index = self.matrix_index((z_x, z_y))
+        zoom = self.zoom_dict[self.cursor_index]*dzoom
         # back to original settings if the limit is reached
         if zoom < 1:
             zoom = 1
             z_cen = (0.5, 0.5)
         # save zoom settings
-        if self.zoom[z_idx] == 1:  # only change zoom center from original settings
-            z_anc = self.matrix_anchor(z_idx, loc='NW')
+        elif self.zoom_dict[self.cursor_index] == 1:  # change zoom center from original settings
+            z_anc = self.matrix_anchor(self.cursor_index, loc='NW')
             z_cen = (float(z_x-z_anc[0])/self.cell_size[0],
                      float(z_y-z_anc[1])/self.cell_size[1])
         else:
-            z_cen = self.zoom["c{}".format(z_idx)]
-        self.zoom[z_idx] = zoom
-        self.zoom["c{}".format(z_idx)] = z_cen
+            z_cen = self.zoom_dict["c{}".format(self.cursor_index)]
+        self.zoom_dict = {self.cursor_index: zoom, "c{}".format(self.cursor_index): z_cen}
         # apply zoom
         for i in range(self.N):
-            self.add_image(self._img_copy[i], i)
+            self.add_image(self._img_copy[i], i, image_data=self._img_data[i])
+
+    @property
+    def scroll_event_offset(self):
+        """
+        Helper due to BUG?
+
+        Args/Kwargs:
+            None
+
+        Return:
+            offset <int,int> - offset of the x and y coordinates of a scroll event
+        """
+        if not hasattr(self, '_scroll_event_offset'):
+            self._scroll_event_offset = tk.StringVar()
+            self._scroll_event_offset.set('0x0')
+        if hasattr(self, '_scroll_event_offset_widget'):
+            offset = self.scroll_event_offset_widget.winfo_width(), 0
+            self.scroll_event_offset = offset
+        return [int(c) for c in self._scroll_event_offset.get().split('x')]
+
+    @scroll_event_offset.setter
+    def scroll_event_offset(self, offset):
+        """
+        Setter for the scroll_event_offset
+
+        Args:
+            offset_func <int,int> - new offset in x and y
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_scroll_event_offset'):
+            self._scroll_event_offset = tk.StringVar()
+        self._scroll_event_offset.set("{}x{}".format(offset[0], offset[1]))
+
+    @property
+    def scroll_event_offset_widget(self):
+        """
+        Offsetting widget
+
+        Args/Kwargs:
+            None
+
+        Return:
+            widget <tk.Widget object> - some widget with .winfo_width()
+        """
+        if not hasattr(self, '_scroll_event_offset_widget'):
+            self._scroll_event_offset_widget = self.env.root
+        return self._scroll_event_offset_widget
+
+    @scroll_event_offset_widget.setter
+    def scroll_event_offset_widget(self, widget):
+        """
+        Setter for the Offsetting widget
+
+        Args/Kwargs:
+            None
+
+        Return:
+            widget <tk.Widget object> - some widget with .winfo_width()
+        """
+        self._scroll_event_offset_widget = widget
