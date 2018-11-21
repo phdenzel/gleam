@@ -61,10 +61,20 @@ class GLEAMDecoder(object):
             if jcls_name in globals():
                 jcls = globals()[jcls_name]
             else:
-                jmodule = __import__('.'.join(['gleam', jcls_name.lower()]), fromlist=[''])
-                jcls = getattr(jmodule, jcls_name)
+                if '.' in jcls_name:  # if subclass type
+                    jcls_name, jcls_subname = jcls_name.split('.')
+                    jmodule = __import__('.'.join(['gleam', jcls_name.lower()]), fromlist=[''])
+                    jcls = getattr(jmodule, jcls_name)
+                    jcls = getattr(jcls, jcls_subname)
+                else:
+                    jmodule = __import__('.'.join(['gleam', jcls_name.lower()]), fromlist=[''])
+                    jcls = getattr(jmodule, jcls_name)
             if 'from_jdict' in dir(jcls):
-                return jcls.from_jdict(jdict, **GLEAMDecoder.decoding_kwargs)
+                try:
+                    return jcls.from_jdict(jdict, **GLEAMDecoder.decoding_kwargs)
+                except TypeError:
+                    GLEAMDecoder.decoding_kwargs = {}
+                    return jcls.from_jdict(jdict, **GLEAMDecoder.decoding_kwargs)
             else:
                 return jcls(**jdict)
         return jdict
