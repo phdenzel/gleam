@@ -199,7 +199,7 @@ class SkyPatch(object):
             print(self.__v__)
         return self
 
-    def jsonify(self, savename=None, no_hash=False, verbose=False):
+    def jsonify(self, name=None, with_hash=True, verbose=False):
         """
         Export instance to JSON
 
@@ -207,7 +207,8 @@ class SkyPatch(object):
             None
 
         Kwargs:
-            save <bool> - save the JSON as file
+            name <str> - export a JSON with name as file name
+            with_hash <bool> - append md5 hash to filename, making it truly unique
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -216,24 +217,45 @@ class SkyPatch(object):
         """
         import json
         jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
-        if savename:
-            if len(savename.split('.')) > 1:
-                filename = savename.split('.')[:-1]
-            else:
-                filename = savename
-            if not no_hash:
-                if self.__class__.__name__.lower() not in savename:
-                    filename += ['{}#{}'.format(
-                        self.__class__.__name__.lower(), self.encode()[:-3])]
-            if 'json' not in filename[-1]:
-                filename += ['json']
-            filename = '.'.join(filename)
+        if name:
+            filename = self.json_filename(filename=name, with_hash=with_hash)
             with open(filename, 'w') as output:
                 json.dump(self, output, cls=GLEAMEncoder, sort_keys=True, indent=4)
             return filename
         if verbose:
             print(jsn)
         return jsn
+
+    def json_filename(self, filename=None, with_hash=True, verbose=False):
+        """
+        Generate a unique filename for json export
+
+        Args:
+            None
+
+        Kwargs:
+            filename <str> - filename to which type and md5 hash are appended
+            with_hash <bool> - append md5 hash to filename, making it truly unique
+
+        Return:
+            filename <str> - unique filename
+        """
+        finput = filename
+        if filename is None:
+            filename = ''
+            finput = ''
+        if len(filename.split('.')) > 1:
+            filename = filename.split('.')[:-1]
+        else:
+            filename = filename.split('.')
+        if with_hash:
+            if self.__class__.__name__.lower() not in finput:
+                filename += ['{}#{}'.format(
+                    self.__class__.__name__.lower(), self.encode()[:-3])]
+        if 'json' not in filename[-1]:
+            filename += ['json']
+        filename = '.'.join(filter(None, filename))
+        return filename
 
     def __str__(self):
         return "SkyPatch({})".format(", ".join(self.bands))
@@ -253,7 +275,7 @@ class SkyPatch(object):
             tests <list(str)> - a list of test variable strings
         """
         return ['N', 'filepaths', 'files', 'fs', 'bands', 'naxis1', 'naxis2', 'naxis_plus',
-                'structure']
+                'structure', 'roi']
 
     @property
     def __v__(self):
@@ -396,6 +418,19 @@ class SkyPatch(object):
             magnitudes <list(np.ndarray)> - list of converted magnitude maps
         """
         return [nu.magnitudes for nu in self.fs]
+
+    @property
+    def roi(self):
+        """
+        ROI selectors from the list of .fit file data
+
+        Args/Kwargs:
+            None
+
+        Return:
+            roi <list(ROISelector object)> - list of gleam.ROISelector instances
+        """
+        return [nu.roi for nu in self.fs]
 
     def image_patch(self, cmap='magma'):
         """

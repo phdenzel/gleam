@@ -11,6 +11,7 @@ Learn everything about .fits files with SkyF
 from gleam.skyf import SkyF
 import os
 import numpy as np
+from PIL import Image
 from gleam.test.utils import UnitTestPrototype
 
 
@@ -61,13 +62,17 @@ class TestSkyF(UnitTestPrototype):
         """ # from_json """
         filename = 'test.json'
         self.skyf.photzp = 25.67
-        filename = self.skyf.jsonify(savename='test.json')
+        self.skyf.roi.select['circle']((64, 64), 20)
+        self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64))
+        self.skyf.roi.select['rect']((32, 32), (64, 64))
+        filename = self.skyf.jsonify(name='test.json')
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
             jcopy = SkyF.from_json(j, **self.v)
             self.assertEqual(jcopy, self.skyf)
             self.assertFalse(jcopy is self.skyf)
             self.assertEqual(jcopy.photzp, self.skyf.photzp)
+            self.assertEqual(jcopy.roi, self.skyf.roi)
         try:
             os.remove(filename)
         except OSError:
@@ -76,6 +81,9 @@ class TestSkyF(UnitTestPrototype):
     def test_jsonify(self):
         """ # jsonify """
         print(">>> {}".format(self.skyf))
+        self.skyf.roi.select['circle']((64, 64), 20)
+        self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64))
+        self.skyf.roi.select['rect']((32, 32), (64, 64))
         jsnstr = self.skyf.jsonify(**self.v)
         self.assertIsInstance(jsnstr, str)
 
@@ -178,6 +186,24 @@ class TestSkyF(UnitTestPrototype):
             os.remove('test.pdf')
         except OSError:
             pass
+
+    def test_roi(self):
+        """ # roi """
+        print(">>> {}, {}".format('circle', [(64, 64), 20]))
+        self.skyf.roi.select['circle']((64, 64), 20, **self.v)
+        print(">>> {}, {}".format('polygon', [(64, 64), (32, 32), (32, 64)]))
+        self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64), **self.v)
+        print(">>> {}, {}".format('rect', [(32, 32), (64, 64)]))
+        self.skyf.roi.select['rect']((32, 32), (64, 64), **self.v)
+
+    def test_image_f(self):
+        """ # image_f """
+        self.skyf.roi.select['circle']((64, 64), 20, **self.v)
+        self.skyf.roi.select['polygon']((64, 32), (32, 32), (32, 64), **self.v)
+        self.skyf.roi.select['rect']((28, 28), (82, 82), **self.v)
+        self.skyf.roi.close_all()
+        img = self.skyf.image_f(draw_roi=True)
+        img.show()
 
 
 if __name__ == "__main__":

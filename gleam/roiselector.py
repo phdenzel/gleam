@@ -18,6 +18,9 @@ Usage example:
 ###############################################################################
 import copy
 import numpy as np
+from PIL import Image, ImageDraw
+
+from gleam.utils import colors as glmc
 
 __all__ = ['ROISelector']
 
@@ -27,10 +30,10 @@ class ROISelector(object):
     """
     Selects pixels from fits files
     """
-
+    params = ['shape', '_buffer']
     selection_modes = ['circle', 'rect', 'square', 'polygon', 'amorph', 'color']
 
-    def __init__(self, data, verbose=False):
+    def __init__(self, data=None, shape=None, _buffer=None, verbose=False):
         """
         Initialize from a pure data array
 
@@ -48,20 +51,23 @@ class ROISelector(object):
                 raise IndexError("ROISelector requires data shape of (N, M, D), "
                                  + "NxM grid with D dimensional points!")
             self.data = np.asarray(data)
-            # height, widht = a.shape, i.e. matrix coordinates i, j = y, x and not x, y!
-            self.yidcs, self.xidcs = np.indices(self.shape[0:2])
+        elif shape is not None:
+            self.data = np.zeros(shape)
         else:
-            self.data = data
-            self.idcs = data
+            self.data = np.zeros((1, 1))
+        # height, widht = a.shape, i.e. matrix coordinates i, j = y, x and not x, y!
+        self.yidcs, self.xidcs = np.indices(self.shape[0:2])
         self._buffer = {k: [] for k in ROISelector.selection_modes}
+        if _buffer is not None:
+            self._buffer = _buffer
         if verbose:
             print(self.__v__)
 
-    def __call__(self, key=None):
-        if key in self._buffer:
-            return self._buffer[key][-1]
+    def __call__(self, key=None, index=-1):
+        if key in self._masks:
+            return self._masks[key][index]
         elif hasattr(self, '_focus') and hasattr(self, '_selection'):
-            return self._buffer[self._selection][self._focus]
+            return self._masks[self._selection][self._focus]
         else:
             NotImplemented
 
@@ -70,6 +76,70 @@ class ROISelector(object):
             return self()
         else:
             raise IndexError('Not a valid key "{}"!'.format(key))
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.shape == other.shape and self._buffer == other._buffer
+        else:
+            NotImplemented
+
+    def __copy__(self):
+        args = (self.data,)
+        kwargs = {k: self.__getattribute__(k) for k in self.__class__.params}
+        return self.__class__(*args, **kwargs)
+
+    def __deepcopy__(self, memo):
+        args = (copy.deepcopy(self.data, memo),)
+        kwargs = {k: copy.deepcopy(self.__getattribute__(k), memo)
+                  for k in self.__class__.params}
+        return self.__class__(*args, **kwargs)
+
+    def copy(self, verbose=False):
+        cpy = copy.copy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    def deepcopy(self, verbose=False):
+        cpy = copy.deepcopy(self)
+        if verbose:
+            print(cpy.__v__)
+        return cpy
+
+    @property
+    def __json__(self):
+        """
+        Select attributes for json write (link to data is not considered)
+        """
+        jsn_dict = {}
+        for k in self.__class__.params:
+            if hasattr(self, k):
+                jsn_dict[k] = self.__getattribute__(k)
+        jsn_dict['__type__'] = self.__class__.__name__
+        return jsn_dict
+
+    @classmethod
+    def from_gleamobj(cls, gleam, **kwargs):
+        """
+        Initialize from a gleam instance
+        gleam.[skyf.SkyF, skypatch.SkyPatch, lensobject.LensObject, multilens.MultiLens]
+
+        Args:
+            gleam <gleam object> - contains data of a or more than one .fits files
+
+        Kwargs:
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+           <ROISelector object> - initializer with gleam object
+        """
+        return cls(gleam.data, **kwargs)
+
+    def __str__(self):
+        return "{}{}".format(self.__class__.__name__, self.shape)
+
+    def __repr__(self):
+        return self.__str__()
 
     @property
     def __v__(self):
@@ -97,23 +167,6 @@ class ROISelector(object):
         """
         return ['shape', '_buffer']
 
-    @classmethod
-    def from_gleamobj(cls, gleam, **kwargs):
-        """
-        Initialize from a gleam instance
-        (gleam.[skyf.SkyF, skypatch.SkyPatch, lensobject.LensObject, multilens.MultiLens])
-
-        Args:
-            gleam <gleam object> - contains data of a or more than one .fits files
-
-        Kwargs:
-            verbose <bool> - verbose mode; print command line statements
-
-        Return:
-           <ROISelector object> - initializer with gleam object
-        """
-        return cls(gleam.data, **kwargs)
-
     @property
     def shape(self):
         """
@@ -127,6 +180,23 @@ class ROISelector(object):
         """
         if self.data is not None:
             return self.data.shape
+
+    @property
+    def _masks(self):
+        """
+        The masks for roi selection derived from buffer
+
+        Args/Kwargs:
+            None
+
+        Return:
+            masks <dict(list(np.ndarray(bool)))> - selections derived from buffer
+        """
+        masks = {k: [] for k in ROISelector.selection_modes}
+        for k in self._buffer:
+            for s in self._buffer[k]:
+                masks[k].append(s.contains(self.xidcs, self.yidcs))
+        return masks
 
     @property
     def select(self):
@@ -165,8 +235,8 @@ class ROISelector(object):
         circle = ROISelector.Circle(center, radius)
         selection = circle.contains(self.xidcs, self.yidcs)
         self._selection = 'circle'
-        self._buffer[self._selection].append(selection)
         self._focus = -1
+        self._buffer[self._selection].append(circle)
         if verbose:
             print(self.__v__)
         return selection
@@ -186,9 +256,10 @@ class ROISelector(object):
             selection <np.ndarray(bool)> - boolean array with same shape as data
         """
         rect = ROISelector.Rectangle(anchor, dv=dv, corner=corner)
+        self._buffer[self._selection].append(rect)
+        rect = rect.close()
         selection = rect.contains(self.xidcs, self.yidcs)
         self._selection = 'rect'
-        self._buffer[self._selection].append(selection)
         self._focus = -1
         if verbose:
             print(self.__v__)
@@ -211,7 +282,7 @@ class ROISelector(object):
         square = ROISelector.Square(anchor, dv=dv, corner=corner)
         selection = square.contains(self.xidcs, self.yidcs)
         self._selection = 'square'
-        self._buffer[self._selection].append(selection)
+        self._buffer[self._selection].append(square)
         self._focus = -1
         if verbose:
             print(self.__v__)
@@ -232,10 +303,10 @@ class ROISelector(object):
         """
         verbose = kwargs.pop('verbose', False)
         polygon = ROISelector.Polygon(*polygon, **kwargs)
+        self._buffer[self._selection].append(polygon)
         polygon = polygon.close()
         selection = polygon.contains(self.xidcs, self.yidcs)
         self._selection = 'polygon'
-        self._buffer[self._selection].append(selection)
         self._focus = -1
         if verbose:
             print(self.__v__)
@@ -258,7 +329,7 @@ class ROISelector(object):
         amorph = ROISelector.Amorph(*points, **kwargs)
         selection = amorph.contains(self.xidcs, self.yidcs)
         self._selection = 'amorph'
-        self._buffer[self._selection].append(selection)
+        self._buffer[self._selection].append(amorph)
         self._focus = -1
         if verbose:
             print(self.__v__)
@@ -293,12 +364,54 @@ class ROISelector(object):
             'color': self.focus_color
         }
 
+    def close_all(self):
+        """
+        Close all geometries in the buffer
+
+        Args/Kwargs/Return:
+            None
+        """
+        for k in self._buffer:
+            for i, s in enumerate(self._buffer[k]):
+                if 'close' in dir(s):
+                    self._buffer[k][i] = s.close()
+
+    def clear_buffer(self):
+        """
+        Clear the buffer
+
+        Args/Kwargs/Return:
+            None
+        """
+        self._buffer = {k: [] for k in ROISelector.selection_modes}
+        self._selection = None
+        self._focus = 0
+
+    def draw_rois(self, img, current_only=False, verbose=False):
+        """
+        Draw all selection geometries in the buffer on the input image
+
+        Args:
+            img <PIL.Image object> - an image object
+
+        Kwargs:
+            current_only <bool> - only plot currently focussed selection
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            img <PIL.Image object> - the image object with selections drawn
+        """
+        if any([self._buffer[k] for k in self.selection_modes]):
+            for k in self._buffer:
+                for s in self._buffer[k]:
+                    img = s.draw2img(img)
+        return img
+
     def mpl_interface(self):
         """
         Plot the data and provide a GUI to select ROIs manually
         """
         import matplotlib as mpl
-        from matplotlib import pyplot as plt
         mpl.pyplot.plot(self.data)
 
 ###############################################################################
@@ -306,6 +419,7 @@ class ROISelector(object):
         """
         A data structure describing a polygon
         """
+        params = ['points']
 
         def __init__(self, *points, **kwargs):
             """
@@ -320,6 +434,7 @@ class ROISelector(object):
             Return:
                 <ROISelector.Polygon object> - standard initializer
             """
+            points = kwargs.pop('points', points)
             self.points = points
             if len(self.x) != len(self.y):  # by construction this should never happen
                 raise IndexError("Shape of x and y coordinates do not match!")
@@ -354,6 +469,18 @@ class ROISelector(object):
             if verbose:
                 print(cpy.__v__)
             return cpy
+
+        @property
+        def __json__(self):
+            """
+            Select attributes for json write
+            """
+            jsn_dict = {}
+            for k in self.__class__.params:
+                if hasattr(self, k):
+                    jsn_dict[k] = self.__getattribute__(k)
+            jsn_dict['__type__'] = 'ROISelector.' + self.__class__.__name__
+            return jsn_dict
 
         def encode(self):
             """
@@ -724,11 +851,46 @@ class ROISelector(object):
                 print(msg)
             return contained
 
+        def draw2img(self, img, point_size=1, fill=None, outline=None, verbose=False):
+            """
+            Draw the circle on the input image
+
+            Args:
+                img <PIL.Image object> - an image object
+
+            Kwargs:
+                point_size <int/float> - point size, i.e. radius in pixels
+                fill <str> - color to use for points
+                outline <str> - color to use for lines and borders
+                verbose <bool> - verbose mode; print command line statements
+
+            Return:
+                img <PIL.Image object> - the image object with the shape drawn
+            """
+            if fill is None:
+                if self.__class__.__name__ == 'Polygon':
+                    fill = glmc.green
+                elif self.__class__.__name__ == 'Rectangle':
+                    fill = glmc.golden
+                elif self.__class__.__name__ == 'Square':
+                    fill = glmc.blue
+            if outline is None:
+                outline = glmc.black
+            draw = ImageDraw.Draw(img)
+            draw.line([tuple(p) for p in self.points], fill=outline, width=1)
+            pts = [(p[0]-point_size, p[1]-point_size, p[0]+point_size, p[1]+point_size)
+                   for p in self.points]
+            for p in pts:
+                draw.ellipse(p, fill=fill, outline=outline)
+            del draw
+            return img
+
 ###############################################################################
     class Rectangle(Polygon):
         """
         A data structure describing a rectangle
         """
+        params = ['anchor', 'dv']
 
         def __init__(self, anchor, dv=None, corner=None, **kwargs):
             """
@@ -871,6 +1033,7 @@ class ROISelector(object):
         """
         A data structure describing a square
         """
+        params = ['anchor', 'dv']
 
         def __init__(self, anchor, dv=None, corner=None, **kwargs):
             """
@@ -904,6 +1067,7 @@ class ROISelector(object):
         """
         A data structure describing a circle
         """
+        params = ['center', 'radius']
 
         def __init__(self, center, radius=0, verbose=False):
             """
@@ -936,6 +1100,18 @@ class ROISelector(object):
                     and self.center[1] == other.center[1]
             else:
                 NotImplemented
+
+        @property
+        def __json__(self):
+            """
+            Select attributes for json write
+            """
+            jsn_dict = {}
+            for k in self.__class__.params:
+                if hasattr(self, k):
+                    jsn_dict[k] = self.__getattribute__(k)
+            jsn_dict['__type__'] = 'ROISelector.' + self.__class__.__name__
+            return jsn_dict
 
         def encode(self):
             """
@@ -1119,7 +1295,7 @@ class ROISelector(object):
                 yp <np.ndarray(float)> - y coordinate of the point(s)
 
             Kwargs:
-                 small_dist <float> - threshold distance to determine limit
+                small_dist <float> - threshold distance to determine limit
                 verbose <bool> - verbose mode; print command line statements
 
             Return:
@@ -1146,6 +1322,71 @@ class ROISelector(object):
                                for i in range(len(is_inside))])
                 print(msg)
             return contained
+
+        @staticmethod
+        def draw_radius(image, bounds, width=1, outline=None, antialias=1):
+            """
+            Improved ellipse drawing function, based on PIL.ImageDraw
+
+            Args:
+                image <PIL.Image object> - the image to draw on
+                bounds <list(tuple(float,float))> - four points to define the bounding box
+
+            Kwargs:
+                width <float> - width of the circle/ellipse outline
+                outline <str> - color to use for lines and borders
+                antialias <int> - degree of antialiasing (1 for no antialiasing, needs more memory)
+
+            Return:
+                image <PIL.Image objet> - the image object with the circle drawn
+            """
+            if outline is None:
+                outline = glmc.black
+            # single channel mask
+            mask = Image.new(size=[int(dim * antialias) for dim in image.size],
+                             mode='L', color='black')
+            draw = ImageDraw.Draw(mask)
+
+            # draw outer shape in color and inner shape transparent (black)
+            for offset, fill in [(width/-2.0, 'white'), (width/2.0, 'black')]:
+                x0, y0 = [(value + offset) * antialias for value in bounds[:2]]
+                x1, y1 = [(value - offset) * antialias for value in bounds[2:]]
+                draw.ellipse((x0, y0, x1, y1), fill=fill)
+            mask = mask.resize(image.size, Image.LANCZOS)
+            image.paste(outline, mask=mask)
+            del draw, mask
+            return image
+
+        def draw2img(self, img, point_size=1, arc_width=1, fill=None, outline=None, verbose=False):
+            """
+            Draw the circle on the input image
+
+            Args:
+                img <PIL.Image object> - an image object
+
+            Kwargs:
+                point_size <float> - point size, i.e. radius in pixels
+                arc_width <float> - width of the circle borders
+                fill <str> - color to use for points
+                outline <str> - color to use for lines and borders
+                verbose <bool> - verbose mode; print command line statements
+
+            Return:
+                img <PIL.Image object> - the image object with the circle drawn
+            """
+            if fill is None:
+                fill = glmc.red
+            if outline is None:
+                outline = glmc.black
+            x0, y0 = self.center[0]-self.radius, self.center[1]-self.radius
+            x1, y1 = self.center[0]+self.radius, self.center[1]+self.radius
+            cx0, cy0 = self.center[0]-point_size, self.center[1]-point_size
+            cx1, cy1 = self.center[0]+point_size, self.center[1]+point_size
+            img = self.draw_radius(img, (x0, y0, x1, y1), width=arc_width, outline=outline)
+            draw = ImageDraw.Draw(img)
+            draw.ellipse((cx0, cy0, cx1, cy1), fill=fill, outline=outline)
+            del draw
+            return img
 
 ###############################################################################
     class Amorph(np.ndarray):

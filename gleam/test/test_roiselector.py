@@ -61,7 +61,7 @@ class TestROISelector(UnitTestPrototype):
         print(">>> {}".format(None))
         roi = ROISelector(None, **self.v)
         self.assertIsInstance(roi, ROISelector)
-        self.assertIsNone(roi.data)
+        self.assertEqual(roi.data, np.zeros((1, 1)))
         # with data shape (128, 128)
         print(">>> {}".format(self.skyf.data))
         roi = ROISelector(self.skyf.data, **self.v)

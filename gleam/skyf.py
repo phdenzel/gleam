@@ -11,6 +11,7 @@ TODO:
 # Imports
 ###############################################################################
 from gleam.skycoords import SkyCoords
+from gleam.roiselector import ROISelector
 from gleam.megacam_fields import MEGACAM_FPROPS
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
 
@@ -32,13 +33,13 @@ class SkyF(object):
     """
     Framework for patches of the sky (.fits files) of a single band
     """
-    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp']
+    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp', 'roi']
     hdr_keys = ['FILTER', 'NAXIS1', 'NAXIS2', 'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
                 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'OBJECT', 'PHOTZP']
 
     def __init__(self, filepath, data=None, hdr=None,
                  px2arcsec=None, refpx=None, refval=None,
-                 photzp=None,
+                 photzp=None, roi=None,
                  verbose=False):
         """
         Initialize parsing of a fits file with a file name
@@ -76,6 +77,9 @@ class SkyF(object):
         self.mag_formula = None
         if self.hdr is not None:
             self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=self.photzp)
+        self.roi = ROISelector.from_gleamobj(self)
+        if roi is not None:
+            self.roi = roi
         # get rid of methods when inherited
         if self.__class__.__name__ != SkyF.__name__ and hasattr(SkyF, 'show_fullsky'):
             del SkyF.show_fullsky
@@ -174,6 +178,7 @@ class SkyF(object):
         """
         self = cls(None, **jdict)
         self.data = np.asarray(self.data)
+        self.roi.data = self.data
         if filepath:
             self.filepath = filepath
         if verbose:
@@ -189,7 +194,7 @@ class SkyF(object):
             print(self.__v__)
         return self
 
-    def jsonify(self, savename=None, no_hash=False, verbose=False):
+    def jsonify(self, name=None, with_hash=True, verbose=False):
         """
         Export instance to JSON
 
@@ -197,7 +202,8 @@ class SkyF(object):
             None
 
         Kwargs:
-            save <str> - save the JSON as file with name save
+            name <str> - export a JSON with savename as file name
+            with_hash <bool> - append md5 hash to filename, making it truly unique
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -206,24 +212,45 @@ class SkyF(object):
         """
         import json
         jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
-        if savename:
-            if len(savename.split('.')) > 1:
-                filename = savename.split('.')[:-1]
-            else:
-                filename = savename
-            if not no_hash:
-                if self.__class__.__name__.lower() not in savename:
-                    filename += ['{}#{}'.format(
-                        self.__class__.__name__.lower(), self.encode()[:-3])]
-            if 'json' not in filename[-1]:
-                filename += ['json']
-            filename = '.'.join(filename)
+        if name:
+            filename = self.json_filename(filename=name, with_hash=with_hash)
             with open(filename, 'w') as output:
                 json.dump(self, output, cls=GLEAMEncoder, sort_keys=True, indent=4)
             return filename
         if verbose:
             print(jsn)
         return jsn
+
+    def json_filename(self, filename=None, with_hash=True, verbose=False):
+        """
+        Generate a unique filename for json export
+
+        Args:
+            None
+
+        Kwargs:
+            filename <str> - filename to which type and md5 hash are appended
+            with_hash <bool> - append md5 hash to filename, making it truly unique
+
+        Return:
+            filename <str> - unique filename
+        """
+        finput = filename
+        if filename is None:
+            filename = ''
+            finput = ''
+        if len(filename.split('.')) > 1:
+            filename = filename.split('.')[:-1]
+        else:
+            filename = filename.split('.')
+        if with_hash:
+            if self.__class__.__name__.lower() not in finput:
+                filename += ['{}#{}'.format(
+                    self.__class__.__name__.lower(), self.encode()[:-3])]
+        if 'json' not in filename[-1]:
+            filename += ['json']
+        filename = '.'.join(filename)
+        return filename
 
     def __str__(self):
         return "SkyF({}@[{:.4f}, {:.4f}])".format(self.band, *self.center)
@@ -244,7 +271,7 @@ class SkyF(object):
         """
         return ['filename', 'filepath', 'band', 'naxis1', 'naxis2', 'naxis_plus',
                 'refval', 'refpx', 'center', 'px2deg', 'px2arcsec', 'megacam_range',
-                'field', 'photzp', 'mag_formula']
+                'field', 'photzp', 'mag_formula', 'roi']
 
     @property
     def __v__(self):
@@ -806,7 +833,7 @@ class SkyF(object):
             print(totmag)
         return totmag
 
-    def image_f(self, cmap='magma'):
+    def image_f(self, cmap='magma', draw_roi=False):
         """
         An 8-bit PIL.Image of the .fits data
 
@@ -824,9 +851,13 @@ class SkyF(object):
         if self.data is not None:
             lower = self.data.min()
             upper = self.data.max()
-            return Image.fromarray(
+            img = Image.fromarray(
                 np.uint8(255*cmap((self.data-lower)/(upper-lower)))
-            ).transpose(Image.FLIP_TOP_BOTTOM)
+            )
+            if draw_roi:
+                img = self.roi.draw_rois(img)
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            return img
         return self.data
 
     def cutout(self, window, center=None, verbose=False):

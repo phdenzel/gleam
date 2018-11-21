@@ -69,12 +69,11 @@ class MultiLens(SkyPatch):
                 centroid <int> - use COM positions around a pixel slice of size of centroid
                                  around peak center if centroid > 1
 
-
         Return:
             <MultiLens object> - standard initializer
         """
-        super(MultiLens, self).__init__(files, verbose=False,
-                                        **{k: kwargs[k] for k in SkyF.params if k in kwargs})
+        super(MultiLens, self).__init__(
+            files, verbose=False, **{k: kwargs[k] for k in SkyF.params if k in kwargs})
         # keyword defaults
         for k in LensObject.params:
             kwargs.setdefault(k, [None]*self.N)
@@ -151,10 +150,10 @@ class MultiLens(SkyPatch):
         Return:
             fs <super: LensObject object> - the from lens_objects derived instances
         """
-        if hasattr(self, 'lens_objects'):
-            return [super(LensObject, l) for l in self.lens_objects]
-        else:
+        if hasattr(self, '_fs'):
             return self._fs
+        elif hasattr(self, 'lens_objects'):
+            return self.lens_objects
 
     @fs.setter
     def fs(self, fs):

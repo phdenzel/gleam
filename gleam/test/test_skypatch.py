@@ -60,7 +60,7 @@ class TestSkyPatch(UnitTestPrototype):
         """ # from_json """
         filename = 'test.json'
         self.skyp.fs[5].photzp = 25.67
-        filename = self.skyp.jsonify(savename='test.json')
+        filename = self.skyp.jsonify(name='test.json')
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
             jcopy = SkyPatch.from_json(j, **self.v)
