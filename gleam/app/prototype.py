@@ -249,6 +249,41 @@ class FramePrototype(tk.Frame, object):
                           for t in self._tests+self.tests])
 
     @staticmethod
+    def enable(widget):
+        """
+        Enable all children of a widget
+
+        Args:
+            widget <tk.Widget> - a widget with components to enable
+
+        Kwargs/Return:
+            None
+        """
+        for child in widget.winfo_children():
+            child.configure(state=tk.NORMAL)
+
+    @staticmethod
+    def disable(widget, exceptions=[]):
+        """
+        Disable all children of a widget
+
+        Args:
+            widget <tk.Widget> - a widget with components to enable
+
+        Kwargs:
+            exceptions <list(str)> - a list of widget names
+
+        Return:
+            None
+        """
+        for child in widget.winfo_children():
+            if hasattr(child, 'name'):
+                if child.name not in exceptions:
+                    child.configure(state=tk.DISABLED)
+            else:
+                child.configure(state=tk.DISABLED)
+
+    @staticmethod
     def is_displaying():
         """
         Detects whether Tkinter mainloop is locking the script
@@ -709,6 +744,30 @@ class CanvasPrototype(tk.Canvas, object):
         if not hasattr(self, '_cursor_value'):
             self._cursor_value = tk.StringVar()
         self._cursor_value.set("{:.4f}".format(val))
+
+    def cursor_value_transf(self, transform):
+        """
+        Add trace to cursor_value and use transform function on it
+
+        Args/Kwargs:
+            None
+
+        Return:
+            transform <tk.StringVar objects> - transform of the cursor value
+        """
+        if not hasattr(self, '_cursor_value_transforms'):
+            self._cursor_value_transf = []
+            self._cursor_value_transforms = []
+        transformed = tk.StringVar()
+
+        def transform_trace(*args):
+            t = transform(self.cursor_value)
+            transformed.set("{:.4f}".format(t))
+
+        self._cursor_value_transf.append(transformed)
+        self._cursor_value_transforms.append(transform_trace)
+        self._cursor_value.trace("w", self._cursor_value_transforms[-1])
+        return self._cursor_value_transf[-1]
 
     @property
     def zoom_dict(self):
