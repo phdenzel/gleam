@@ -55,7 +55,8 @@ class Menubar(FramePrototype):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return ['menu', 'main_labels', 'labels', 'shortcuts', 'bindings', 'menu_settings']
+        return ['menu', 'main_labels', 'labels', 'shortcuts', 'bindings', 'submenus',
+                'menu_settings']
 
     @property
     def menu_settings(self):
@@ -69,7 +70,8 @@ class Menubar(FramePrototype):
             menu_settings <dict> - the entire settings
         """
         return {ml: {l: (self.bindings[ml][l], s)
-                     for l, s in zip(self.labels[ml], self.shortcuts[ml])}
+                     for l, s in zip(self.labels[ml], self.shortcuts[ml])
+                     if l in self.bindings[ml]}
                 for ml in self.main_labels}
 
     @property
@@ -219,6 +221,41 @@ class Menubar(FramePrototype):
                 self._bindings[ml][label] = binding
                 break
 
+    def mk_checklist(self, label, sub_labels=[], variable=None, command=None):
+        """
+        Make a submenu out of a previously added label with checkbuttons as items
+
+        Args:
+            label <str> - label string to make a menu out of
+
+        Kwargs:
+            sublabels <list(str)> - list of checkbutton sublabel strings
+
+        Return:
+            None
+        """
+        if not hasattr(self, '_submenus'):
+            self._submenus = {}
+        self._submenus[label] = {}
+        self._submenus[label]['list'] = sub_labels
+        self._submenus[label]['variable'] = variable
+        self._submenus[label]['command'] = command
+
+    @property
+    def submenus(self):
+        """
+        A dictionary of labels destined for submenus
+
+        Args/Kwargs:
+            None
+
+        Return:
+            submenus <dict(list)> - a dictionary with labels as keys
+        """
+        if not hasattr(self, '_submenus'):
+            self._submenus = {}
+        return self._submenus
+
     def fmtl(self, label, shortcut, spacing=3):
         """
         Formatted labels from label and shortcut
@@ -255,7 +292,16 @@ class Menubar(FramePrototype):
             self.__setattr__(ml, tk.Menu(self.menu, tearoff=0))
             m = self.__getattribute__(ml)
             for l, s in zip(self.labels[ml], self.shortcuts[ml]):
-                m.add_command(label=self.fmtl(l, s), command=self.bindings[ml][l])
+                if l in self.submenus:
+                    self.__setattr__(l, tk.Menu(m, tearoff=0))
+                    sm = self.__getattribute__(l)
+                    m.add_cascade(label=l.capitalize(), menu=sm)
+                    for c in self.submenus[l]['list']:
+                        sm.add_checkbutton(label=c, onvalue=c,
+                                           variable=self.submenus[l]['variable'],
+                                           command=self.submenus[l]['command'])
+                else:
+                    m.add_command(label=self.fmtl(l, s), command=self.bindings[ml][l])
             self.menu.add_cascade(label=ml.capitalize(), menu=m)
         self.env.root.configure(menu=self.menu)
         return self.menu
