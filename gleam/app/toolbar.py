@@ -165,7 +165,7 @@ class Toolbar(FramePrototype):
                 if isinstance(l, tk.StringVar):
                     kw.update({'textvariable': l})
                 if isinstance(l, str):
-                    kw.update({'text': l.capitalize()})
+                    kw.update({'text': l})
                 tool_line.append(tk.Label(self, **kw))
             tools.append(tool_line)
         # order tools
@@ -366,14 +366,17 @@ class Toolbar(FramePrototype):
         self.ifocus = -1
         for s in self.sections:
             self.ifocus += 1
-            slabel = tk.Label(self, text=s.capitalize())
+            slabel = tk.Label(self, name=s, text=s.capitalize())
             self._tools['sections'].append(slabel)
             slabel.grid(row=self.ifocus, column=0, sticky=tk.N+tk.W)
             self.ifocus += 1
             for i, j in self.sij(s):
                 t = self.tools[s][(i, j)]
+                if isinstance(t, tk.Label):
+                    t.name = t.cget('text')
                 if isinstance(t, tk.Button):
                     idx = self.buttons[s].index(t)
+                    t.name = self.bindings[s][idx].__name__
                     t.configure(command=self.bindings[s][idx])
                 i = i + self.ifocus
                 if j == 0:
