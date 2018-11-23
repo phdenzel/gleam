@@ -58,6 +58,8 @@ class ROISelector(object):
         # height, widht = a.shape, i.e. matrix coordinates i, j = y, x and not x, y!
         self.yidcs, self.xidcs = np.indices(self.shape[0:2])
         self._buffer = {k: [] for k in ROISelector.selection_modes}
+        self._selection = self.selection_modes[0]
+        self._focus = -1
         if _buffer is not None:
             self._buffer = _buffer
         if verbose:
@@ -182,9 +184,17 @@ class ROISelector(object):
             return self.data.shape
 
     @property
+    def buffer(self):
+        """
+        The most current ROI object from the buffer
+        """
+        if self._buffer[self._selection]:
+            return self._buffer[self._selection][self._focus]
+
+    @property
     def _masks(self):
         """
-        The masks for roi selection derived from buffer
+        The masks for ROI selection derived from buffer
 
         Args/Kwargs:
             None
@@ -233,10 +243,10 @@ class ROISelector(object):
             selection <np.ndarray(bool)> - boolean array with same shape as data
         """
         circle = ROISelector.Circle(center, radius)
-        selection = circle.contains(self.xidcs, self.yidcs)
         self._selection = 'circle'
         self._focus = -1
         self._buffer[self._selection].append(circle)
+        selection = circle.contains(self.xidcs, self.yidcs)
         if verbose:
             print(self.__v__)
         return selection
@@ -256,11 +266,11 @@ class ROISelector(object):
             selection <np.ndarray(bool)> - boolean array with same shape as data
         """
         rect = ROISelector.Rectangle(anchor, dv=dv, corner=corner)
+        self._selection = 'rect'
+        self._focus = -1
         self._buffer[self._selection].append(rect)
         rect = rect.close()
         selection = rect.contains(self.xidcs, self.yidcs)
-        self._selection = 'rect'
-        self._focus = -1
         if verbose:
             print(self.__v__)
         return selection
@@ -280,10 +290,10 @@ class ROISelector(object):
             selection <np.ndarray(bool)> - boolean array with same shape as data
         """
         square = ROISelector.Square(anchor, dv=dv, corner=corner)
-        selection = square.contains(self.xidcs, self.yidcs)
         self._selection = 'square'
-        self._buffer[self._selection].append(square)
         self._focus = -1
+        self._buffer[self._selection].append(square)
+        selection = square.contains(self.xidcs, self.yidcs)
         if verbose:
             print(self.__v__)
         return selection
@@ -303,11 +313,11 @@ class ROISelector(object):
         """
         verbose = kwargs.pop('verbose', False)
         polygon = ROISelector.Polygon(*polygon, **kwargs)
+        self._selection = 'polygon'
+        self._focus = -1
         self._buffer[self._selection].append(polygon)
         polygon = polygon.close()
         selection = polygon.contains(self.xidcs, self.yidcs)
-        self._selection = 'polygon'
-        self._focus = -1
         if verbose:
             print(self.__v__)
         return selection
@@ -327,10 +337,10 @@ class ROISelector(object):
         """
         verbose = kwargs.pop('verbose', False)
         amorph = ROISelector.Amorph(*points, **kwargs)
-        selection = amorph.contains(self.xidcs, self.yidcs)
         self._selection = 'amorph'
-        self._buffer[self._selection].append(amorph)
         self._focus = -1
+        self._buffer[self._selection].append(amorph)
+        selection = amorph.contains(self.xidcs, self.yidcs)
         if verbose:
             print(self.__v__)
         return selection
@@ -366,7 +376,7 @@ class ROISelector(object):
 
     def close_all(self):
         """
-        Close all geometries in the buffer
+        Close all ROI objects in the buffer
 
         Args/Kwargs/Return:
             None
@@ -389,7 +399,7 @@ class ROISelector(object):
 
     def draw_rois(self, img, current_only=False, verbose=False):
         """
-        Draw all selection geometries in the buffer on the input image
+        Draw all selection ROI objects in the buffer on the input image
 
         Args:
             img <PIL.Image object> - an image object
@@ -409,7 +419,7 @@ class ROISelector(object):
 
     def mpl_interface(self):
         """
-        Plot the data and provide a GUI to select ROIs manually
+        Plot the data and provide a GUI to select ROI objects manually
         """
         import matplotlib as mpl
         mpl.pyplot.plot(self.data)
