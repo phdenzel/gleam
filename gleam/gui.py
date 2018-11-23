@@ -10,8 +10,8 @@ An app for some gleamy interactive activity
 import sys
 import os
 import traceback
-import matplotlib
-matplotlib.use('TkAgg')  # needs to come before any other matplotlib imports
+import matplotlib as mpl
+mpl.use('TkAgg')  # needs to come before any other matplotlib imports
 if sys.version_info.major < 3:
     import Tkinter as tk
     # import ttk
@@ -68,29 +68,37 @@ class App(FramePrototype):
         self.statusbar = Statusbar(self)
         self.window = Window(self)
 
-        # MENUBAR
+        # state attributes
+        self.selection_mode = None
+        self.colormap = 'gnuplot2'
+
+        # menubar
         self.menubar.main_labels = ['file', 'edit', 'view', 'help']
         self.menubar.labels = [['open...', 'save as...', 'exit'],
                                ['colormap'],
                                ['navbar', 'toolbar', 'statusbar'],
                                ['help', 'about']]
+        self.menubar.mk_checklist('colormap',
+                                  sub_labels=list(mpl.cm.datad.keys()),
+                                  variable=self._colormap, command=self._on_colormap)
         self.menubar.shortcuts = [[u'\u2303F', u'\u2303S', u'\u2303Q'],
                                   [''],
                                   [u'\u2303\u2325N', u'\u2303\u2325T', u'\u2303\u2325S'],
                                   [u'\u2303H', '']]
         self.menubar.bindings = [[self._on_open, self._on_save_as, self._on_close],
-                                 [self.menubar.dummy_func],
+                                 [],
                                  [self.menubar.dummy_func, self.menubar.dummy_func, self.menubar.dummy_func],
-                                 [self.menubar.dummy_func, self.menubar.dummy_func], ]
+                                 [self._on_help, self._on_about], ]
         self.menubar.rebuild()
 
-        # NAVBAR
+        # navbar
 
-        # TOOLBAR
+        # toolbar
         self.toolbar.sections = ['data', 'selection', ' ']
         self.toolbar.add_labels('data', [['XY', self.window.canvas._cursor_position],
-                                         ['adu', self.window.canvas._cursor_value],
-                                         ['mag', ' '], ])
+                                         ['ADU', self.window.canvas._cursor_value],
+                                         ['Mag', self.window.canvas.cursor_value_transf(
+                                             self.lens_patch[0].mag_formula)], ])
         self.toolbar.add_buttons(
             'selection', [['/assets/circle.png'],
                           ['/assets/rect.png'],
@@ -98,14 +106,14 @@ class App(FramePrototype):
         self.toolbar.add_buttons(
             ' ', [['save as json', 'save as png'], ])
         self.toolbar.bindings = [[],
-                                 [self.toolbar.dummy_func, self.toolbar.dummy_func, self.toolbar.dummy_func],
-                                 [self.toolbar.dummy_func, self.toolbar.dummy_func], ]
+                                 [self._on_circle, self._on_rect, self._on_polygon],
+                                 [self._on_save_as_json, self.toolbar.dummy_func], ]
         self.toolbar.rebuild()
 
-        # STATUSBAR
+        # statusbar
         self.statusbar.log('In development...')
 
-        # WINDOW
+        # window and canvas
         if cell_size is None:
             # default configuration
             cols = 3
@@ -132,13 +140,9 @@ class App(FramePrototype):
 
         # test projecting entire image patch
         if not display_off:
-            self.project(self.lens_patch.image_patch(cmap='gnuplot2'),
+            self.project(self.lens_patch.image_patch(cmap=self.colormap),
                          image_data=[f.data for f in self.lens_patch.lens_objects])
 
-        # attributes
-        
-
-        
         # test reducing image number and column number
         # self.window.canvas.N = 1
         # self.window.canvas.ncols = 1
@@ -190,7 +194,7 @@ class App(FramePrototype):
             images <list(PIL.Image object)> - images to be added to the buffer
 
         Kwargs:
-            size <int,int> - change the images' size while projecting
+            image_data <list(np.ndarray)> - the raw data represented in the images
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -222,28 +226,75 @@ class App(FramePrototype):
             print(self.__v__)
         self.mainloop()
 
+# Properties ##################################################################
+    @property
+    def selection_mode(self):
+        """
+        Variable to indicate whether selection mode is on or off
+
+        Args/Kwargs:
+            None
+
+        Return:
+            mode <str> - mode string ('circle'/'rect'/'polygon' or None)
+        """
+        if not hasattr(self, '_selection_mode'):
+            self._selection_mode = None
+        return self._selection_mode
+
+    @selection_mode.setter
+    def selection_mode(self, mode):
+        """
+        Set the selection mode. While selection mode is off, all widgets are enabled.
+
+        Args:
+            mode <str> - mode string ('circle'/'rect'/'polygon' or None)
+
+        Kwargs/Return:
+            None
+        """
+        self._selection_mode = mode
+        if self._selection_mode is None:
+            self.enable(self.toolbar)
+        else:
+            button_name = "_on_{}".format(self._selection_mode)
+            self.disable(self.toolbar, exceptions=[button_name])
+
+    @property
+    def colormap(self):
+        """
+        The colormap used for data representation
+
+        Args/Kwargs:
+            None
+
+        Return:
+            cmap <str> - matplotlib.cm strings
+        """
+        if not hasattr(self, '_colormap'):
+            self._colormap = tk.StringVar()
+            self._colormap.set("gnuplot2")
+        return self._colormap.get()
+
+    @colormap.setter
+    def colormap(self, cmap):
+        """
+        Setter for the colormap used for data representation
+
+        Args:
+            cmap <str> - new matplotlib.cm string
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_colormap'):
+            self._colormap = tk.StringVar()
+        self._colormap.set(cmap)
+
 # Bindings ####################################################################
-    def _on_circle_select(self, event=None):
-        """
-        Execute when 'circle selection' event is triggdered
-        """
-        pass
-
-    def _on_rect_select(self, event=None):
-        """
-        Execute when 'rectangle selection' event is triggdered
-        """
-        pass
-
-    def _on_polygon_select(self, event=None):
-        """
-        Execute when 'polygon selection' event is triggdered
-        """
-        pass
-
     def _on_open(self, event=None):
         """
-        Execute when 'open as' event is triggered
+        Execute when 'open' event is triggered
         """
         fin = filedialog.askopenfilenames(
             parent=self.master, defaultextension=".fits", multiple=True)
@@ -251,17 +302,14 @@ class App(FramePrototype):
             print(fin)
             # self.lenspatch = MultiLens(fin, auto=False)
 
-    def _on_save_as(self, event=None, ask=True):
+    def _on_save_as(self, event=None):
         """
         Execute when 'save as' event is triggered
         """
-        if ask:
-            fout = filedialog.asksaveasfilename(
-                parent=self.master, defaultextension=".json",
-                initialfile=self.lens_patch.json_filename())
-            if not fout:
-                return
-        else:
+        fout = filedialog.asksaveasfilename(
+            parent=self.master, defaultextension=".json",
+            initialfile=self.lens_patch.json_filename())
+        if not fout:
             fout = self.lens_patch.json_filename()
         if fout.endswith('json'):
             self.lens_patch.jsonify(name=fout, with_hash=False)
@@ -272,6 +320,67 @@ class App(FramePrototype):
         """
         self.master.quit()
         sys.exit(1)
+
+    def _on_colormap(self):
+        """
+        Change the colormap and reproject
+        """
+        # print(self.colormap)
+        self.project(self.lens_patch.image_patch(cmap=self.colormap),
+                     image_data=[f.data for f in self.lens_patch.lens_objects])
+
+    def _on_help(self, event=None):
+        """
+        Execute when 'help' event is triggered
+        """
+        import webbrowser
+        helpurl = "https://github.com/phdenzel/gleam/blob/master/README.org"
+        webbrowser.open(helpurl, new=0)
+
+    def _on_about(self, event=None):
+        """
+        Execute when 'about' event is triggered
+        """
+        pass
+
+    def _on_circle(self, event=None):
+        """
+        Execute when 'circle selection' event is triggdered
+        """
+        # if 'circle selection' event already has been triggered
+        if self.selection_mode == 'circle':
+            self.selection_mode = None
+        else:
+            self.selection_mode = 'circle'
+
+    def _on_rect(self, event=None):
+        """
+        Execute when 'rectangle selection' event is triggdered
+        """
+        # if 'rect selection' event already has been triggered
+        if self.selection_mode == 'rect':
+            self.selection_mode = None
+        else:
+            self.selection_mode = 'rect'
+
+    def _on_polygon(self, event=None):
+        """
+        Execute when 'polygon selection' event is triggdered
+        """
+        # if 'polygon selection' event already has been triggered
+        if self.selection_mode == 'polygon':
+            self.selection_mode = None
+        else:
+            self.selection_mode = 'polygon'
+        # bind key press to create polygon, every following click adds to it
+
+    def _on_save_as_json(self, event=None):
+        """
+        Execute when 'save as json' event is triggered
+        """
+        fout = self.lens_patch.json_filename()
+        if fout.endswith('json'):
+            self.lens_patch.jsonify(name=fout, with_hash=False)
 
     def term_shell(self, verbose=False):
         """
@@ -295,8 +404,14 @@ class App(FramePrototype):
                 print("Quitting the app")
             self.master.quit()
         else:
+            print("\n APP")
             print(self.__v__)
-            print(self.statusbar.log_history)
+            print("\n MENUBAR")
+            print(self.menubar.__v__)
+            print("\n TOOLBAR")
+            print(self.toolbar.__v__)
+            print("\n STATUSBAR")
+            print(self.statusbar.__v__)
             self.after(100, self.term_shell)
 
 
