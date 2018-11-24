@@ -95,7 +95,7 @@ class TestMultiLens(UnitTestPrototype):
         """ # add_to_patch"""
         print(">>> {}".format(self.ml.filepaths[0]))
         before = self.ml.copy()
-        self.ml.add_to_patch(self.ml.filepaths[0], **self.v)
+        self.ml.add_to_patch(self.ml.filepaths[0])
         after = self.ml
         self.assertEqual(before.N+1, after.N)
         self.assertEqual(before.filepaths, after.filepaths[:-1])

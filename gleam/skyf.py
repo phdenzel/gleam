@@ -842,6 +842,7 @@ class SkyF(object):
 
         Kwargs:
             cmap <str> - a cmap string from matplotlib.colors.Colormap
+            draw_roi <bool> - draw the ROI objects on top of data
 
         Return:
             f_image <PIL.Image object> - a colorized image object

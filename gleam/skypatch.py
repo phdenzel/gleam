@@ -49,7 +49,7 @@ class SkyPatch(object):
             <SkyPatch object> - standard initializer
         """
         # collect all files
-        if isinstance(files, list):  # input as list of files
+        if isinstance(files, (tuple, list)):  # input as list of files
             self.filepaths = self.find_files(files)
         elif isinstance(files, str) and any([files.endswith(ext) for ext in (
                 '.fits', '.fit', '.fts')]):  # single file input
@@ -432,7 +432,7 @@ class SkyPatch(object):
         """
         return [nu.roi for nu in self.fs]
 
-    def image_patch(self, cmap='magma'):
+    def image_patch(self, **kwargs):
         """
         An 8-bit PIL.Image of the .fits data
 
@@ -441,11 +441,12 @@ class SkyPatch(object):
 
         Kwargs:
             cmap <str> - a cmap string from matplotlib.colors.Colormap
+            draw_roi <bool> - draw the ROI objects on top of data
 
         Return:
             f_images <list(PIL.Image object)> - a colorized image object
         """
-        return [f.image_f(cmap=cmap) for f in self.fs]
+        return [f.image_f(**kwargs) for f in self.fs]
 
     @property
     def composite(self):

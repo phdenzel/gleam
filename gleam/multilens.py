@@ -152,13 +152,13 @@ class MultiLens(SkyPatch):
         """
         if hasattr(self, '_fs'):
             return self._fs
-        elif hasattr(self, 'lens_objects'):
+        if hasattr(self, 'lens_objects'):
             return self.lens_objects
 
     @fs.setter
     def fs(self, fs):
         """
-        Setter for overriden fs
+        Setter for overridden fs
 
         Args:
             fs <list(SkyF objects)> - dummy SkyF objects to be overridden by lens_objects
@@ -337,6 +337,22 @@ class MultiLens(SkyPatch):
         self.lens_objects = [self.lens_objects[i] for i in new_sequence]
         if verbose:
             print(self.__v__)
+
+    def image_patch(self, **kwargs):
+        """
+        An 8-bit PIL.Image of the .fits data
+
+        Args:
+            None
+
+        Kwargs:
+            cmap <str> - a cmap string from matplotlib.colors.Colormap
+            draw_roi <bool> - draw the ROI objects on top of data
+
+        Return:
+            f_images <list(PIL.Image object)> - a colorized image object
+        """
+        return [l.image_f(**kwargs) for l in self.lens_objects]
 
     def plot_composite(self, fig, ax=None, method='standard', lens=False, source_images=False,
                        colorbar=False, scalebar=True, verbose=False, **kwargs):
