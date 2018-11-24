@@ -187,9 +187,25 @@ class ROISelector(object):
     def buffer(self):
         """
         The most current ROI object from the buffer
+
+        Args/Kwargs:
+            None
+
+        Return:
+            buffer <ROISelector.[] object> - current ROI object
         """
         if self._buffer[self._selection]:
             return self._buffer[self._selection][self._focus]
+
+    @buffer.setter
+    def buffer(self, roi):
+        """
+        Setter for the most current ROI object
+
+        Args:
+            roi <ROISelector.[] object> - current ROI object for buffer
+        """
+        self._buffer[self._selection].append(roi)
 
     @property
     def _masks(self):
@@ -695,9 +711,11 @@ class ROISelector(object):
             Return:
                 None
             """
-            if self.is_ccw < 0:
-                self.x = self.x[::-1]
-                self.y = self.y[::-1]
+            if len(self.points) < 2:
+                return
+            if self.is_ccw < 0:  # clockwise
+                self.x = np.concatenate((np.array([self.x[0]]), self.x[:0:-1]))
+                self.y = np.concatenate((np.array([self.y[0]]), self.y[:0:-1]))
             if verbose:
                 print(self.__v__)
 
@@ -986,7 +1004,7 @@ class ROISelector(object):
         @property
         def dv(self):
             """
-            Diagonal spanning vecotr of the rectangle
+            Diagonal spanning vector of the rectangle
 
             Args/Kwargs:
                 None
@@ -1014,6 +1032,38 @@ class ROISelector(object):
             A = self.anchor
             B = (A[0]+dv[0], A[1])
             C = (B[0], A[1]+dv[1])
+            D = (A[0], C[1])
+            self.points = [A, B, C, D]
+            self._2ccw()
+
+        @property
+        def dcorner(self):
+            """
+            Diagonal corner opposite of anchor of the rectangle
+
+            Args/Kwargs:
+                None
+
+            Return:
+                corner <float,float> - corner position opposite of the anchor
+            """
+            return self.points[2]
+
+        @dcorner.setter
+        def dcorner(self, corner):
+            """
+            Move the corner opposite to the anchor to the given position
+
+            Args:
+                corner <float,float> - new corner position
+
+            Kwargs/Return:
+                None
+            """
+            dv = [c-a for a, c in zip(self.anchor, corner)]
+            A = self.anchor
+            B = (A[0]+dv[0], A[1])
+            C = corner
             D = (A[0], C[1])
             self.points = [A, B, C, D]
             self._2ccw()
@@ -1097,8 +1147,8 @@ class ROISelector(object):
             if isinstance(radius, (int, float)):
                 self.radius = abs(radius)
             elif hasattr(radius, '__len__') and len(radius) == 2:
-                dx = radius[0]-center[0]
-                dy = radius[1]-center[1]
+                dx = radius[0]-self.center[0]
+                dy = radius[1]-self.center[1]
                 self.radius = np.sqrt(dx*dx+dy*dy)
             if verbose:
                 print(self.__v__)
@@ -1259,6 +1309,14 @@ class ROISelector(object):
                 None
             """
             self.radius = np.sqrt(a)/np.pi
+
+        def mv_r(self, position):
+            """
+            Move the radius from the center to the input position
+            """
+            dx = position[0]-self.center[0]
+            dy = position[1]-self.center[1]
+            self.radius = np.sqrt(dx*dx+dy*dy)
 
         def mindst(self, xp, yp, small_dist=1e-12, verbose=False):
             """
