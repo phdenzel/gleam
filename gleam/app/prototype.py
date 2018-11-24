@@ -343,6 +343,8 @@ class CanvasPrototype(tk.Canvas, object):
 
         self.cursor_index = 0
         self.cursor_position = 0, 0
+        self.cursor_click = 0, 0
+        self.cursor_release = 0, 0
         self.cursor_value = 0
 
         # configure canvas to be resizeable
@@ -351,11 +353,14 @@ class CanvasPrototype(tk.Canvas, object):
 
         # binding actions on the canvas
         self.bind("<Configure>", self._resize_on_resize)
+        self.bind("<Button-1>", self._track_on_click, add="+")
+        self.bind("<B1-Motion>", self._track_on_move, add="+")
+        self.bind("<ButtonRelease-1>", self._track_on_release, add="+")
+        self.bind("<Motion>", self._track_on_move, add="+")
         self.bind("<Button-4>", self._zoom_on_scroll, add="+")
         self.bind("<Button-5>", self._zoom_on_scroll, add="+")
         # careful! binding MouseWheel causes UnicodeDecodeError on MacOS Tcl/Tk < 8.6
         self.bind("<MouseWheel>", self._zoom_on_scroll, add="+")
-        self.bind("<Motion>", self._track_on_move, add="+")
 
         self._tests = ['env']
         if verbose:
@@ -383,7 +388,8 @@ class CanvasPrototype(tk.Canvas, object):
             tests <list(str)> - a list of test variable strings
         """
         return ['N', 'cell_size', 'ncols',
-                'cursor_index', 'cursor_position', 'cursor_value', 'zoom',
+                'cursor_index', 'cursor_position', 'cursor_click', 'cursor_value',
+                'zoom_dict',
                 'img_buffer', '_img_copy']
 
     @property
@@ -684,15 +690,46 @@ class CanvasPrototype(tk.Canvas, object):
         self._cursor_index.set("{:=2d}".format(idx))
 
     @property
-    def cursor_position(self):
+    def cursor_click(self):
         """
-        Position of the cursor within a cell
+        Position of the cursor within a cell when canvas is clicked
 
         Args/Kwargs:
             None
 
         Return:
-            pos <float,float> - the position within the cell
+            pos <int,int> - the position within the cell
+        """
+        if not hasattr(self, '_cursor_click'):
+            self._cursor_click = tk.StringVar()
+            self._cursor_click.set("({:4}, {:4})".format('', ''))
+        return [int(s) for s in re.findall(r'\d+', self._cursor_click.get())]
+
+    @cursor_click.setter
+    def cursor_click(self, pos):
+        """
+        Setter of the cursor click position
+
+        Args:
+            pos <int,int> - position on click
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_cursor_click'):
+            self._cursor_click = tk.StringVar()
+        self._cursor_click.set("({:=4d}, {:=4d})".format(pos[0], pos[1]))
+
+    @property
+    def cursor_position(self):
+        """
+        Position of the cursor within a cell when cursor is moved on the canvas
+
+        Args/Kwargs:
+            None
+
+        Return:
+            pos <int,int> - the position within the cell
         """
         if not hasattr(self, '_cursor_position'):
             self._cursor_position = tk.StringVar()
@@ -705,7 +742,7 @@ class CanvasPrototype(tk.Canvas, object):
         Setter of the cursor position
 
         Args:
-            pos <int> - the new cursor position
+            pos <int,int> - the new cursor position
 
         Kwargs/Return:
             None
@@ -713,6 +750,37 @@ class CanvasPrototype(tk.Canvas, object):
         if not hasattr(self, '_cursor_position'):
             self._cursor_position = tk.StringVar()
         self._cursor_position.set("({:=4d}, {:=4d})".format(pos[0], pos[1]))
+
+    @property
+    def cursor_release(self):
+        """
+        Position of the cursor within a cell when canvas is released
+
+        Args/Kwargs:
+            None
+
+        Return:
+            pos <int,int> - the position within a cell
+        """
+        if not hasattr(self, '_cursor_release'):
+            self._cursor_release = tk.StringVar()
+            self._cursor_position.set("({:4}, {:4})".format('', ''))
+        return [int(s) for s in re.findall(r'\d+', self._cursor_release.get())]
+
+    @cursor_release.setter
+    def cursor_release(self, pos):
+        """
+        Setter of the cursor release position
+
+        Args:
+            pos <int,int> - the new cursor release position
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_cursor_release'):
+            self._cursor_release = tk.StringVar()
+        self._cursor_release.set("({:=4d}, {:=4d})".format(pos[0], pos[1]))
 
     @property
     def cursor_value(self):
@@ -867,12 +935,13 @@ class CanvasPrototype(tk.Canvas, object):
         else:
             return (z_n, z_w, z_s, z_e)
 
-    def _track_on_move(self, event, origin='SW'):
+    def _track_on_click(self, event, origin='SW'):
         """
-        Tracking actions applied when mouse moves on canvas
+        Tracking actions applied when mouse clicks on canvas
 
         Args:
             event <str> - event to be bound to this function; format <[modifier-]type[-detail]>
+            origin <str> - origin of the data relative to the image
 
         Kwargs/Return:
             None
@@ -883,16 +952,53 @@ class CanvasPrototype(tk.Canvas, object):
         pos = self.matrix_position((event.x, event.y))
         if hasattr(self, '_img_copy') and self._img_copy[self.cursor_index]:
             w, h = self._img_copy[self.cursor_index].size
+            w, h = w-1, h-1
         else:
             w, h = 0, 0
         if origin == 'SW':
-            self.cursor_position = min(pos[0], w-1), min(h-1-pos[1], h-1)
+            self.cursor_click = pos[0] % w, (h-pos[1]) % h
         if origin == 'NW':
-            self.cursor_position = min(pos[0], w-1), min(pos[1], h-1)
+            self.cursor_click = pos[0] % w, pos[1] % h
         if origin == 'NE':
-            self.cursor_position = min(w-1-pos[0], w-1), min(pos[1], h-1)
+            self.cursor_click = (w-pos[0]) % w, pos[1] % h
         if origin == 'SE':
-            self.cursor_position = min(w-1-pos[0], w-1), min(h-1-pos[1], h-1)
+            self.cursor_click = (w-pos[0]) % w, (h-pos[1]) % h
+        # get data
+        if self._img_data[self.cursor_index] is not None:
+            p = self.cursor_click
+            val = self._img_data[self.cursor_index][p[1], p[0]]
+        else:
+            val = 0
+        self.cursor_value = val
+
+    def _track_on_move(self, event, origin='SW'):
+        """
+        Tracking actions applied when mouse moves on canvas
+
+        Args:
+            event <str> - event to be bound to this function; format <[modifier-]type[-detail]>
+            origin <str> - origin of the data relative to the image
+
+        Kwargs/Return:
+            None
+        """
+        # get index
+        self.cursor_index = self.matrix_index((event.x, event.y))
+        # get position relative to origin (matrix_position anchored to NW by default)
+        pos = self.matrix_position((event.x, event.y))
+        if hasattr(self, '_img_copy') and self._img_copy[self.cursor_index]:
+            w, h = self._img_copy[self.cursor_index].size
+            w, h = w-1, h-1
+        else:
+            w, h = 0, 0
+        if origin == 'SW':
+            self.cursor_position = pos[0] % w, (h-pos[1]) % h
+        if origin == 'NW':
+            self.cursor_position = pos[0] % w, pos[1] % h
+        if origin == 'NE':
+            self.cursor_position = (w-pos[0]) % w, pos[1] % h
+        if origin == 'SE':
+            self.cursor_position = (w-pos[0]) % w, (h-pos[1]) % h
         # get data
         if self._img_data[self.cursor_index] is not None:
             p = self.cursor_position
@@ -901,17 +1007,41 @@ class CanvasPrototype(tk.Canvas, object):
             val = 0
         self.cursor_value = val
 
-    def _track_on_click(self, event):
+    def _track_on_release(self, event, origin='SW'):
         """
-        Tracking actions applied when mouse clicks on canvas
+        Tracking actions applied when mouse releases on canvas
 
         Args:
             event <str> - event to be bound to this function; format <[modifier-]type[-detail]>
+            origin <str> - origin of the data relative to the image
 
         Kwargs/Return:
             None
         """
-        self._track_on_move(self, event)
+        # get index
+        self.cursor_index = self.matrix_index((event.x, event.y))
+        # get position relative to origin (matrix_position anchored to NW by default)
+        pos = self.matrix_position((event.x, event.y))
+        if hasattr(self, '_img_copy') and self._img_copy[self.cursor_index]:
+            w, h = self._img_copy[self.cursor_index].size
+            w, h = w-1, h-1
+        else:
+            w, h = 0, 0
+        if origin == 'SW':
+            self.cursor_release = pos[0] % w, (h-pos[1]) % h
+        if origin == 'NW':
+            self.cursor_release = pos[0] % w, pos[1] % h
+        if origin == 'NE':
+            self.cursor_release = (w-pos[0]) % w, pos[1] % h
+        if origin == 'SE':
+            self.cursor_release = (w-pos[0]) % w, (h-pos[1]) % h
+        # get data
+        if self._img_data[self.cursor_index] is not None:
+            p = self.cursor_release
+            val = self._img_data[self.cursor_index][p[1], p[0]]
+        else:
+            val = 0
+        self.cursor_value = val
 
     def _resize_on_resize(self, event):
         """
