@@ -275,7 +275,7 @@ class SkyPatch(object):
             tests <list(str)> - a list of test variable strings
         """
         return ['N', 'filepaths', 'files', 'fs', 'bands', 'naxis1', 'naxis2', 'naxis_plus',
-                'structure', 'roi']
+                'structure', 'roi', 'light_model']
 
     @property
     def __v__(self):
@@ -327,7 +327,7 @@ class SkyPatch(object):
         Return:
             bands <list(str)> - list of bands of all fs
         """
-        return [nu.band for nu in self.fs]
+        return [nu.band for nu in self]
 
     @property
     def naxis1(self):
@@ -340,7 +340,7 @@ class SkyPatch(object):
         Return:
             naxis1 <list(int)> - number of pixels along axis 1 of each .fits file
         """
-        return [nu.naxis1 for nu in self.fs]
+        return [nu.naxis1 for nu in self]
 
     @property
     def naxis2(self):
@@ -353,7 +353,7 @@ class SkyPatch(object):
         Return:
             naxis2 <list(int)> - number of pixels along axis 2 of each .fits file
         """
-        return [nu.naxis2 for nu in self.fs]
+        return [nu.naxis2 for nu in self]
 
     @property
     def naxis_plus(self):
@@ -366,7 +366,7 @@ class SkyPatch(object):
         Return:
             naxis_plus <list(list(int))> - pixels along each additional axis of each .fits file
         """
-        return [nu.naxis_plus for nu in self.fs]
+        return [nu.naxis_plus for nu in self]
 
     @property
     def structure(self):
@@ -417,12 +417,12 @@ class SkyPatch(object):
         Return:
             magnitudes <list(np.ndarray)> - list of converted magnitude maps
         """
-        return [nu.magnitudes for nu in self.fs]
+        return [nu.magnitudes for nu in self]
 
     @property
     def roi(self):
         """
-        ROI selectors from the list of .fit file data
+        ROI selectors from the list of .fitf file data
 
         Args/Kwargs:
             None
@@ -430,7 +430,20 @@ class SkyPatch(object):
         Return:
             roi <list(ROISelector object)> - list of gleam.ROISelector instances
         """
-        return [nu.roi for nu in self.fs]
+        return [nu.roi for nu in self]
+
+    @property
+    def light_model(self):
+        """
+        The light models from the list of .fits file data
+
+        Args/Kwargs:
+            None
+
+        Return:
+            light_model <dict(gleam.model object)> - list of gleam.model objects
+        """
+        return [nu.light_model for nu in self]
 
     def image_patch(self, **kwargs):
         """
@@ -446,7 +459,7 @@ class SkyPatch(object):
         Return:
             f_images <list(PIL.Image object)> - a colorized image object
         """
-        return [f.image_f(**kwargs) for f in self.fs]
+        return [f.image_f(**kwargs) for f in self]
 
     @property
     def composite(self):
@@ -746,7 +759,7 @@ class SkyPatch(object):
 # MAIN FUNCTION ###############################################################
 def main(case, args):
     sp = SkyPatch(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
-                  lens=args.lens, photzp=args.photzp, verbose=args.verbose)
+                  photzp=args.photzp, verbose=args.verbose)
     if args.show == 'bands' or args.savefig is not None:
         sp.show_patch(as_magnitudes=args.mags, figsize=args.figsize,
                       savefig=args.savefig, scalebar=args.scalebar, colorbar=args.colorbar)

@@ -192,7 +192,7 @@ class MultiLens(SkyPatch):
         Kwargs/Return:
             None
         """
-        for p in self.lens_objects:
+        for p in self:
             p.lens = position
 
     @property
@@ -338,21 +338,21 @@ class MultiLens(SkyPatch):
         if verbose:
             print(self.__v__)
 
-    def image_patch(self, **kwargs):
-        """
-        An 8-bit PIL.Image of the .fits data
+    # def image_patch(self, **kwargs):
+    #     """
+    #     An 8-bit PIL.Image of the .fits data
 
-        Args:
-            None
+    #     Args:
+    #         None
 
-        Kwargs:
-            cmap <str> - a cmap string from matplotlib.colors.Colormap
-            draw_roi <bool> - draw the ROI objects on top of data
+    #     Kwargs:
+    #         cmap <str> - a cmap string from matplotlib.colors.Colormap
+    #         draw_roi <bool> - draw the ROI objects on top of data
 
-        Return:
-            f_images <list(PIL.Image object)> - a colorized image object
-        """
-        return [l.image_f(**kwargs) for l in self.lens_objects]
+    #     Return:
+    #         f_images <list(PIL.Image object)> - a colorized image object
+    #     """
+    #     return [l.image_f(**kwargs) for l in self.lens_objects]
 
     def plot_composite(self, fig, ax=None, method='standard', lens=False, source_images=False,
                        colorbar=False, scalebar=True, verbose=False, **kwargs):
