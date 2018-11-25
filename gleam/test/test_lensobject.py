@@ -219,5 +219,16 @@ class TestLensObject(UnitTestPrototype):
         except OSError:
             pass
 
+    def test_image_f(self):
+        """ # image_f """
+        self.lobject.roi.select['circle']((64, 64), 20, **self.v)
+        self.lobject.roi.select['polygon']((64, 32), (32, 32), (32, 64), **self.v)
+        self.lobject.roi.select['rect']((28, 28), (82, 82), **self.v)
+        self.lobject.roi.close_all()
+        self.lobject.lens = (96, 96)
+        self.lobject.srcimgs_xy = [(70, 70)]
+        img = self.lobject.image_f(draw_lens=True, draw_srcimgs=True, draw_roi=True)
+        img.show()
+
 if __name__ == "__main__":
     TestLensObject.main(verbosity=1)
