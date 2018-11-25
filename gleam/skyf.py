@@ -33,13 +33,13 @@ class SkyF(object):
     """
     Framework for patches of the sky (.fits files) of a single band
     """
-    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp', 'roi']
+    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp', 'roi', '_light_model']
     hdr_keys = ['FILTER', 'NAXIS1', 'NAXIS2', 'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
                 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'OBJECT', 'PHOTZP']
 
     def __init__(self, filepath, data=None, hdr=None,
                  px2arcsec=None, refpx=None, refval=None,
-                 photzp=None, roi=None,
+                 photzp=None, roi=None, _light_model=None,
                  verbose=False):
         """
         Initialize parsing of a fits file with a file name
@@ -54,6 +54,7 @@ class SkyF(object):
             refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
             refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
             photzp <float> - overwrite photometric zero-point information
+            _light_model <dict/gleam.model object> - a dict or direct input of the light model
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -80,6 +81,9 @@ class SkyF(object):
         self.roi = ROISelector.from_gleamobj(self)
         if roi is not None:
             self.roi = roi
+        self._light_model = {}
+        if _light_model is not None:
+            self.light_model = _light_model
         # get rid of methods when inherited
         if self.__class__.__name__ != SkyF.__name__ and hasattr(SkyF, 'show_fullsky'):
             del SkyF.show_fullsky
@@ -271,7 +275,7 @@ class SkyF(object):
         """
         return ['filename', 'filepath', 'band', 'naxis1', 'naxis2', 'naxis_plus',
                 'refval', 'refpx', 'center', 'px2deg', 'px2arcsec', 'megacam_range',
-                'field', 'photzp', 'mag_formula', 'roi']
+                'field', 'photzp', 'mag_formula', 'roi', 'light_model']
 
     @property
     def __v__(self):
@@ -672,6 +676,47 @@ class SkyF(object):
         self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=photzp)
 
     @property
+    def light_model(self):
+        """
+        The light model to the .fits data
+
+        Args/Kwargs:
+            None
+
+        Return:
+            model <gleam.model object> - the light profile model fitting the data
+        """
+        if not hasattr(self, '_light_model'):
+            self._light_model = {}
+        models = {}
+        for k in self._light_model:
+            module_name = 'gleam.model.{}'.format(k)
+            cls_name = k.capitalize()
+            module = __import__(module_name, fromlist=[k])
+            cls = getattr(module, cls_name)
+            models[k] = cls(**self._light_model[k])
+        return models
+
+    @light_model.setter
+    def light_model(self, model):
+        """
+        Setter of the light models
+
+        Args:
+            model <dict/gleam.model object> - dictionary of direcy input of the model
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_light_model'):
+            self._light_model = {}
+        if isinstance(model, dict):
+            self._light_model.update(model)
+        else:
+            self._light_model[model.__modelname__] = {
+                k: v for k, v in zip(model.parameter_keys, model.model_parameters)}
+
+    @property
     def field(self):
         """
         Field signature of the survey (e.g. for CFHTLS: W3+3-2,...)
@@ -874,6 +919,8 @@ class SkyF(object):
 
         Return:
             cutout <np.ndarray> - cutout part of the .fits file's image
+
+        TODO: include use of ROISelector or remove
         """
         if center is None:
             center = (self.naxis1//2, self.naxis2//2)
