@@ -100,13 +100,17 @@ class App(FramePrototype):
                                          ['Mag', self.window.canvas.cursor_value_transf(
                                              self.lens_patch[0].mag_formula)], ])
         self.toolbar.add_buttons(
-            'selection', [['/assets/circle.png', 'Revert'],
+            'selection', [['Lens', 'Undo lens'],
+                          ['Src imgs', 'Undo srcimgs'],
+                          ['/assets/circle.png', 'Revert'],
                           ['/assets/rect.png', 'Delete'],
                           ['/assets/polygon.png'], ])
         self.toolbar.add_buttons(
             ' ', [['save as json', 'save as png'], ])
         self.toolbar.bindings = [[],
-                                 [self._on_circle, self._on_revert,
+                                 [self._on_lens, self._on_lens_undo,
+                                  self._on_srcimgs, self._on_srcimgs_undo,
+                                  self._on_circle, self._on_revert,
                                   self._on_rect, self._on_delete,
                                   self._on_polygon],
                                  [self._on_save_as_json, self.toolbar.dummy_func], ]
@@ -142,8 +146,7 @@ class App(FramePrototype):
 
         # test projecting entire image patch
         if not display_off:
-            self.project(self.lens_patch.image_patch(cmap=self.colormap, draw_roi=True),
-                         image_data=[f.data for f in self.lens_patch.lens_objects])
+            self.project_patch()
 
         # test reducing image number and column number
         # self.window.canvas.N = 1
@@ -208,6 +211,29 @@ class App(FramePrototype):
             else:
                 self.window.canvas.add_image(img, i)
 
+    def project_patch(self, draw_lens=True, draw_srcimgs=True, draw_roi=True):
+        """
+        Project the lens patch onto the canvas
+
+        Args:
+            None
+
+        Kwargs:
+            draw_lens <bool> - draw the lens position on top of data
+            draw_srcimgs <bool> - draw the source image positions on top of data
+            draw_roi <bool> - draw the ROI objects on top of data
+
+        Return:
+            None
+        """
+        kwargs = {
+            'cmap': self.colormap,
+            'draw_lens': draw_lens,
+            'draw_srcimgs': draw_srcimgs,
+            'draw_roi': draw_roi}
+        self.project(self.lens_patch.image_patch(**kwargs),
+                     image_data=[f.data for f in self.lens_patch])
+
     def display(self, term_mode=False, verbose=False):
         """
         Wrapper for mainloop
@@ -250,7 +276,7 @@ class App(FramePrototype):
         Set the selection mode. While selection mode is off, all widgets are enabled.
 
         Args:
-            mode <str> - mode string ('circle'/'rect'/'polygon' or None)
+            mode <str> - mode string ('lens'/'srcimg'/'circle'/'rect'/'polygon' or None)
 
         Kwargs/Return:
             None
@@ -335,9 +361,7 @@ class App(FramePrototype):
                 with open(fin[0], 'r') as jsonf:
                     self.lens_patch = MultiLens.from_json(jsonf)
             self.window.canvas.N = self.lens_patch.N
-            self.project(self.lens_patch.image_patch(
-                cmap=self.colormap, draw_roi=True),
-                         image_data=[f.data for f in self.lens_patch.lens_objects])
+            self.project_patch()
 
     def _on_save_as(self, event=None):
         """
@@ -362,8 +386,7 @@ class App(FramePrototype):
         """
         Change the colormap and reproject
         """
-        self.project(self.lens_patch.image_patch(cmap=self.colormap),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
 
     def _on_help(self, event=None):
         """
@@ -380,6 +403,50 @@ class App(FramePrototype):
         pass
 
 # Button bindings #############################################################
+    def _on_lens(self, event=None):
+        """
+        Execute when 'lens selection' event is triggered
+        """
+        # if 'lens selection' event already has been triggered
+        if self.selection_mode == 'lens':
+            self.selection_mode = None
+            self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
+        else:
+            self.selection_mode = 'lens'
+            self.selection_trace = []
+            self.selection_trace.append(
+                self.window.canvas._cursor_click.trace('w', self._lens_click))
+
+    def _on_lens_undo(self, event=None):
+        """
+        Execute when 'lens undo' event is triggered
+        """
+        for l in self.lens_patch:
+            l._lens = None
+        self.project_patch()
+
+    def _on_srcimgs(self, event=None):
+        """
+        Execute when 'srcimgs selection' event is triggered
+        """
+        # if 'srcimg selection' event already has been triggered
+        if self.selection_mode == 'srcimgs':
+            self.selection_mode = None
+            self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
+        else:
+            self.selection_mode = 'srcimgs'
+            self.selection_trace = []
+            self.selection_trace.append(
+                self.window.canvas._cursor_click.trace('w', self._srcimgs_click))
+
+    def _on_srcimgs_undo(self, event=None):
+        """
+        Execute when 'srcimgs undo' event is triggered
+        """
+        for l in self.lens_patch:
+            l._lens = None
+        self.project_patch()
+
     def _on_circle(self, event=None):
         """
         Execute when 'circle selection' event is triggered
@@ -387,16 +454,19 @@ class App(FramePrototype):
         # if 'circle selection' event already has been triggered
         if self.selection_mode == 'circle':
             self.selection_mode = None
+            self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
+            self.window.canvas._cursor_position.trace_vdelete('w', self.selection_trace[1])
+            self.window.canvas._cursor_release.trace_vdelete('w', self.selection_trace[2])
         else:
             self.selection_mode = 'circle'
-        # bind key press to create circle, move changes the radius, release saves it
-        self.selection_trace = []
-        self.selection_trace.append(
-            self.window.canvas._cursor_click.trace('w', self._circle_click))
-        self.selection_trace.append(
-            self.window.canvas._cursor_position.trace('w', self._circle_move))
-        self.selection_trace.append(
-            self.window.canvas._cursor_release.trace('w', self._circle_release))
+            # bind key press to create circle, move changes the radius, release saves it
+            self.selection_trace = []
+            self.selection_trace.append(
+                self.window.canvas._cursor_click.trace('w', self._circle_click))
+            self.selection_trace.append(
+                self.window.canvas._cursor_position.trace('w', self._circle_move))
+            self.selection_trace.append(
+                self.window.canvas._cursor_release.trace('w', self._circle_release))
 
     def _on_rect(self, event=None):
         """
@@ -405,16 +475,19 @@ class App(FramePrototype):
         # if 'rect selection' event already has been triggered
         if self.selection_mode == 'rect':
             self.selection_mode = None
+            self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
+            self.window.canvas._cursor_position.trace_vdelete('w', self.selection_trace[1])
+            self.window.canvas._cursor_release.trace_vdelete('w', self.selection_trace[2])
         else:
             self.selection_mode = 'rect'
-        # bind key press to create rectangle, every following click adds to it
-        self.selection_trace = []
-        self.selection_trace.append(
-            self.window.canvas._cursor_click.trace('w', self._rect_click))
-        self.selection_trace.append(
-            self.window.canvas._cursor_position.trace('w', self._rect_move))
-        self.selection_trace.append(
-            self.window.canvas._cursor_release.trace('w', self._rect_release))
+            # bind key press to create rectangle, every following click adds to it
+            self.selection_trace = []
+            self.selection_trace.append(
+                self.window.canvas._cursor_click.trace('w', self._rect_click))
+            self.selection_trace.append(
+                self.window.canvas._cursor_position.trace('w', self._rect_move))
+            self.selection_trace.append(
+                self.window.canvas._cursor_release.trace('w', self._rect_release))
 
     def _on_polygon(self, event=None):
         """
@@ -423,12 +496,13 @@ class App(FramePrototype):
         # if 'polygon selection' event already has been triggered
         if self.selection_mode == 'polygon':
             self.selection_mode = None
+            self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
         else:
             self.selection_mode = 'polygon'
-        # bind key press to create polygon, every following click adds to it
-        self.selection_trace = []
-        self.selection_trace.append(
-            self.window.canvas._cursor_click.trace('w', self._polygon_click))
+            # bind key press to create polygon, every following click adds to it
+            self.selection_trace = []
+            self.selection_trace.append(
+                self.window.canvas._cursor_click.trace('w', self._polygon_click))
 
     def _on_revert(self):
         """
@@ -438,9 +512,7 @@ class App(FramePrototype):
             del self._selection
         for l in self.lens_patch:
             l.roi._buffer[l.roi._selection] = l.roi._buffer[l.roi._selection][:-1]
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
 
     def _on_delete(self):
         """
@@ -451,9 +523,7 @@ class App(FramePrototype):
         for l in self.lens_patch:
             for k in l.roi.selection_modes:
                 l.roi._buffer[k] = []
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
 
     def _on_save_as_json(self, event=None):
         """
@@ -464,6 +534,33 @@ class App(FramePrototype):
             self.lens_patch.jsonify(name=fout, with_hash=False)
 
 # Traces ######################################################################
+    def _lens_click(self, *args):
+        """
+        Place the lens position during 'click' event
+
+        Args/Kwargs/Return:
+            None
+        """
+        pos = self.window.canvas.cursor_click
+        for l in self.lens_patch:
+            l.lens = pos
+        self.project_patch()
+        self.selection_mode = None
+        self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
+
+    def _srcimgs_click(self, *args):
+        """
+        Place source image positions during 'click' event
+
+        Args/Kwargs/Return:
+            None
+        """
+        pos = self.window.canvas.cursor_click
+        for l in self.lens_patch:
+            xy = l.srcimgs_xy
+            l.srcimgs_xy = xy + [pos]
+        self.project_patch()
+
     def _circle_click(self, *args):
         """
         Start a circle during 'click' event
@@ -479,9 +576,7 @@ class App(FramePrototype):
             l.roi._buffer['circle'].append(self.selection)
             l.roi._selection = 'circle'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         for l in self.lens_patch:
             l.roi._buffer['circle'] = l.roi._buffer['circle'][:-1]
 
@@ -502,9 +597,7 @@ class App(FramePrototype):
             l.roi._buffer['circle'].append(self.selection)
             l.roi._selection = 'circle'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         for l in self.lens_patch:
             l.roi._buffer['circle'] = l.roi._buffer['circle'][:-1]
 
@@ -525,9 +618,7 @@ class App(FramePrototype):
             l.roi._buffer['circle'].append(self.selection)
             l.roi._selection = 'circle'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         self.selection_mode = None
         del self._selection
         self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
@@ -549,9 +640,7 @@ class App(FramePrototype):
             l.roi._buffer['rect'].append(self.selection)
             l.roi._selection = 'rect'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         for l in self.lens_patch:
             l.roi._buffer['rect'] = l.roi._buffer['rect'][:-1]
 
@@ -572,9 +661,7 @@ class App(FramePrototype):
             l.roi._buffer['rect'].append(self.selection.close())
             l.roi._selection = 'rect'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         for l in self.lens_patch:
             l.roi._buffer['rect'] = l.roi._buffer['rect'][:-1]
 
@@ -596,9 +683,7 @@ class App(FramePrototype):
             l.roi._buffer['rect'].append(self.selection)
             l.roi._selection = 'rect'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         self.selection_mode = None
         del self._selection
         self.window.canvas._cursor_click.trace_vdelete('w', self.selection_trace[0])
@@ -621,9 +706,7 @@ class App(FramePrototype):
             l.roi._buffer['polygon'].append(self._selection)
             l.roi._selection = 'polygon'
             l.roi._focus = -1
-        self.project(self.lens_patch.image_patch(
-            cmap=self.colormap, draw_roi=True),
-                     image_data=[f.data for f in self.lens_patch.lens_objects])
+        self.project_patch()
         if not self.selection.is_closed:
             for l in self.lens_patch:
                 l.roi._buffer['polygon'] = l.roi._buffer['polygon'][:-1]
