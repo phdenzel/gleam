@@ -20,6 +20,7 @@ import copy
 import math
 import warnings
 import numpy as np
+from PIL import Image, ImageDraw
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -81,14 +82,13 @@ class LensObject(SkyF):
         self.zs = None
         self.tdelay = None
         self.tderr = None
-        # assume lens is in the center of the .fits file afterwards if auto is False
-        self._lens = None
+        self._lens = None  # lens position (assume to be in the center for finder)
         self.srcimgs = []  # source image positions
         # GLASS config factory for parsing text and config files
         self.glscfactory = GLSCFactory(lens_object=self, **glscfactory_options)
         self.glscfactory.sync_lens_params(verbose=False)  # load parameters from text file or dict
         # LensFinder for automatic search of lens and source image positions
-        self.lens = self.center
+        self.lens = self.center  # needs lens reference for dummy shifts
         self.finder = LensFinder(self, **finder_options)
         if auto:
             if self.finder.lens_candidate is not None:
@@ -96,6 +96,7 @@ class LensObject(SkyF):
             for p in self.finder.source_candidates:
                 self.srcimgs.append(p)
         # set lens parameters manually
+        self._lens = None
         if lens is not None:
             self.lens = lens
         if srcimgs is not None:
@@ -276,6 +277,92 @@ class LensObject(SkyF):
         if verbose:
             print(shifts)
         return shifts
+
+    def image_f(self, draw_lens=False, draw_srcimgs=False, **kwargs):
+        """
+        An 8-bit PIL.Image of the .fits data
+
+        Args:
+            None
+
+        Kwargs:
+            cmap <str> - a cmap string from matplotlib.colors.Colormap
+            draw_lens <bool> - draw the lens position on top of data
+            draw_srcimgs <bool> - draw the source image positions on top of data
+            draw_roi <bool> - draw the ROI objects on top of data
+
+        Return:
+            f_image <PIL.Image object> - a colorized image object
+        """
+        if self.data is not None:
+            img = super(LensObject, self).image_f(**kwargs)
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            if draw_lens:
+                img = self.draw_lens(img)
+            if draw_srcimgs:
+                img = self.draw_srcimgs(img)
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            return img
+        return self.data
+
+    def draw_lens(self, img, point_size=1, fill=None, outline=None, verbose=False):
+        """
+        Draw the lens as points on the input image
+
+        Args:
+            img <PIL.Image object> - an image object
+
+        Kwargs:
+            point_size <int/float> - point size, i.e. radius in pixels
+            fill <str> - color to use for points
+            outline <str> - color to use for lines and borders
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            img <PIL.Image object> - the image object with the shape drawn
+        """
+        if self.lens is None:
+            return img
+        if fill is None:
+            fill = glmc.blue
+        if outline is None:
+            outline = glmc.black
+        draw = ImageDraw.Draw(img)
+        p = (self.lens.x-point_size, self.lens.y-point_size,
+             self.lens.x+point_size, self.lens.y+point_size)
+        draw.ellipse(p, fill=fill, outline=outline)
+        del draw
+        return img
+
+    def draw_srcimgs(self, img, point_size=1, fill=None, outline=None, verbose=False):
+        """
+        Draw the lens as points on the input image
+
+        Args:
+            img <PIL.Image object> - an image object
+
+        Kwargs:
+            point_size <int/float> - point size, i.e. radius in pixels
+            fill <str> - color to use for points
+            outline <str> - color to use for lines and borders
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            img <PIL.Image object> - the image object with the shape drawn
+        """
+        if len(self.srcimgs) < 1:
+            return img
+        if fill is None:
+            fill = glmc.pink
+        if outline is None:
+            outline = glmc.black
+        draw = ImageDraw.Draw(img)
+        pts = [(p.x-point_size, p.y-point_size, p.x+point_size, p.y+point_size)
+               for p in self.srcimgs]
+        for p in pts:
+            draw.ellipse(p, fill=fill, outline=outline)
+        del draw
+        return img
 
     def plot_f(self, fig, ax=None, as_magnitudes=False, lens=False, source_images=False,
                label_images=False, sequence=None, scalebar=True, colorbar=False,
