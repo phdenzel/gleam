@@ -152,6 +152,37 @@ class Sersic(_BaseModel):
         """
         self.r_s = pscale
 
+    @property
+    def priors(self):
+        """
+        Parameter space limits
+
+        Args/Kwargs:
+            None
+
+        Return:
+            priors <list> - a list of min and max values the parameters should take
+        """
+        if not hasattr(self, '_priors'):
+            self._priors = super(Sersic, self).priors + [
+                [0.5, 25.],
+                [2., np.sqrt(2)*.125*(self.Nx+self.Ny)]]
+        return self._priors
+
+    @priors.setter
+    def priors(self, priors):
+        """
+        Set different parameter space limits than the default
+        (simple step function as prior probability)
+
+        Args:
+            priors <list> - a list of min and max values the parameters should take
+
+        Kwargs/Return:
+            None
+        """
+        self._priors = priors
+
     def get_profile(self, a):
         """
         Intensity at radius a along the semi-major axis

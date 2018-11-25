@@ -78,6 +78,25 @@ class _BaseModel(object):
             print(self.__v__)
 
     @property
+    def __json__(self):
+        """
+        Select attributes for json write
+
+        Args/Kwargs:
+            None
+
+        Return:
+            jsn_dict <dict> - a first-layer serialized json dictionary
+        """
+        jsn_dict = {}
+        for k in self.__class__.parameter_keys:
+            if hasattr(self, k):
+                val = self.__getattribute__(k)
+                jsn_dict[k] = val
+        jsn_dict['__type__'] = self.__class__.__name__
+        return jsn_dict
+
+    @property
     def tests(self):
         """
         A list of attributes being tested when calling __v__
@@ -232,6 +251,40 @@ class _BaseModel(object):
         elif isinstance(model_pars, list):
             for k, i in zip(self.parameter_keys, model_pars):
                 self.__setattr__(k, i)
+
+    @property
+    def priors(self):
+        """
+        Parameter space limits
+
+        Args/Kwargs:
+            None
+
+        Return:
+            priors <list> - a list of min and max values the parameters should take
+        """
+        if not hasattr(self, "_priors"):
+            self._priors = [[0., float(self.Nx)],
+                            [0., float(self.Ny)],
+                            [0., np.pi],
+                            [0., .5],
+                            [1e-1, 3e2],  # increase if upper limit too low
+                            [0., 10.]]
+        return self._priors
+
+    @priors.setter
+    def priors(self, priors):
+        """
+        Set different parameter space limits than the default
+        (simple step function as prior probability)
+
+        Args:
+            priors <list> - a list of min and max values the parameters should take
+
+        Kwargs/Return:
+            None
+        """
+        self._priors = priors
 
     @property
     def map_parameters(self):
