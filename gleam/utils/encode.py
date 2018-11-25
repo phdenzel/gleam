@@ -30,6 +30,8 @@ class GLEAMEncoder(json.JSONEncoder):
             return obj.__json__
         if isinstance(obj, np.ndarray):
             return obj.tolist()
+        if 'numpy' in str(type(obj)):  # since numpy types don't have __dict__
+            return obj.tolist()
         else:
             return obj.__dict__
         # return json.JSONEncoder.default(self, obj)
