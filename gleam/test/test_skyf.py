@@ -65,6 +65,10 @@ class TestSkyF(UnitTestPrototype):
         self.skyf.roi.select['circle']((64, 64), 20)
         self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64))
         self.skyf.roi.select['rect']((32, 32), (64, 64))
+        self.skyf.light_model = {'sersic': {
+            'phi': 1.8052729641945808, 'e': 0.3648069769263307,
+            'r_s': 18.520443508692196, 'n': 1.12780508392599,
+            'c_0': 0.0, 'y': 68, 'x': 61, 'I_0': 35.71338473276946}}
         filename = self.skyf.jsonify(name='test.json')
         print(">>> {}".format(filename))
         with open(filename, 'r') as j:
@@ -84,6 +88,10 @@ class TestSkyF(UnitTestPrototype):
         self.skyf.roi.select['circle']((64, 64), 20)
         self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64))
         self.skyf.roi.select['rect']((32, 32), (64, 64))
+        self.skyf.light_model = {'sersic': {
+            'phi': 1.8052729641945808, 'e': 0.3648069769263307,
+            'r_s': 18.520443508692196, 'n': 1.12780508392599,
+            'c_0': 0.0, 'y': 68, 'x': 61, 'I_0': 35.71338473276946}}
         jsnstr = self.skyf.jsonify(**self.v)
         self.assertIsInstance(jsnstr, str)
 
@@ -203,7 +211,7 @@ class TestSkyF(UnitTestPrototype):
         self.skyf.roi.select['rect']((28, 28), (82, 82), **self.v)
         self.skyf.roi.close_all()
         img = self.skyf.image_f(draw_roi=True)
-        img.show()
+        # img.show()
 
 
 if __name__ == "__main__":
