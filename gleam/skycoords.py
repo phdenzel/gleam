@@ -639,7 +639,7 @@ class SkyCoords(object):
         if dec is None:
             self._dec = dec
         else:
-            self._dec = dec % 90*math.copysign(1, dec)
+            self._dec = dec % (90*math.copysign(1, dec))
 
     @property
     def radec(self):
