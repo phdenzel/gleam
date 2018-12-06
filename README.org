@@ -1,8 +1,7 @@
 * GLEAM
 
-#+BEGIN_SRC html
-  <b>G</b>ravitational <b>LE</b>ns <b>A</b>nalysis <b>M</b>odule
-#+END_SRC
+@<b>G@</b>ravitational @<b>LE@</b>ns @<b>A@</b>nalysis @<b>M@</b>odule
+
 
 ** Binaries
 
