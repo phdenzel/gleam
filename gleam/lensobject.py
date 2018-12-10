@@ -20,6 +20,7 @@ import copy
 import math
 import warnings
 import numpy as np
+from scipy import interpolate
 from PIL import Image, ImageDraw
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -33,10 +34,11 @@ class LensObject(SkyF):
     """
     An object representing a gravitational lens
     """
-    params = SkyF.params + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr']
+    params = SkyF.params + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr',
+                            '_light_model', 'stel_mass', 'lens_map']
 
     def __init__(self, filepath, lens=None, srcimgs=None, zl=None, zs=None,
-                 tdelay=None, tderr=None,
+                 tdelay=None, tderr=None, _light_model=None, stel_mass=None, lens_map=None,
                  auto=False,
                  glscfactory_options={}, finder_options={},
                  verbose=False, **kwargs):
@@ -55,6 +57,13 @@ class LensObject(SkyF):
             photzp <float> - overwrite photometric zero-point information
             lens <int,int> - overwrite the lens pixel coordinates
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
+            zl <float> - TODO
+            zs <float> - TODO
+            tdelay <list(float)> - TODO
+            tderr <list(float) - TODO
+            _light_model <dict/gleam.model object> - a dict or direct input of the light model
+            stel_mass <float> - TODO
+            lens_map <np.ndarray> - TODO
             auto <bool> - use LensFinder for automatic image recognition (can be unreliable)
             verbose <bool> - verbose mode; print command line statements
             glscfactory_options <dict> - options for the GLSCFactory encompassing the following:
@@ -82,13 +91,16 @@ class LensObject(SkyF):
         self.zs = None
         self.tdelay = None
         self.tderr = None
+        self._light_model = {}
+        self.stel_mass = None
+        self.lens_map = None
         self._lens = None  # lens position (assume to be in the center for finder)
         self.srcimgs = []  # source image positions
         # GLASS config factory for parsing text and config files
         self.glscfactory = GLSCFactory(lens_object=self, **glscfactory_options)
         self.glscfactory.sync_lens_params(verbose=False)  # load parameters from text file or dict
         # LensFinder for automatic search of lens and source image positions
-        self.lens = self.center  # needs lens reference for dummy shifts
+        self._lens = self.center  # needs lens reference for dummy shifts
         self.finder = LensFinder(self, **finder_options)
         if auto:
             if self.finder.lens_candidate is not None:
@@ -109,6 +121,10 @@ class LensObject(SkyF):
             self.tdelay = tdelay
         if tderr is not None:
             self.tderr = tderr
+        if _light_model is not None:
+            self.light_model = _light_model
+        if stel_mass is not None:
+            self.stel_mass = stel_mass
 
         # some verbosity
         if verbose:
@@ -142,7 +158,8 @@ class LensObject(SkyF):
             tests <list(str)> - a list of test variable strings
         """
         return super(LensObject, self).tests \
-            + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr', 'glscfactory', 'finder']
+            + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr', 'light_model', 'stel_mass',
+               'glscfactory', 'finder']
 
     @property
     def lens(self):
@@ -218,8 +235,11 @@ class LensObject(SkyF):
             refp = [0, 0]
             refv = [0., 0.]
             if not relative and self.lens is not None:
-                refp = self.lens.xy  # reference_pixel
-                refv = self.lens.radec  # reference_value
+                refp = self.center.xy  # reference_pixel
+                refv = self.center.radec  # reference_value
+            elif not relative and self.center is not None:
+                refp = self.center.xy  # reference_pixel
+                refv = self.center.radec  # reference_value
             p = SkyCoords.pixels2deg(position, px2arcsec_scale=self.center.px2arcsec_scale,
                                      reference_pixel=refp, reference_value=refv)
             if relative:
@@ -231,7 +251,10 @@ class LensObject(SkyF):
         else:  # unit = 'degree' by default
             p = position
         if relative:
-            skyc = self.lens.shift(p, right_increase=True)
+            if self.lens is not None:
+                skyc = self.lens.shift(p, right_increase=True)
+            else:
+                skyc = self.center.shift(p, right_increase=True)
         else:
             skyc = SkyCoords(*p, **self.center.coordkw)
         if verbose:
@@ -273,10 +296,86 @@ class LensObject(SkyF):
             shifts <list> - list of shifts from lens to source images
         """
         verbose = kwargs.pop('verbose', False)
-        shifts = [srcpos.get_shift_to(self.lens, **kwargs) for srcpos in self.srcimgs]
+        if self.lens is not None:
+            shifts = [srcpos.get_shift_to(self.lens, **kwargs) for srcpos in self.srcimgs]
+        else:
+            shifts = [srcpos.get_shift_to(self.center, **kwargs) for srcpos in self.srcimgs]
         if verbose:
             print(shifts)
         return shifts
+
+    @property
+    def light_model(self):
+        """
+        The light model to the .fits data
+
+        Args/Kwargs:
+            None
+
+        Return:
+            model <gleam.model object> - the light profile model fitting the data
+        """
+        if not hasattr(self, '_light_model'):
+            self._light_model = {}
+        models = {}
+        for k in self._light_model:
+            module_name = 'gleam.model.{}'.format(k)
+            cls_name = k.capitalize()
+            module = __import__(module_name, fromlist=[k])
+            cls = getattr(module, cls_name)
+            models[k] = cls(**self._light_model[k])
+        return models
+
+    @light_model.setter
+    def light_model(self, model):
+        """
+        Setter of the light models
+
+        Args:
+            model <dict/gleam.model object> - dictionary of direcy input of the model
+
+        Kwargs/Return:
+            None
+        """
+        if not hasattr(self, '_light_model'):
+            self._light_model = {}
+        if isinstance(model, dict):
+            self._light_model.update(model)
+        else:
+            self._light_model[model.__modelname__] = {
+                k: v for k, v in zip(model.parameter_keys, model.model_parameters)}
+
+    @property
+    def stel_map(self):
+        """
+        The stellar map from a light model and stellar mass estimate
+
+        Args/Kwargs:
+            None
+
+        Return:
+            stel_map <np.ndarray> - the stellar map derived from light model
+        """
+        if self.stel_mass is None or len(self.light_model) < 1:
+            return
+        if 'sersic' in self.light_model:
+            light_model = self.light_model['sersic']
+        else:
+            model_dict = self.light_model
+            model_name = list(model_dict.keys())[0]
+            light_model = model_dict[model_name]
+        light_model.Ny, light_model.Nx = self.data.shape
+        light_model.y, light_model.x = light_model.Ny//2, light_model.Nx//2
+        light_model.calc_map()
+        if not self.roi._buffer['circle']:
+            self.roi.select['circle']((light_model.x, light_model.y), 10)
+        else:
+            r = self.roi._buffer['circle'][0].radius
+            self.roi.select['circle']((light_model.x, light_model.y), r)
+        lens_mask = self.roi._masks['circle'][-1]
+        mask = lens_mask
+        light_norm = light_model.normalize(light_model.map2D, mask=mask)
+        return light_norm * self.stel_mass / (self.px2arcsec[0]*self.px2arcsec[1])
 
     def image_f(self, draw_lens=False, draw_srcimgs=False, **kwargs):
         """
@@ -398,7 +497,7 @@ class LensObject(SkyF):
             ax.scatter(*self.lens.xy, marker='o', s=3**2*math.pi, c=glmc.purpleblue)
         if source_images and self.srcimgs:
             for i, c in enumerate(self.srcimgs):
-                ax.scatter(*c.xy, marker='o', s=3**2*math.pi, c=glmc.neongreen)
+                ax.scatter(*c.xy, marker='o', s=3**2*math.pi, c=glmc.green)
                 if label_images:
                     ax.text(c.x+self.naxis1*0.02, c.y-self.naxis2*0.04,
                             sequence[i],
@@ -426,20 +525,15 @@ def main(case, args):
     """
     sp = LensObject(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
                     lens=args.lens, photzp=args.photzp,
-                    auto=args.auto, n=args.n, sigma=args.sigma, min_q=args.min_q,
-                    output=args.config_single or args.config_multi, name=args.name,
-                    text_file=args.text_file, filter_=args.filter_, reorder=args.reorder,
-                    verbose=args.verbose)
+                    auto=args.auto, verbose=args.verbose,
+                    finder_options=dict(n=args.n, sigma=args.sigma, min_q=args.min_q),
+                    glscfactory_options=dict(text_file=args.text_file, filter_=args.filter_, reorder=args.reorder))
     if args.show or args.show_lens or args.show_sources or args.savefig is not None:
         sp.show_f(as_magnitudes=args.mags, figsize=args.figsize,
                   lens=args.show_lens, source_images=args.show_sources,
                   label_images=args.labels, sequence=args.reorder,
                   scalebar=args.scalebar, colorbar=args.colorbar,
                   savefig=args.savefig, verbose=args.verbose)
-    if args.config_single is not None:
-        sp.glscfactory.write(verbose=args.verbose)
-    elif args.config_multi is not None:
-        sp.glscfactory.append(last=args.finish_config, verbose=args.verbose)
 
 
 def parse_arguments():
@@ -448,6 +542,7 @@ def parse_arguments():
     """
     from argparse import ArgumentParser, RawTextHelpFormatter
     parser = ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
+
     # main args
     parser.add_argument("case", nargs='?',
                         help="Path input to .fits file for skyf to use",
@@ -456,15 +551,6 @@ def parse_arguments():
     parser.add_argument("-a", "--auto", dest="auto", action="store_true",
                         help="Use automatic image recognition (can be unreliable)",
                         default=False)
-    parser.add_argument("-n", "--npeaks", dest="n", metavar="<N>", type=int,
-                        help="Number of peaks the automatic image recognition is supposed to find",
-                        default=5)
-    parser.add_argument("-q", "--min-q", dest="min_q", metavar="<min_q>", type=float,
-                        help="A percentage quotient for the minimal peak separation",
-                        default=0.1)
-    parser.add_argument("--sigma", metavar=("<sx", "sy>"), dest="sigma", nargs=2, type=float,
-                        help="Lower/upper sigma factor for signal-to-noise estimation",
-                        default=(2, 2))
     parser.add_argument("--scale", metavar=("<dx", "dy>"), nargs=2, type=float,
                         help="Pixel-to-arcsec scale for x (-RA) and y (Dec) direction")
     parser.add_argument("--refpx", metavar=("<x", "y>"), nargs=2, type=float,
@@ -503,17 +589,18 @@ def parse_arguments():
     parser.add_argument("--savefig", dest="savefig", metavar="<output-name>", type=str,
                         help="Save the figure in <output-name> instead of showing it")
 
+    # lensfinder options
+    parser.add_argument("-n", "--npeaks", dest="n", metavar="<N>", type=int,
+                        help="Number of peaks the automatic image recognition is supposed to find",
+                        default=5)
+    parser.add_argument("-q", "--min-q", dest="min_q", metavar="<min_q>", type=float,
+                        help="A percentage quotient for the minimal peak separation",
+                        default=0.1)
+    parser.add_argument("--sigma", metavar=("<sx", "sy>"), dest="sigma", nargs=2, type=float,
+                        help="Lower/upper sigma factor for signal-to-noise estimation",
+                        default=(2, 2))
+
     # gls config factory args
-    parser.add_argument("--single-config", dest="config_single", metavar="<output-name>", type=str,
-                        help="Generate a glass config file")
-    parser.add_argument("--multi-config", dest="config_multi", metavar="<output-name>", type=str,
-                        help="Generate a glass config file in append-mode")
-    parser.add_argument("--name", dest="name", metavar="<name>", type=str,
-                        help="Name of the lens object in the glass config file")
-    parser.add_argument("--finish", dest="finish_config", action="store_true",
-                        help="Append and complete the config file with these configs"
-                        + " in multi-config mode",
-                        default=False)
     parser.add_argument("--text-file", dest="text_file", metavar="<path-to-file>", type=str,
                         help="Path to text file with additional info for glass config generation")
     parser.add_argument("--filter", dest="filter_", action="store_true",

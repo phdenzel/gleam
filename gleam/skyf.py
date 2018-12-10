@@ -12,7 +12,7 @@ TODO:
 ###############################################################################
 from gleam.skycoords import SkyCoords
 from gleam.roiselector import ROISelector
-from gleam.megacam_fields import MEGACAM_FPROPS
+from gleam.megacam import MEGACAM_FPROPS
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
 
 import sys
@@ -33,7 +33,7 @@ class SkyF(object):
     """
     Framework for patches of the sky (.fits files) of a single band
     """
-    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp', 'roi', '_light_model']
+    params = ['data', 'hdr', 'px2arcsec', 'refval', 'refpx', 'photzp', 'roi']
     hdr_keys = ['FILTER', 'NAXIS1', 'NAXIS2', 'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
                 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2', 'OBJECT', 'PHOTZP']
 
@@ -54,7 +54,6 @@ class SkyF(object):
             refpx <int,int> - overwrite reference pixel coordinates in .fits header (in pixels)
             refval <float,float> - overwrite reference pixel values in .fits header (in degrees)
             photzp <float> - overwrite photometric zero-point information
-            _light_model <dict/gleam.model object> - a dict or direct input of the light model
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -81,9 +80,6 @@ class SkyF(object):
         self.roi = ROISelector.from_gleamobj(self)
         if roi is not None:
             self.roi = roi
-        self._light_model = {}
-        if _light_model is not None:
-            self.light_model = _light_model
         # get rid of methods when inherited
         if self.__class__.__name__ != SkyF.__name__ and hasattr(SkyF, 'show_fullsky'):
             del SkyF.show_fullsky
@@ -275,7 +271,7 @@ class SkyF(object):
         """
         return ['filename', 'filepath', 'band', 'naxis1', 'naxis2', 'naxis_plus',
                 'refval', 'refpx', 'center', 'px2deg', 'px2arcsec', 'megacam_range',
-                'field', 'photzp', 'mag_formula', 'roi', 'light_model']
+                'field', 'photzp', 'mag_formula', 'roi']
 
     @property
     def __v__(self):
@@ -456,6 +452,8 @@ class SkyF(object):
         """
         if self.hdr and self.hdr['FILTER'] is not None:
             return self.hdr['FILTER'].split('.')[0]
+        else:
+            return ""
 
     @property
     def naxis1(self):
@@ -646,6 +644,20 @@ class SkyF(object):
         self.hdr['CD2_2'] = pxscale[1]/3600.
 
     @property
+    def extent(self):
+        """
+        The extent of the .fits data in arcsec (left, bottom, top, right)
+
+        Args/Kwargs:
+            None
+
+        Return:
+            extent <list(float)> - the map extent
+        """
+        return [-0.5*self.px2arcsec[0]*self.naxis1, -0.5*self.px2arcsec[1]*self.naxis2,
+                0.5*self.px2arcsec[0]*self.naxis1, 0.5*self.px2arcsec[1]*self.naxis2]
+
+    @property
     def photzp(self):
         """
         Photometric zero-point
@@ -674,47 +686,6 @@ class SkyF(object):
         """
         self.hdr['PHOTZP'] = photzp
         self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=photzp)
-
-    @property
-    def light_model(self):
-        """
-        The light model to the .fits data
-
-        Args/Kwargs:
-            None
-
-        Return:
-            model <gleam.model object> - the light profile model fitting the data
-        """
-        if not hasattr(self, '_light_model'):
-            self._light_model = {}
-        models = {}
-        for k in self._light_model:
-            module_name = 'gleam.model.{}'.format(k)
-            cls_name = k.capitalize()
-            module = __import__(module_name, fromlist=[k])
-            cls = getattr(module, cls_name)
-            models[k] = cls(**self._light_model[k])
-        return models
-
-    @light_model.setter
-    def light_model(self, model):
-        """
-        Setter of the light models
-
-        Args:
-            model <dict/gleam.model object> - dictionary of direcy input of the model
-
-        Kwargs/Return:
-            None
-        """
-        if not hasattr(self, '_light_model'):
-            self._light_model = {}
-        if isinstance(model, dict):
-            self._light_model.update(model)
-        else:
-            self._light_model[model.__modelname__] = {
-                k: v for k, v in zip(model.parameter_keys, model.model_parameters)}
 
     @property
     def field(self):
@@ -1283,6 +1254,13 @@ def main(case, args):
     """
     sp = SkyF(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
               photzp=args.photzp, verbose=args.verbose)
+    if args.hdr:
+        print('HEADER:')
+        for k in sp.hdr.keys():
+            if isinstance(sp.hdr[k], list):
+                print(k+"\n\t"+"\n\t".join(sp.hdr[k]))
+            else:
+                print(k.ljust(20)+str(sp.hdr[k]))
     if args.show or args.savefig is not None and args.fullsky is None:
         sp.show_f(as_magnitudes=args.mags, figsize=args.figsize, savefig=args.savefig,
                   scalebar=args.scalebar, colorbar=args.colorbar, verbose=args.verbose)
@@ -1309,6 +1287,10 @@ def parse_arguments():
                         help="Values of the reference pixel")
     parser.add_argument("--photzp", metavar="<zp>", type=float,
                         help="Magnitude zero-point information")
+
+    # misc options
+    parser.add_argument("--hdr", dest="hdr", action="store_true",
+                        help="Print the hdr", default=False)
 
     # plotting args
     parser.add_argument("-s", "--show", dest="show", action="store_true",

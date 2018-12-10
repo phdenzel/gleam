@@ -137,7 +137,8 @@ class MultiLens(SkyPatch):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return super(MultiLens, self).tests + ['lens_objects', 'lens', 'srcimgs', 'srcimgs_xy']
+        return super(MultiLens, self).tests + ['lens_objects', 'lens', 'srcimgs', 'srcimgs_xy',
+                                               'light_model']
 
     @property
     def fs(self):
@@ -252,6 +253,19 @@ class MultiLens(SkyPatch):
         """
         return [p.add_srcimg(position, **kwargs) for p in self.lens_objects]
 
+    @property
+    def light_model(self):
+        """
+        The light models from the list of .fits file data
+
+        Args/Kwargs:
+            None
+
+        Return:
+            light_model <dict(gleam.model object)> - list of gleam.model objects
+        """
+        return [nu.light_model for nu in self]
+
     def add_to_patch(self, filepath, index=None, verbose=False, **kwargs):
         """
         Add a file to the patch after initialization
@@ -338,22 +352,6 @@ class MultiLens(SkyPatch):
         if verbose:
             print(self.__v__)
 
-    # def image_patch(self, **kwargs):
-    #     """
-    #     An 8-bit PIL.Image of the .fits data
-
-    #     Args:
-    #         None
-
-    #     Kwargs:
-    #         cmap <str> - a cmap string from matplotlib.colors.Colormap
-    #         draw_roi <bool> - draw the ROI objects on top of data
-
-    #     Return:
-    #         f_images <list(PIL.Image object)> - a colorized image object
-    #     """
-    #     return [l.image_f(**kwargs) for l in self.lens_objects]
-
     def plot_composite(self, fig, ax=None, method='standard', lens=False, source_images=False,
                        colorbar=False, scalebar=True, verbose=False, **kwargs):
         """
@@ -399,12 +397,13 @@ def main(case, args):
                    lens=args.lens, photzp=args.photzp,
                    auto=args.auto, verbose=args.verbose,
                    finder_options=dict(n=args.n, sigma=args.sigma, min_q=args.min_q),
-                   glscfactory_options=dict(text_file=args.text_file, filter_=args.filter_))
-    if args.show == 'bands' or args.savefig:
+                   glscfactory_options=dict(text_file=args.text_file, filter_=args.filter_,
+                                            reorder=args.reorder))
+    if args.show == 'bands':
         ml.show_patch(as_magnitudes=args.mags, figsize=args.figsize,
                       lens=args.show_lens, source_images=args.show_sources,
                       scalebar=args.scalebar, colorbar=args.colorbar, savefig=args.savefig)
-    elif args.show == 'composite' or args.savefig:
+    elif args.show == 'composite':
         ml.show_composite(figsize=args.figsize, method=args.method,
                           lens=args.show_lens, source_images=args.show_sources,
                           scalebar=args.scalebar, savefig=args.savefig)
@@ -415,16 +414,12 @@ def main(case, args):
         ml.show_composite(figsize=args.figsize, method=args.method,
                           lens=args.show_lens, source_images=args.show_sources,
                           scalebar=args.scalebar)
-    # if args.gen_config is not None:
-    #     if args.append_config:
-    #         pass  #TODO: once a uniform solution has been found
-    #     else:
-    #         pass  #TODO: once a uniform solution has been found
 
 
 def parse_arguments():
     from argparse import ArgumentParser, RawTextHelpFormatter
     parser = ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
+
     # main args
     parser.add_argument("case", nargs='*',
                         help="Path input to .fits file for skyf to use",
@@ -432,15 +427,6 @@ def parse_arguments():
     parser.add_argument("-a", "--auto", dest="auto", action="store_true",
                         help="Use automatic image recognition (can be unreliable)",
                         default=False)
-    parser.add_argument("-n", "--npeaks", dest="n", metavar="<N>", type=int,
-                        help="Number of peaks the automatic image recognition is supposed to find",
-                        default=5)
-    parser.add_argument("-q", "--min-q", dest="min_q", metavar="<min_q>", type=float,
-                        help="A percentage quotient for the minimal peak separation",
-                        default=0.1)
-    parser.add_argument("--sigma", metavar=("<sx", "sy>"), dest="sigma", nargs=2, type=float,
-                        help="Lower/upper sigma factor for signal-to-noise estimation",
-                        default=(2, 2))
     parser.add_argument("--scale", metavar=("<dx", "dy>"), nargs=2, type=float,
                         help="Pixel-to-arcsec scale for x (-RA) and y (Dec) direction")
     parser.add_argument("--refpx", metavar=("<x", "y>"), nargs=2, type=float,
@@ -482,24 +468,23 @@ def parse_arguments():
     parser.add_argument("--savefig", dest="savefig", metavar="<output-name>", type=str,
                         help="Save the figure in <output-name> instead of showing it")
 
-    # gls config factory args
-    parser.add_argument("--single-config", dest="config_single", metavar="<output-name>", type=str,
-                        help="Generate a glass config file")
-    parser.add_argument("--multi-config", dest="config_multi", metavar="<output-name>", type=str,
-                        help="Generate a glass config file in append-mode")
-    parser.add_argument("--name", dest="name", metavar="<name>", type=str,
-                        help="Name of the lens object in the glass config file")
-    parser.add_argument("--finish", dest="finish_config", action="store_true",
-                        help="Append and complete the config file with these configs"
-                        + " in multi-config mode",
-                        default=False)
+    # lensfinder options
+    parser.add_argument("-n", "--npeaks", dest="n", metavar="<N>", type=int,
+                        help="Number of peaks the automatic image recognition is supposed to find",
+                        default=5)
+    parser.add_argument("-q", "--min-q", dest="min_q", metavar="<min_q>", type=float,
+                        help="A percentage quotient for the minimal peak separation",
+                        default=0.1)
+    parser.add_argument("--sigma", metavar=("<sx", "sy>"), dest="sigma", nargs=2, type=float,
+                        help="Lower/upper sigma factor for signal-to-noise estimation",
+                        default=(2, 2))
+
+    # glscfactory options
     parser.add_argument("--text-file", dest="text_file", metavar="<path-to-file>", type=str,
                         help="Path to text file with additional info for glass config generation")
     parser.add_argument("--filter", dest="filter_", action="store_true",
                         help="Use GLSCFactory's additional filter for extracted text info",
                         default=False)
-    parser.add_argument("--reorder", dest="reorder", metavar="<abcd-order>", type=str.upper,
-                        help="reorder the image positions relative to ABCD ordered bottom-up")
 
     # mode args
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",

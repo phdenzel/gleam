@@ -275,7 +275,7 @@ class SkyPatch(object):
             tests <list(str)> - a list of test variable strings
         """
         return ['N', 'filepaths', 'files', 'fs', 'bands', 'naxis1', 'naxis2', 'naxis_plus',
-                'structure', 'roi', 'light_model']
+                'structure', 'roi']
 
     @property
     def __v__(self):
@@ -431,19 +431,6 @@ class SkyPatch(object):
             roi <list(ROISelector object)> - list of gleam.ROISelector instances
         """
         return [nu.roi for nu in self]
-
-    @property
-    def light_model(self):
-        """
-        The light models from the list of .fits file data
-
-        Args/Kwargs:
-            None
-
-        Return:
-            light_model <dict(gleam.model object)> - list of gleam.model objects
-        """
-        return [nu.light_model for nu in self]
 
     def image_patch(self, **kwargs):
         """
@@ -760,15 +747,19 @@ class SkyPatch(object):
 def main(case, args):
     sp = SkyPatch(case, px2arcsec=args.scale, refpx=args.refpx, refval=args.refval,
                   photzp=args.photzp, verbose=args.verbose)
-    if args.show == 'bands' or args.savefig is not None:
+    if args.show == 'bands':
         sp.show_patch(as_magnitudes=args.mags, figsize=args.figsize,
-                      savefig=args.savefig, scalebar=args.scalebar, colorbar=args.colorbar)
-    elif args.show == 'composite' or args.savefig is not None:
+                      scalebar=args.scalebar, colorbar=args.colorbar,
+                      savefig=args.savefig)
+    elif args.show == 'composite':
         sp.show_composite(figsize=args.figsize, method=args.method,
-                          savefig=args.savefig, scalebar=args.scalebar)
+                          scalebar=args.scalebar, savefig=args.savefig)
     elif args.show == 'both':
-        sp.show_patch(as_magnitudes=args.mags, figsize=args.figsize, scalebar=args.scalebar)
-        sp.show_composite(figsize=args.figsize, method=args.method, scalebar=args.scalebar)
+        sp.show_patch(as_magnitudes=args.mags, figsize=args.figsize,
+                      scalebar=args.scalebar, savefig=args.savefig)
+        sp.show_composite(figsize=args.figsize, method=args.method,
+                          scalebar=args.scalebar, colorbar=args.colorbar,
+                          savefig=args.savefig)
 
 
 def parse_arguments():
