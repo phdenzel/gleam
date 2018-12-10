@@ -39,6 +39,8 @@ class GLSCFactory(object):
                 'zs': ['redshift', 'source redshift', 'lens/source redshift',
                        'lens/src redshift', 'l/s redshift', 'source/lens redshift',
                        'src/lens redshift', 's/l redshift'],
+                'lens': ['lens position', 'lens coordinates'],
+                'srcimgs': ['image positions', 'image coordinates'],
                 'photzp': ['zeropoint', 'zero-point', 'zero point', 'zp'],
                 'tdelay': ['time delay', 'delay', 'BCD - A', 'B - A'],
                 'tderr': ['time delay', 'delay', 'BCD - A', 'B - A'],
@@ -69,10 +71,10 @@ class GLSCFactory(object):
 
     def __init__(self, parameter=None, text_file=None, text=None, filter_=True, sync=True,
                  lens_object=None, fits_file=None,
-                 template_single=os.path.abspath(os.path.dirname(__file__)) \
-                 + '/' + 'template.single.gls',
-                 template_multi=os.path.abspath(os.path.dirname(__file__)) \
-                 + '/' + 'template.multi.gls',
+                 template_single=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                              'template.single.gls'),
+                 template_multi=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                             'template.multi.gls'),
                  output=None, name=None, reorder=None, verbose=False, **kwargs):
         """
         Initialize a Glass Config Factory with information from .fits and/or .txt file
@@ -212,12 +214,16 @@ class GLSCFactory(object):
             for i, line in enumerate(self._config[k]):
                 param = line[1:].split("=")[0].strip()
                 if line[0] == "_" and param in parameter:
-                    if param == 'ABCD' and parameter['reorder'] is not None and not parameter_reordered:
+                    if param == 'ABCD' and parameter['reorder'] is not None \
+                       and not parameter_reordered:
                         topbottom = list(parameter['ABCD'])  # not yet ABCD
                         parameter_reordered = True
                         for j, x in enumerate(parameter['reorder']):
                             parameter['ABCD'][GLSCFactory.labeling[x]] = topbottom[j]
                     self._config[k][i] = param+" = "+str(parameter[param])+"\n"
+                # None values
+                elif line[0] == "_":
+                    self._config[k][i] = param+" = "+"None\n"
         return self._config
 
     @staticmethod
@@ -393,23 +399,38 @@ class GLSCFactory(object):
         info = dict()
         if directory is not None:
             info.update({'dpath': "'{}'".format(directory)})
-        # positions
-        ABCD = lo.src_shifts(unit='arcsec')
+        # get info from lens object
+        for k in GLSCFactory.keywords.keys():
+            if k in dir(lo):
+                par = lo.__getattribute__(k)
+                info[k] = par
+        # exceptional transformations and assignments
+        lens = lo.lens.xy if lo.lens else lo.center.xy
+        ABCD = lo.srcimgs_xy
         # parity
         if len(lo.srcimgs) == 4:
             parity = ['min', 'min', 'sad', 'sad']
         elif len(lo.srcimgs) == 2:
             parity = ['min', 'sad']
+        elif len(lo.srcimgs) == 5:
+            parity = ['min', 'min', 'sad', 'sad', 'max']
+        elif len(lo.srcimgs) == 3:
+            parity = ['min', 'sad', 'max']
         else:
             ABCD = [ABCD[i] if len(ABCD) > i else [] for i in range(4)]
             parity = ['min', 'min', 'sad', 'sad']
-        # gather info and return it
-        info.update({'ABCD': ABCD, 'parity': parity})
+        info.update({'ABCD': ABCD, 'lens': lens,
+                     'parity': parity})
+        # some defaults
+        if not info['zl']:
+            info['zl'] = 0.5
+        if not info['zs']:
+            info['zs'] = 3.0
         if verbose:
             print(info)
         return info
 
-    def write(self, filename=None, verbose=False):
+    def write(self, filename=None, adjust_paths=True, verbose=False):
         """
         Write glass configs to a new file
 
@@ -418,6 +439,7 @@ class GLSCFactory(object):
 
         Kwargs:
             filename <str> - save in a different location as given in output
+            adjust_paths <bool> - change the output paths in the config file according to filename
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -427,16 +449,25 @@ class GLSCFactory(object):
             if '~' in filename:
                 filename = os.path.expanduser(filename)
             self.directory, self.fname = os.path.split(os.path.abspath(filename))
+        if adjust_paths:
+            fname = self.fname
+            if fname.endswith('.config.gls'):
+                fname = ".".join(self.fname.split('.')[:-2])
+            elif fname.endswith('.gls'):
+                fname = ".".join(self.fname.split('.')[:-1])
+            self.parameter = {'dpath': "'{}'".format(self.directory),
+                              'fname': "'{}'".format(fname)}
         mkdir_p(self.directory)
-        output = self.directory+"/"+self.fname
-        if not self.fname.endswith(".gls"):
+        output = os.path.join(self.directory, self.fname)
+        if not output.endswith(".gls"):
             output = output + ".gls"
         with open(output, 'w') as f:
             f.writelines(self.config['single'])
         if verbose:
             print('Writing configs to {}'.format(output))
 
-    def append(self, filename=None, multi=True, last=False, verbose=False):
+    def append(self, filename=None, multi=True, last=False, adjust_paths=True,
+               verbose=False):
         """
         Append only lens specific configs to an already existing file
 
@@ -447,6 +478,7 @@ class GLSCFactory(object):
             filename <str> - save in a different location as given in output
             multi <bool> - use multi template instead of single template
             last <bool> - complete file by attaching the last 4 lines
+            adjust_paths <bool> - change the output paths in the config file according to filename
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -457,6 +489,14 @@ class GLSCFactory(object):
             if '~' in filename:
                 filename = os.path.expanduser(filename)
             self.directory, self.fname = os.path.split(os.path.abspath(filename))
+        if adjust_paths:
+            fname = self.fname
+            if fname.endswith('.config.gls'):
+                fname = ".".join(self.fname.split('.')[:-2])
+            elif fname.endswith('.gls'):
+                fname = ".".join(self.fname.split('.')[:-1])
+            self.parameter = {'dpath': "'{}'".format(self.directory),
+                              'fname': "'{}'".format(fname)}
         mkdir_p(self.directory)
         output = self.directory+"/"+self.fname
         if not self.fname.endswith(".gls"):
