@@ -1,12 +1,13 @@
 ### Automatically generated GLASS config script for a single lens
 ###############################################################################
-from numpy import argsort
+import os
+import numpy as np
 
 
 ### Meta info
 _dpath = 
 _fname = 
-fpath = dpath+fname
+fpath = os.path.join(dpath, fname)
 glass_basis('glass.basis.pixels', solver='rwalk')
 meta(author='GLSCFactory', notes='single-config-mode')
 setup_log(fpath+'.log')
@@ -32,7 +33,7 @@ include_prior(
 
 ### Cosmology
 omega(0.27, 0.73)
-# hubble_constant(72.032)
+hubble_constant(72.032)
 # hubble_time(13.7)
 
 
@@ -52,19 +53,27 @@ local_gradient(45)
 shear(0.01)
 # symm()
 
-maprad(2)
+# maprad(2)
 
 
 ### Source
 _zs = 
 
+_lens = 
 _ABCD = 
 _parity = 
+_px2arcsec = 
+
+for i in range(len(ABCD)):
+    ABCD[i] = (ABCD[i][0]-lens[0])*px2arcsec[0], (ABCD[i][1]-lens[1])*px2arcsec[1]
 
 _tdelay = 
 _tderr = 
-delay_order = argsort(tdelay)              # idxs of tdelay ordered after delay times
-image_order = (delay_order+1) % len(ABCD)  # idxs of  ABCD  ordered after delay times
+# idxs of tdelay ordered after delay times
+delay_order = np.argsort(tdelay) if tdelay else np.array([(i-1) % len(ABCD) for i in range(len(ABCD))])
+# idxs of ABCD ordered after delay times
+image_order = (delay_order+1) % len(ABCD)
+
 
 pos_par_td = [ABCD[image_order[0]], parity[0]]
 for i in range(1, len(ABCD)):
@@ -74,11 +83,12 @@ for i in range(1, len(ABCD)):
 
 source(zs, *pos_par_td)
 
-# exlicit time delays
-for i, td in enumerate(tdelay[:-1]):
-    delay(ABCD[0], ABCD[i+1], [td-tderr[i], td+tderr[i]])
+# explicit time delays
+if tdelay:
+    for i, td in enumerate(tdelay[:-1]):
+        delay(ABCD[0], ABCD[i+1], [td-tderr[i], td+tderr[i]])
 
 
 ###############################################################################
-model(10000)
+model(1000)
 savestate(fpath+'.state')
