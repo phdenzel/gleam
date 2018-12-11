@@ -1,0 +1,8 @@
+# Filter            columns   AB/Vega   zp_error   zp_offset
+uMega_fil            2,  3     AB        0.035        30.0
+gMega_fil            4,  5     AB        0.035        30.0
+rMega_fil            6,  7     AB        0.035        30.0
+iMega_fil            8,  9     AB        0.035        30.0
+i2Mega_fil          10, 11     AB        0.035        30.0
+zMega_fil           12, 13     AB        0.035        30.0
+M_0                 8
