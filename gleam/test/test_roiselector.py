@@ -97,7 +97,8 @@ class TestROISelector(UnitTestPrototype):
         self.assertTrue(np.any(s))
         self.roi.data[self.roi()] = 100
         plt.imshow(self.roi.data, cmap='bone', origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
         # on shape (200, 300, 4)
         W, H = 300, 200
@@ -109,7 +110,8 @@ class TestROISelector(UnitTestPrototype):
         e[~roi()] = 0
         e[:, :, 3] = 1
         plt.imshow(e, origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
 
     def test_select_rect(self):
@@ -123,7 +125,8 @@ class TestROISelector(UnitTestPrototype):
         self.assertTrue(np.any(s))
         self.roi.data[self.roi()] = 100
         plt.imshow(self.roi.data, cmap='bone', origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
         # on shape (200, 300, 4)
         W, H = 300, 200
@@ -135,7 +138,8 @@ class TestROISelector(UnitTestPrototype):
         e[~roi()] = 0, 0, 1, 0
         e[:, :, 3] = 1
         plt.imshow(e, origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
 
     def test_select_square(self):
@@ -149,7 +153,8 @@ class TestROISelector(UnitTestPrototype):
         self.assertTrue(np.any(s))
         self.roi.data[self.roi()] = 100
         plt.imshow(self.roi.data, cmap='bone', origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
         # on shape (200, 300, 4)
         W, H = 300, 200
@@ -161,7 +166,8 @@ class TestROISelector(UnitTestPrototype):
         e[~roi()] = 0, 0, 1, 0
         e[:, :, 3] = 1
         plt.imshow(e, origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
 
     def test_select_polygon(self):
@@ -175,7 +181,8 @@ class TestROISelector(UnitTestPrototype):
         self.assertTrue(np.any(s))
         self.roi.data[self.roi()] = 100
         plt.imshow(self.roi.data, cmap='bone', origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
         # on shape (200, 300, 4)
         W, H = 300, 200
@@ -187,7 +194,8 @@ class TestROISelector(UnitTestPrototype):
         e[~roi()] = 0, 0, 1, 0
         e[:, :, 3] = 1
         plt.imshow(e, origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
 
     def test_select_amorph(self):
@@ -202,7 +210,8 @@ class TestROISelector(UnitTestPrototype):
         self.assertTrue(np.any(s))
         self.roi.data[self.roi()] = 100
         plt.imshow(self.roi.data, cmap='bone', origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
         # scattered points on shape (200, 300, 4)
         W, H = 300, 200
@@ -215,7 +224,8 @@ class TestROISelector(UnitTestPrototype):
         e[~roi()] = 0, 0, 1, 0
         e[:, :, 3] = 1
         plt.imshow(e, origin='lower')
-        plt.show()
+        if 0:
+            plt.show()
         plt.close()
 
     def test_mpl_interface(self):

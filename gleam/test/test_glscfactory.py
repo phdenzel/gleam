@@ -43,7 +43,7 @@ class TestGLSCFactory(UnitTestPrototype):
         self.assertIsInstance(factory, GLSCFactory)
         lo = LensObject(self.test_fits)
         print(">>> {}".format(lo))
-        factory = GLSCFactory(lens_object=lo, **self.kwargs)
+        factory = GLSCFactory(lensobject=lo, **self.kwargs)
         self.assertIsInstance(factory, GLSCFactory)
 
     def test_text_extract(self):

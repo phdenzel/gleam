@@ -21,8 +21,8 @@ class TestLensObject(UnitTestPrototype):
 
     def setUp(self):
         # arguments and keywords
-        self.test_fits = os.path.abspath(os.path.dirname(__file__)) \
-                         + '/W3+3-2.U.12907_13034_7446_7573.fits'
+        self.test_fits = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                      'W3+3-2.U.12907_13034_7446_7573.fits')
         # __init__ test
         self.lobject = LensObject(self.test_fits)
         # verbosity
@@ -49,9 +49,9 @@ class TestLensObject(UnitTestPrototype):
         auto = kwargs.pop('auto')
         lobject = LensObject(self.test_fits, auto=auto, finder_options=kwargs, **self.v)
         self.assertIsInstance(lobject, LensObject)
-        print(">>> {}".format(None))
-        lobject = LensObject(None, **self.v)
-        self.assertIsInstance(lobject, LensObject)
+        # print(">>> {}".format(None))
+        # lobject = LensObject(None, **self.v)
+        # self.assertIsInstance(lobject, LensObject)
 
     def test_copy(self):
         """ # copy """
@@ -228,7 +228,9 @@ class TestLensObject(UnitTestPrototype):
         self.lobject.lens = (96, 96)
         self.lobject.srcimgs_xy = [(70, 70)]
         img = self.lobject.image_f(draw_lens=True, draw_srcimgs=True, draw_roi=True)
-        img.show()
+        if 0:
+            img.show()
+
 
 if __name__ == "__main__":
     TestLensObject.main(verbosity=1)

@@ -2,7 +2,6 @@
 
 #+HTML: <b>G</b>ravitational <b>LE</b>ns <b>A</b>nalysis <b>M</b>odule
 
-
 ** Binaries
 
 GLEAM is avaiable as a standalone app for macOS.
@@ -27,20 +26,24 @@ This will unpack, compile, and install all the necessary dependencies.
 *** gleam.skycoords
 Framework for reading astronomical coordinates such as /J2000/, /RA/Dec/, etc.
 Is able to convert between different coordinate systems, and interfaces particularly well with
-the MegaPipe pixel coordinate system.
+the CFHTLS MegaPipe pixel coordinate system.
+- TODO: 
 
 *** gleam.skyf
 Reads in a single ~.fits~ file and extracts general information on the observation.
 Also contains several plotting procedures which visualize the data.
+- TODO: add test for extent
 
 *** gleam.skypatch
 Reads in a set of ~.fits~ files and extracts general information on the observation in different bands,
 analogously to ~skyf.py~ (importing ~skyf.py~). Visualizes data as stacked or palette image.
+- TODO: 
 
 *** gleam.lensobject
 Inherits from ~SkyF~. Additionally extracts properties important for gravitational lenses
 and lensed sources.
 Visualizes these properties on top of inherited plotting procedures.
+- TODO: complete docstrings, add light_model, stel_mass, lens_map to tests
 
 *** gleam.multilens
 Inherits from ~SkyPatch~. Additionally extracts properties important for gravitational lenses
@@ -52,13 +55,13 @@ Visualizes these properties on top of inherited plotting procedures as stacked o
 A simple peak finder to extract lens and source image positions.
 Uses very crude procedures, whose parameters have to be fine-tuned.
 Provides an automatic lens detection feature to the ~LensObject~ class.
-- TODO: Write a main method for use as a script!
+- TODO: Write a main method for usage as script!
 
 *** gleam.glscfactory
 GLASS config-file generator.
 Features a sync and config reading feature with ~LensObject~ class.
 Can be used to write config files for ~LensObject~ class instances, or to extract config files from ~LensObject~ class instances.
-- TODO: Write a main method for use as a script!
+- TODO: Write a main method for usage as script!
 
 *** gleam.gui
 - TODO

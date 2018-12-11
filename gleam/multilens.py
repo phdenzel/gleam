@@ -124,7 +124,11 @@ class MultiLens(SkyPatch):
             raise IndexError
 
     def __str__(self):
-        return "MultiLens({})".format(", ".join(self.bands))
+        bands = ", ".join(self.bands)
+        if bands:
+            return "MultiLens({})".format(bands)
+        else:
+            return "MultiLens({})".format(self.encode())
 
     @property
     def tests(self):

@@ -94,7 +94,7 @@ class LensObject(SkyF):
         self._lens = None  # lens position (assume to be in the center for finder)
         self.srcimgs = []  # source image positions
         # GLASS config factory for parsing text and config files
-        self.glscfactory = GLSCFactory(lens_object=self, **glscfactory_options)
+        self.glscfactory = GLSCFactory(lensobject=self, **glscfactory_options)
         self.glscfactory.sync_lens_params(verbose=False)  # load parameters from text file or dict
         # LensFinder for automatic search of lens and source image positions
         self._lens = self.center  # needs lens reference for dummy shifts

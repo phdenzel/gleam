@@ -70,7 +70,7 @@ class GLSCFactory(object):
     labeling = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8}
 
     def __init__(self, parameter=None, text_file=None, text=None, filter_=True, sync=True,
-                 lens_object=None, fits_file=None,
+                 lensobject=None, fits_file=None,
                  template_single=os.path.join(os.path.abspath(os.path.dirname(__file__)),
                                               'template.single.gls'),
                  template_multi=os.path.join(os.path.abspath(os.path.dirname(__file__)),
@@ -86,10 +86,10 @@ class GLSCFactory(object):
             parameter <dict> - parameter directly for the GLASS config generation
             text_file <str> - path to .txt file (shortcuts are automatically resolved)
             text <list(str)> - alternatively to text_file the text can be input directly
-            lens_object <LensObject object> - a lens object for basic information about lens
+            lensobject <LensObject object> - a lens object for basic information about lens
             fits_file <str> - alternatively to a lens object, a path to .fits file
                               (shortcuts are automatically resolved) can be input
-            override <bool> - change values in lens_object obtained from text
+            override <bool> - change values in lensobject obtained from text
             output <str> - output name of the .gls file
             name <str> - object name in the .gls file (extracted from output by default)
             reorder <str> - reorder the image positions relative to ABCD ordered bottom-up
@@ -123,12 +123,12 @@ class GLSCFactory(object):
             self.text = text
 
         # read lens input
-        if lens_object is None:
-            self.lens_object = None
+        if lensobject is None:
+            self.lensobject = None
             if fits_file is not None:
-                self.lens_object = gleam.lensobject.LensObject(fits_file, auto=True, **kwargs)
+                self.lensobject = gleam.lensobject.LensObject(fits_file, auto=True, **kwargs)
         else:
-            self.lens_object = lens_object
+            self.lensobject = lensobject
         if sync:
                 self.sync_lens_params()
 
@@ -156,7 +156,7 @@ class GLSCFactory(object):
         Return:
             <str> - test of GLSCFactory attributes
         """
-        tests = ['lens_object', 'text', 'directory', 'name', 'parameter',
+        tests = ['lensobject', 'text', 'directory', 'name', 'parameter',
                  'template', 'config']
         return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in tests])
 
@@ -174,7 +174,7 @@ class GLSCFactory(object):
         if self._parameter is None:
             self._parameter = dict()
         text_info = self.text_extract(self.text, filter_=True)
-        lens_info = self.lens_extract(self.lens_object)
+        lens_info = self.lens_extract(self.lensobject)
         self._parameter.update(text_info)
         self._parameter.update(lens_info)
         return self._parameter
@@ -377,10 +377,10 @@ class GLSCFactory(object):
             None
         """
         for k in self.parameter.keys():
-            if k in dir(self.lens_object):
-                self.lens_object.__setattr__(k, self.parameter[k])
+            if k in dir(self.lensobject):
+                self.lensobject.__setattr__(k, self.parameter[k])
                 if verbose:
-                    print(self.lens_object.__getattribute__(k))
+                    print(self.lensobject.__getattribute__(k))
 
     @staticmethod
     def lens_extract(lo, directory=None, quad=True, double=False, output=None, verbose=False):
