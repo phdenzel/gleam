@@ -610,7 +610,7 @@ class SkyCoords(object):
         if ra is None:
             self._ra = ra
         else:
-            self._ra = ra % 360
+            self._ra = ra % (360*math.copysign(1, ra))
 
     @property
     def dec(self):
