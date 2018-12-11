@@ -45,7 +45,7 @@ class _BaseModel(object):
         Kwargs:
             x <float> - first center coordinate on x-axis
             y <float> - second center coordinate on y-axis
-            phi <float> - position angle (in radians [0, 2\pi])
+            phi <float> - position angle (in radians [0, 2*pi])
             e <float> - ellipticity [0, 1]
             I_0 <float> - model observable value, e.g. in the center
             c_0 <float> - box parameter
@@ -266,8 +266,8 @@ class _BaseModel(object):
         if not hasattr(self, "_priors"):
             self._priors = [[0., float(self.Nx)],
                             [0., float(self.Ny)],
-                            [0., np.pi],
-                            [0., .5],
+                            [0., 2*np.pi],
+                            [0., .9],
                             [1e-1, 3e2],  # increase if upper limit too low
                             [0., 10.]]
         return self._priors
@@ -444,6 +444,7 @@ class _BaseModel(object):
         """
         verbose = kwargs.pop('verbose', False)
         smooth_center = kwargs.pop('smooth_center', False)
+        self.indices = np.indices((self.Ny, self.Nx))
         self.map2D = self.calc_pixel(self.indices[1], self.indices[0], **kwargs)
         if smooth_center:
             x0, y0 = self.x, self.y
@@ -473,6 +474,47 @@ class _BaseModel(object):
             else:
                 n_subsamples = min(100, int(2*r_sample/r))
         return n_subsamples
+
+    # @staticmethod
+    # def integrate(data, mask=None):
+    #     """
+    #     Integrate a data map
+
+    #     Args:
+    #         data <np.ndarray> - data to be normalized
+
+    #     Kwargs:
+    #         mask <np.ndarray(bool)> - boolean mask used for integration
+
+    #     Return:
+    #         tot <float> - the integrated data map
+    #     # TODO: remove and replace with ROISelector.r_integrate and ROISelector.cumr_profile
+    #     """
+    #     data = np.asarray(data)
+    #     if mask is None:
+    #         mask = np.full(data.shape, True)
+    #     return np.sum(data[mask])
+
+    # @staticmethod
+    # def normalize(data, mask=None):
+    #     """
+    #     Calculate the normalized data map
+
+    #     Args:
+    #         data <np.ndarray> - data to be normalized
+
+    #     Kwargs:
+    #         mask <np.ndarray(bool)> - boolean mask used for integration
+
+    #     Return:
+    #         norm <np.ndarray> - normalized data map
+    #     TODO: move to ROISelector
+    #     """
+    #     data = np.asarray(data)
+    #     if mask is None:
+    #         mask = np.full(data.shape, True)
+    #     tot = np.sum(data[mask])
+    #     return data/tot
 
     def plot_map(self, log=False, colorbar=True, scalebar=None,
                  mask=None, contours=None, show=False, **kwargs):
@@ -586,22 +628,6 @@ class _BaseModel(object):
         return fig
 
     # @classmethod
-    # def integrate(cls, surface, radius, center=None):
-    #     """
-    #     Returns integrated surface upto radius r
-    #     """
-    #     surface = np.array(surface)  # just to be sure
-    #     if center is None:
-    #         center = [surface.shape[0]//2, surface.shape[1]//2]
-    #     msk = np.indices(surface.shape)
-    #     msk[0] -= center[0]  # shift to center
-    #     msk[1] -= center[1]  # shift to center
-    #     msk = np.square(msk)  # square for distance calculation
-    #     msk = msk[0, :, :] + msk[1, :, :] < radius*radius
-    #     surface[~msk] = 0
-    #     return np.sum(surface[msk])
-
-    # @classmethod
     # def expand_map(cls, pars, Nx, Ny, relative=False):
     #     """
     #     Expand parameters to new dimensions Nx, Ny
@@ -621,14 +647,3 @@ class _BaseModel(object):
     #     if 'Ny' in pars:
     #         pars['Ny'] = Ny
     #     return pars
-
-    # @classmethod
-    # def normalize_map(cls, surface, radius=None):
-    #     """
-    #     Return normalized map and the total map
-    #     """
-    #     if radius is None:
-    #         radius = surface.shape[0]//2
-    #     total = cls.integrate(surface, radius)
-    #     mask = None
-    #     return surface/total, total, mask

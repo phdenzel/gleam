@@ -165,8 +165,9 @@ class Sersic(_BaseModel):
         """
         if not hasattr(self, '_priors'):
             self._priors = super(Sersic, self).priors + [
-                [0.5, 25.],
-                [2., np.sqrt(2)*.125*(self.Nx+self.Ny)]]
+                [0.5, 2.5],
+                # [2., np.sqrt(2)*0.0625*(self.Nx+self.Ny)]]
+                [2., np.sqrt(2)*0.125*(self.Nx+self.Ny)]]
         return self._priors
 
     @priors.setter

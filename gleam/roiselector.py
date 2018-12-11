@@ -208,6 +208,20 @@ class ROISelector(object):
         self._buffer[self._selection].append(roi)
 
     @property
+    def mask(self):
+        """
+        The most current ROI object from the buffer
+
+        Args/Kwargs:
+            None
+
+        Return:
+            buffer <ROISelector.[] object> - current ROI object
+        """
+        if self._masks[self._selection]:
+            return self._masks[self._selection][self._focus]
+
+    @property
     def _masks(self):
         """
         The masks for ROI selection derived from buffer
@@ -432,6 +446,62 @@ class ROISelector(object):
                 for s in self._buffer[k]:
                     img = s.draw2img(img)
         return img
+
+    @staticmethod
+    def r_integrate(data, mask=None, center=None, R=None):
+        """
+        Sum up all pixels from a data map at center radially outwards
+
+        Args:
+            data <np.ndarray> - the data to be integrated
+
+        Kwargs:
+            mask <np.ndarray(bool)> - boolean mask used for integration
+            center <float,float> - center from which to sum up the pixels (in pixels)
+            R <float> - the radius up to which to sum up the pixels (in pixels)
+
+        Return:
+            sum <float> - the sum of all pixels in the data map
+        """
+        data = np.asarray(data)
+        if center is None:
+            center = 0.5*data.shape[0], 0.5*data.shape[1]
+        if R is None:
+            R = 0.5*data.shape[0]
+        if mask is None:
+            roi = ROISelector(data)
+            mask = roi.select['circle'](center, R)
+        return np.sum(data[mask])
+
+    @staticmethod
+    def cumr_profile(data, center=None, radii=None, R=None):
+        """
+        Sum up all pixels from a data map at center radially outwards for multiple radii
+
+        Args:
+            data <np.ndarray> - the data to be integrated
+
+        Kwargs:
+            mask <np.ndarray(bool)> - boolean mask used for integration
+            center <float,float> - center from which to sum up the pixels (in pixels)
+            R <float> - the radius up to which to sum up the pixels (in pixels)
+        """
+        data = np.asarray(data)
+        if center is None:
+            center = 0.5*data.shape[0], 0.5*data.shape[1]
+        if R is None:
+            R = 0.5*data.shape[0]
+        if radii is None:
+            radii = np.linspace(0., R, 0.5*data.shape[0])
+        if len(radii) == 0:
+            radii = np.array([0])
+        roi = ROISelector(data)
+        profile = radii[:]
+        roi.select['circle'](center, radii[0])
+        for i, r in enumerate(radii):
+            roi.buffer.radius = r
+            profile[i] = np.sum(data[roi.mask])
+        return profile
 
     def mpl_interface(self):
         """
