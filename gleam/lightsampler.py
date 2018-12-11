@@ -16,16 +16,16 @@ Note:
 # Imports
 ###############################################################################
 import numpy as np
+from matplotlib import pyplot as plt
 import emcee  # http://dan.iel.fm/emcee/current/
 
 from gleam.skyf import SkyF
 from gleam.skypatch import SkyPatch
 from gleam.lensobject import LensObject
 from gleam.multilens import MultiLens
+from gleam.utils import colors as glmc
 
 # import logging
-# from collections import OrderedDict
-# from matplotlib import pyplot as plt
 
 ###############################################################################
 class LightSampler(object):
@@ -33,10 +33,10 @@ class LightSampler(object):
     MCMC sampler class for light profiles of galaxy lenses
     """
     def __init__(self, data, model='sersic',
-                 center=None, mask=None, gain=1, reduce_params=False, priors=None,
+                 center=None, mask=None, gain=1, priors=None,
                  verbose=False):
         """
-        Setup parameter space for walkers
+        Set up parameter space for walkers
 
         Args:
             data <np.ndarray> - data to be compared to model
@@ -44,14 +44,13 @@ class LightSampler(object):
         Kwargs:
             model <str/gleam.model.[] object> - name of model to be used or the model directly
             center <float,float> - coordinates where to put the model's center initially
-            masks <list(np.ndarray(bool))> - boolean masks to exclude in the model fitting
+            masks <np.ndarray(bool)> - boolean mask to exclude in the model fitting
             gain <float> - gain with which the data was boosted
-            reduce_params <bool> - only use the reduced parameter set
             priors <list> - a list of limits to limit the parameter space
             verbose <bool> - verbose mode; print command line statements
 
         Return:
-            <MCMCSampler object> - standard initializer
+            <LightSampler object> - standard initializer
         """
         self.data = np.asarray(data)
         self.center = center or (self.data.shape[0]//2, self.data.shape[1]//2)
@@ -75,72 +74,42 @@ class LightSampler(object):
             gleam <gleam object> - contains data of a or more than one .fits files
 
         Kwargs:
-            masks <list(np.ndarray(bool))> - boolean masks to exclude in the model fitting
+            band <str/int> - the band to use the model on (if multiple data maps are passed)
+            lens_mask <np.ndarray(bool)> - boolean masks to include in the model fitting
+            image_masks <np.ndarray(bool)> - boolean masks to exclude in the model fitting
+            center <float,float> - coordinates where to put the model's center initially
             gain <float> - gain with which the data was boosted
             reduce_params <bool> - only use the reduced parameter set
             priors <list> - a list of limits to limit the parameter space
             verbose <bool> - verbose mode; print command line statements
 
         Return:
-            <MCMCSampler object> - initialized with gleam object
+            <LightSampler object> - initialized with gleam object
         """
         if not isinstance(gleam, (SkyF, SkyPatch, LensObject, MultiLens)):
             return
         if len(gleam.data.shape) > 2:
             if band in gleam.bands:
-                data = gleam[band].data
-                if hasattr(gleam[band], 'lens') and gleam[band].lens:
-                    kwargs.setdefault('center', gleam[band].lens.xy)
-                elif hasattr(gleam[band], 'center') and gleam[band].center:
-                    kwargs.setdefault('center', gleam[band].center.xy)
-                if lens_mask:
-                    lens_mask = lens_mask
-                elif hasattr(gleam[band], 'roi') and gleam[band].roi:
-                    lens_mask = np.logical_or.reduce(gleam[band].roi._masks['circle'])
-                else:
-                    lens_mask = np.full(data.shape, True)
-                if image_mask:
-                    image_mask = image_mask
-                elif hasattr(gleam[band], 'roi') and gleam[band].roi:
-                    image_mask = np.logical_or.reduce(gleam[band].roi._masks['polygon'])
-                else:
-                    image_mask = np.full(data.shape, False)
+                gleam = gleam[band]
             else:
-                data = gleam[0].data
-                if hasattr(gleam[0], 'lens') and gleam[0].lens:
-                    kwargs.setdefault('center', gleam[0].lens.xy)
-                elif hasattr(gleam[0], 'center') and gleam[0].center:
-                    kwargs.setdefault('center', gleam[0].center.xy)
-                if lens_mask:
-                    lens_mask = lens_mask
-                elif hasattr(gleam[0], 'roi') and gleam[0].roi:
-                    lens_mask = np.logical_or.reduce(gleam[0].roi._masks['circle'])
-                else:
-                    lens_mask = np.full(data.shape, True)
-                if image_mask:
-                    image_mask = image_mask
-                elif hasattr(gleam[0], 'roi') and gleam[0].roi:
-                    image_mask = np.logical_or.reduce(gleam[0].roi._masks['polygon'])
-                else:
-                    image_mask = np.full(data.shape, False)
+                gleam = gleam[0]
+        data = gleam.data
+        if hasattr(gleam, 'lens') and gleam.lens:
+            kwargs.setdefault('center', gleam.lens.xy)
+        elif hasattr(gleam, 'center') and gleam.center:
+            kwargs.setdefault('center', gleam.center.xy)
+        if lens_mask:
+            lens_mask = lens_mask
+        elif hasattr(gleam, 'roi') and gleam.roi:
+            lens_mask = np.logical_or.reduce(gleam.roi._masks['circle'])
         else:
-            data = gleam.data
-            if hasattr(gleam, 'lens') and gleam.lens:
-                kwargs.setdefault('center', gleam.lens.xy)
-            elif hasattr(gleam, 'center') and gleam.center:
-                kwargs.setdefault('center', gleam.center.xy)
-            if lens_mask:
-                lens_mask = lens_mask
-            elif hasattr(gleam, 'roi') and gleam.roi:
-                lens_mask = np.logical_or.reduce(gleam.roi._masks['circle'])
-            else:
-                lens_mask = np.full(data.shape, True)
-            if image_mask:
-                image_mask = image_mask
-            elif hasattr(gleam, 'roi') and gleam.roi:
-                image_mask = np.logical_or.reduce(gleam.roi._masks['polygon'])
-            else:
-                image_mask = np.full(data.shape, False)
+            lens_mask = np.full(data.shape, True)
+        if image_mask:
+            image_mask = image_mask
+        elif hasattr(gleam, 'roi') and gleam.roi:
+            image_mask = np.logical_or.reduce(gleam.roi._masks['polygon'])
+        else:
+            image_mask = np.full(data.shape, False)
         kwargs.setdefault('mask', np.logical_and(lens_mask, ~image_mask))
         return cls(data, **kwargs)
 
@@ -559,8 +528,6 @@ class LightSampler(object):
         Return:
             fig <mpl.figure.Figure object> - the figure on which the corner plot was made
         """
-        from gleam.utils import colors as glmc
-        from matplotlib import pyplot as plt
         import corner  # https://github.com/dfm/corner.py
         # logger = logging.getLogger()
         # logger.disabled = True  # hide annoying warning log
@@ -593,9 +560,6 @@ class LightSampler(object):
         Return:
             fig <mpl.figure.Figure object> - the figure on which the residual plot was made
         """
-        import matplotlib.pyplot as plt
-        import warnings
-        warnings.filterwarnings("ignore", module="matplotlib")
         # data
         resid = self.data - self.model.get_map()
         if log:
@@ -646,20 +610,4 @@ class LightSampler(object):
 
 
 if __name__ == "__main__":
-    jsonfile = "multilens#6c5d09bc65803a10c65afea5684cd.json"
-    with open(jsonfile, 'r') as f:
-        ml = MultiLens.from_json(f, verbose=1)
-    print("\n")
-    sampler = LightSampler.from_gleamobj(ml)
-    sampler.parameters = {'x': 61, 'y': 68}
-    sampler.fixed = 'x', 'y', 'c_0'
-    kwargs = {'n_walkers': 500, 'burn_in': 50, 'mcmc_steps': 300}
-    sampler.run(**kwargs)
-    sampler.parspace_plot(show=1)
-    sampler.ensemble_average(verbose=0)
-    sampler.model.plot_map(show=1)
-    sampler.plot_residuals(show=1)
-    ml['i'].light_model = sampler.model
-    print(ml.__v__)
-    # fout = 'SW05.json'
-    # ml.jsonify(name=fout)
+    pass  # TODO
