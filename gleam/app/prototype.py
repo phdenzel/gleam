@@ -954,7 +954,7 @@ class CanvasPrototype(tk.Canvas, object):
             w, h = self._img_copy[self.cursor_index].size
             w, h = w-1, h-1
         else:
-            w, h = 0, 0
+            w, h = 128, 128
         if origin == 'SW':
             self.cursor_click = pos[0] % w, (h-pos[1]) % h
         if origin == 'NW':
@@ -990,7 +990,7 @@ class CanvasPrototype(tk.Canvas, object):
             w, h = self._img_copy[self.cursor_index].size
             w, h = w-1, h-1
         else:
-            w, h = 0, 0
+            w, h = 128, 128
         if origin == 'SW':
             self.cursor_position = pos[0] % w, (h-pos[1]) % h
         if origin == 'NW':
@@ -1026,7 +1026,7 @@ class CanvasPrototype(tk.Canvas, object):
             w, h = self._img_copy[self.cursor_index].size
             w, h = w-1, h-1
         else:
-            w, h = 0, 0
+            w, h = 128, 128
         if origin == 'SW':
             self.cursor_release = pos[0] % w, (h-pos[1]) % h
         if origin == 'NW':

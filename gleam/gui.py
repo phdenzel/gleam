@@ -10,8 +10,10 @@ An app for some gleamy interactive activity
 import sys
 import os
 import traceback
+from PIL import Image
 import matplotlib as mpl
 mpl.use('TkAgg')  # needs to come before any other matplotlib imports
+from matplotlib import pyplot as plt
 if sys.version_info.major < 3:
     import Tkinter as tk
     # import ttk
@@ -58,7 +60,11 @@ class App(FramePrototype):
         # self.master.wm_iconbitmap()
 
         # add lens framework
-        self.lens_patch = MultiLens(filepath, auto=False)
+        if filepath.endswith(".json"):
+            with open(filepath, 'r') as f:
+                self.lens_patch = MultiLens.from_json(f)
+        else:
+            self.lens_patch = MultiLens(filepath, auto=False)
         self.env.add(self.env, self.lens_patch, self, itemname='lens_patch')
 
         # initialize app components
@@ -70,23 +76,23 @@ class App(FramePrototype):
 
         # state attributes
         self.selection_mode = None
-        self.colormap = 'gnuplot2'
+        self.colormap = 'Spectral_r'
 
         # menubar
         self.menubar.main_labels = ['file', 'edit', 'view', 'help']
-        self.menubar.labels = [['open...', 'save as...', 'exit'],
-                               ['colormap'],
+        self.menubar.labels = [['open...', 'save as...', 'export .gls', 'exit'],
+                               ['colormap', 'toggle scalebar'],
                                ['navbar', 'toolbar', 'statusbar'],
                                ['help', 'about']]
         self.menubar.mk_checklist('colormap',
-                                  sub_labels=list(mpl.cm.datad.keys()),
+                                  sub_labels=list(plt.colormaps()),
                                   variable=self._colormap, command=self._on_colormap)
-        self.menubar.shortcuts = [[u'\u2303F', u'\u2303S', u'\u2303Q'],
-                                  [''],
+        self.menubar.shortcuts = [[u'\u2303F', u'\u2303S', u'', u'\u2303Q'],
+                                  ['', ''],
                                   [u'\u2303\u2325N', u'\u2303\u2325T', u'\u2303\u2325S'],
                                   [u'\u2303H', '']]
-        self.menubar.bindings = [[self._on_open, self._on_save_as, self._on_close],
-                                 [],
+        self.menubar.bindings = [[self._on_open, self._on_save_as, self._on_export_glsc, self._on_close],
+                                 [self.menubar.dummy_func, self.menubar.dummy_func],
                                  [self.menubar.dummy_func, self.menubar.dummy_func, self.menubar.dummy_func],
                                  [self._on_help, self._on_about], ]
         self.menubar.rebuild()
@@ -100,20 +106,20 @@ class App(FramePrototype):
                                          ['Mag', self.window.canvas.cursor_value_transf(
                                              self.lens_patch[0].mag_formula)], ])
         self.toolbar.add_buttons(
-            'selection', [['Lens', 'Undo lens'],
-                          ['Src imgs', 'Undo srcimgs'],
+            'selection', [['Lens', 'Clear lens'],
+                          ['Src imgs', 'Clear srcimgs'],
                           ['/assets/circle.png', 'Revert'],
                           ['/assets/rect.png', 'Delete'],
                           ['/assets/polygon.png'], ])
         self.toolbar.add_buttons(
-            ' ', [['save as json', 'save as png'], ])
+            ' ', [['Save JSON', 'Save PNG'], ])
         self.toolbar.bindings = [[],
-                                 [self._on_lens, self._on_lens_undo,
-                                  self._on_srcimgs, self._on_srcimgs_undo,
+                                 [self._on_lens, self._on_clear_lens,
+                                  self._on_srcimgs, self._on_clear_srcimgs,
                                   self._on_circle, self._on_revert,
                                   self._on_rect, self._on_delete,
                                   self._on_polygon],
-                                 [self._on_save_as_json, self.toolbar.dummy_func], ]
+                                 [self._on_save_as_json, self._on_save_as_png], ]
         self.toolbar.rebuild()
 
         # statusbar
@@ -329,7 +335,7 @@ class App(FramePrototype):
         """
         if not hasattr(self, '_colormap'):
             self._colormap = tk.StringVar()
-            self._colormap.set("gnuplot2")
+            self._colormap.set("viridis")
         return self._colormap.get()
 
     @colormap.setter
@@ -369,11 +375,53 @@ class App(FramePrototype):
         """
         fout = filedialog.asksaveasfilename(
             parent=self.master, defaultextension=".json",
-            initialfile=self.lens_patch.json_filename())
+            initialfile=self.lens_patch.json_filename(),
+            # filetypes=[
+            #     ('All files', '*.*'), ('JSON files', '*.json'),
+            #     ('Image files', '*.jpg'), ('Image files', '*.png'), ('Image files', '*.gif'),
+            #     ('Image files', '*.tiff'), ('Image files', '*.ppm'), ('Image files', '*.bmp'),
+            #     ('Image files', '*.eps'), ('Image files', '*.pdf')]
+        )
         if not fout:
-            fout = self.lens_patch.json_filename()
-        if fout.endswith('json'):
+            return
+        # save as json
+        if fout.endswith('.json'):
             self.lens_patch.jsonify(name=fout, with_hash=False)
+        # save as image
+        if True in [fout.endswith(ext) for ext in ['.png', '.PNG', '.sgi', '.tiff', ]]:
+            kwargs = {
+                'cmap': self.colormap,
+                'draw_lens': True,
+                'draw_srcimgs': True,
+                'draw_roi': True}
+            for i, img in enumerate(self.lens_patch.image_patch(**kwargs)):
+                fout = ".".join(fout.split('.')[:-1]+['{:04d}'.format(i)]+fout.split('.')[-1:])
+                img.save(fout)
+        if True in [fout.endswith(ext) for ext in ['.jpg', '.JPG', '.JPEG',
+                                                   '.bmp', '.eps', '.gif', '.ppm', '.pdf', ]]:
+            kwargs = {
+                'cmap': self.colormap,
+                'draw_lens': True,
+                'draw_srcimgs': True,
+                'draw_roi': True}
+            for i, img in enumerate(self.lens_patch.image_patch(**kwargs)):
+                fout = ".".join(fout.split('.')[:-1]+['{:04d}'.format(i)]+fout.split('.')[-1:])
+                # img.load()
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[3])
+                bg.save(fout, quality=100)
+
+    def _on_export_glsc(self, event=None):
+        """
+        Execute when 'export glsc' event is triggered
+        """
+        dfltname = self.lens_patch.json_filename()
+        dfltname = ".".join(dfltname.split('.')[:-1]+['config', 'gls'])
+        fout = filedialog.asksaveasfilename(
+            parent=self.master, defaultextension=".gls", initialfile=dfltname)
+        if not fout:
+            return
+        self.lens_patch[0].glscfactory.write(fout)
 
     def _on_close(self, event=None):
         """
@@ -417,7 +465,7 @@ class App(FramePrototype):
             self.selection_trace.append(
                 self.window.canvas._cursor_click.trace('w', self._lens_click))
 
-    def _on_lens_undo(self, event=None):
+    def _on_clear_lens(self, event=None):
         """
         Execute when 'lens undo' event is triggered
         """
@@ -439,12 +487,12 @@ class App(FramePrototype):
             self.selection_trace.append(
                 self.window.canvas._cursor_click.trace('w', self._srcimgs_click))
 
-    def _on_srcimgs_undo(self, event=None):
+    def _on_clear_srcimgs(self, event=None):
         """
         Execute when 'srcimgs undo' event is triggered
         """
         for l in self.lens_patch:
-            l._lens = None
+            l.srcimgs = []
         self.project_patch()
 
     def _on_circle(self, event=None):
@@ -530,8 +578,23 @@ class App(FramePrototype):
         Execute when 'save as json' event is triggered
         """
         fout = self.lens_patch.json_filename()
-        if fout.endswith('json'):
+        if fout.endswith('.json'):
             self.lens_patch.jsonify(name=fout, with_hash=False)
+
+    def _on_save_as_png(self, event=None):
+        """
+        Execute when 'save as png' event is triggered
+        """
+        fout = self.lens_patch.json_filename()
+        kwargs = {
+                'cmap': self.colormap,
+                'draw_lens': True,
+                'draw_srcimgs': True,
+                'draw_roi': True}
+        for i, img in enumerate(self.lens_patch.image_patch(**kwargs)):
+            fout = ".".join(fout.split('.')[:-1]+['{:04d}'.format(i)]+['png'])
+            if fout.endswith('.png'):
+                img.save(fout)
 
 # Traces ######################################################################
     def _lens_click(self, *args):
