@@ -423,7 +423,7 @@ def parse_arguments():
     # main args
     parser.add_argument("case", nargs='*',
                         help="Path input to .fits file for skyf to use",
-                        default=os.path.abspath(os.path.dirname(__file__))+'/test/')
+                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test'))
     parser.add_argument("-a", "--auto", dest="auto", action="store_true",
                         help="Use automatic image recognition (can be unreliable)",
                         default=False)
@@ -485,6 +485,8 @@ def parse_arguments():
     parser.add_argument("--filter", dest="filter_", action="store_true",
                         help="Use GLSCFactory's additional filter for extracted text info",
                         default=False)
+    parser.add_argument("--reorder", dest="reorder", metavar="<abcd-order>", type=str.upper,
+                        help="Reorder the image positions relative to ABCD ordered bottom-up")
 
     # mode args
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
@@ -503,7 +505,8 @@ def parse_arguments():
 ###############################################################################
 if __name__ == '__main__':
     parser, case, args = parse_arguments()
-    no_input = len(sys.argv) <= 1 and os.path.abspath(os.path.dirname(__file__))+'/test/' in case
+    testdir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test')
+    no_input = len(sys.argv) <= 1 and testdir in case
     if no_input:
         parser.print_help()
     elif args.test_mode:

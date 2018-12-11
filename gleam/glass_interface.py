@@ -117,5 +117,15 @@ def glass_renv():
     return glass
 
 
+def glass_wenv(config):
+    """
+    Call to set up a standard glass 'write' environment
+
+    Args/Kwargs/Return:
+        None
+    """
+    pass  # TODO
+
+
 if __name__ == "__main__":
     pass  # TODO: tests

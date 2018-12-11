@@ -834,7 +834,7 @@ def parse_arguments():
     # main args
     parser.add_argument("case", nargs='?',
                         help="Path input to .fits file for the app to use",
-                        default=os.path.abspath(os.path.dirname(__file__))+'/test')
+                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test'))
 
     # mode args
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
@@ -856,7 +856,8 @@ def parse_arguments():
 ###############################################################################
 if __name__ == '__main__':
     parser, case, args = parse_arguments()
-    no_input = len(sys.argv) <= 1 and os.path.abspath(os.path.dirname(__file__))+'/test' in case
+    testdir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test')
+    no_input = len(sys.argv) <= 1 and testdir in case
     if no_input:
         parser.print_help()
     elif args.test_mode:

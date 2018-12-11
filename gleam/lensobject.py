@@ -16,11 +16,8 @@ from gleam.utils import colors as glmc
 
 import sys
 import os
-import copy
 import math
 import warnings
-import numpy as np
-from scipy import interpolate
 from PIL import Image, ImageDraw
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -527,7 +524,8 @@ def main(case, args):
                     lens=args.lens, photzp=args.photzp,
                     auto=args.auto, verbose=args.verbose,
                     finder_options=dict(n=args.n, sigma=args.sigma, min_q=args.min_q),
-                    glscfactory_options=dict(text_file=args.text_file, filter_=args.filter_, reorder=args.reorder))
+                    glscfactory_options=dict(text_file=args.text_file, filter_=args.filter_,
+                                             reorder=args.reorder))
     if args.show or args.show_lens or args.show_sources or args.savefig is not None:
         sp.show_f(as_magnitudes=args.mags, figsize=args.figsize,
                   lens=args.show_lens, source_images=args.show_sources,
@@ -546,8 +544,8 @@ def parse_arguments():
     # main args
     parser.add_argument("case", nargs='?',
                         help="Path input to .fits file for skyf to use",
-                        default=os.path.abspath(os.path.dirname(__file__)) \
-                        + '/test/W3+3-2.U.12907_13034_7446_7573.fits')
+                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                             'test', 'W3+3-2.U.12907_13034_7446_7573.fits'))
     parser.add_argument("-a", "--auto", dest="auto", action="store_true",
                         help="Use automatic image recognition (can be unreliable)",
                         default=False)
@@ -626,7 +624,8 @@ def parse_arguments():
 ###############################################################################
 if __name__ == '__main__':
     parser, case, args = parse_arguments()
-    no_input = len(sys.argv) <= 1 and os.path.abspath(os.path.dirname(__file__))+'/test/' in case
+    testdir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test')
+    no_input = len(sys.argv) <= 1 and testdir in case
     if no_input:
         parser.print_help()
     elif args.test_mode:

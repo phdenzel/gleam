@@ -542,8 +542,8 @@ def parse_arguments():
     # main args
     parser.add_argument("case", nargs='*',
                         help="Path input to .fits file for skyf to use",
-                        default=os.path.abspath(os.path.dirname(__file__)) + '/test' \
-                        + '/W3+3-2.U.12907_13034_7446_7573.fits')
+                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                             'test', 'W3+3-2.U.12907_13034_7446_7573.fits'))
     parser.add_argument("-z", "--redshifts", metavar=("<zl", "zs>"), nargs=2, type=float,
                         help="Redshifts for lens and source")
 
@@ -560,8 +560,8 @@ def parse_arguments():
                         default=False)
     parser.add_argument("--text-file", dest="text_file", metavar="<path-to-file>", type=str,
                         help="Path to text file with additional info for glass config generation",
-                        default=os.path.abspath(os.path.dirname(__file__)) + "/test" \
-                        + "/test_lensinfo.txt")
+                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                             "test", "test_lensinfo.txt"))
     parser.add_argument("--filter", dest="filter_", action="store_true",
                         help="Use GLSCFactory's additional filter for extracted text info",
                         default=False)
@@ -584,7 +584,8 @@ def parse_arguments():
 
 if __name__ == '__main__':
     parser, case, args = parse_arguments()
-    no_input = len(sys.argv) <= 1 and os.path.abspath(os.path.dirname(__file__))+'/test/' in case
+    testdir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test')
+    no_input = len(sys.argv) <= 1 and testdir in case
     if no_input:
         parser.print_help()
     elif args.test_mode:

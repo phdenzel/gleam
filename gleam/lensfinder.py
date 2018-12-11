@@ -343,8 +343,8 @@ def parse_arguments():
     # main args
     parser.add_argument("case", nargs='?',
                         help="Path input to .fits file for lensfinder",
-                        default=os.path.abspath(os.path.dirname(__file__)) \
-                        + '/test' + '/W3+3-2.I.12907_13034_7446_7573.fits')
+                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                             'test', 'W3+3-2.I.12907_13034_7446_7573.fits'))
     parser.add_argument("-n", "--npeaks", dest="n", metavar="<N>", type=int,
                         help="Number of peaks the automatic image recognition is supposed to find",
                         default=5)
@@ -372,7 +372,8 @@ def parse_arguments():
 ###############################################################################
 if __name__ == '__main__':
     parser, case, args = parse_arguments()
-    no_input = len(sys.argv) <= 1 and os.path.abspath(os.path.dirname(__file__))+'/test/' in case
+    testdir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test')
+    no_input = len(sys.argv) <= 1 and testdir in case
     if no_input:
         parser.print_help()
     elif args.test_mode:

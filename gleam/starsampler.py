@@ -203,8 +203,8 @@ class StarSampler(object):
             <mass_tU>           - actual mass at tU
         """
         if filepath is None:
-            filepath = os.path.abspath(os.path.dirname(__file__)) \
-                       + "/tables/i_IMF_chabrier.dat"
+            filepath = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                    "tables", "i_IMF_chabrier.dat")
         table = {}
         keys = ['redshift', 'distance_modulus', 'invH', 'mag_halfGy',
                 'mass_halfGy', 'mag_2Gy', 'mass_2Gy', 'mag_tU', 'mass_tU']

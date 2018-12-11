@@ -49,12 +49,12 @@ class RedshiftSampler(object):
         self.mag_transf = mag_transf
         if sampler == 'bpz':
             self.root = sys.path[0] or sys.path[1]
-            self.bpz_lib = self.root + '/src/bpz-1.99.3/'
-            self.bpz_catalogue = os.path.abspath(os.path.dirname(__file__)) + '/bpz/'
+            self.bpz_lib = os.path.join(self.root, 'src', 'bpz-1.99.3')
+            self.bpz_catalogue = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'bpz')
             if len(self.data) == 5:
-                self.bpz_catalogue = self.bpz_catalogue + 'bpz_ugriz.cat'
+                self.bpz_catalogue = os.path.join(self.bpz_catalogue, 'bpz_ugriz.cat')
             elif len(self.data) == 6:
-                self.bpz_catalogue = self.bpz_catalogue + 'bpz_ugrii2z.cat'
+                self.bpz_catalogue = os.path.join(self.bpz_catalogue, 'bpz_ugrii2z.cat')
             else:
                 print("Incomplete band data provided...")
                 sys.exit(1)
