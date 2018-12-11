@@ -659,7 +659,7 @@ def ADU2Mag(data, photzp=30., nan_filter=True):
     return transf
 
 
-def MegaCam2SSDS(data):
+def MegaCam2SDSS(data):
     """
     Converts MegaCam's AB magnitudes to SDSS magnitudes
 
@@ -763,7 +763,7 @@ def MegaCam2SSDS(data):
 #             # Z band
 #             AB_transformed.append(ABdata[4] + 0.074 * (ABdata[3] - ABdata[4]))
 #         else:
-#             print("For SSDS magnitudes, all bands have to be provided...")
+#             print("For SDSS magnitudes, all bands have to be provided...")
 #             return None
 #         return 10**(0.4*(photzp-np.array(AB_transformed)))
 #     else:

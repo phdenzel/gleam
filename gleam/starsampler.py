@@ -16,7 +16,7 @@ from gleam.skyf import SkyF
 from gleam.skypatch import SkyPatch
 from gleam.lensobject import LensObject
 from gleam.multilens import MultiLens
-from gleam.megacam import ADU2Mag, MegaCam2SSDS
+from gleam.megacam import ADU2Mag, MegaCam2SDSS
 
 
 ###############################################################################
@@ -171,7 +171,7 @@ class StarSampler(object):
             ADU_data = [self.light_model.integrate(data, mask=self.mask) for data in band_data]
             Mag_data = ADU2Mag(ADU_data)
             # usually doesn't make much of a difference, but why not
-            Mag_data = MegaCam2SSDS(Mag_data)
+            Mag_data = MegaCam2SDSS(Mag_data)
             Mag_data = Mag_data[3]  # only 'i' band necessary
         # load Chabrier table and look up the mass corresponding to the magnitude
         m_stel = self.chabrier_table_mass(Mag_model, self.zl)
