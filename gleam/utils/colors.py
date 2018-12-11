@@ -28,6 +28,9 @@ darkest    = '#212225'  # rba( 33,  34,  37)
 black      = '#090F0F'  # rba(  9,  15,  15)
 textcolor  = '#dddee1'  # rba(221, 222, 225)
 
+colors = [red, purpleblue, green, orange, yellow, gray, turquoise,
+          pink, purple, golden, brown, blue, darker, textcolor]
+
 
 def color_variant(hex_color, shift=10):
     """
