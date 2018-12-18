@@ -6,6 +6,7 @@ Learn everything about .fits files with SkyF
 
 TODO:
    - center estimate is sometimes off by ~ 1-23 pixels... what's the issue?
+   - rewrite cutout to use roi
 """
 ###############################################################################
 # Imports
@@ -646,7 +647,7 @@ class SkyF(object):
     @property
     def extent(self):
         """
-        The extent of the .fits data in arcsec (left, bottom, top, right)
+        The extent of the .fits data in arcsec with origin in center (left, bottom, top, right)
 
         Args/Kwargs:
             None
@@ -656,6 +657,80 @@ class SkyF(object):
         """
         return [-0.5*self.px2arcsec[0]*self.naxis1, -0.5*self.px2arcsec[1]*self.naxis2,
                 0.5*self.px2arcsec[0]*self.naxis1, 0.5*self.px2arcsec[1]*self.naxis2]
+
+    def p2skycoords(self, position, unit='arcsec', relative=True, verbose=False):
+        """
+        Convert a position into skycoords positions with the skyfs reference pixel information
+
+        Args:
+            position <int/float,int/float> - position (relative to lens/center position)
+
+        Kwargs:
+            unit <str> - unit of the position input (arcsec, degree, pixel)
+            relative <bool> - position relative to lens or center;
+                              if False, position is assumed to be absolute (origin at refpx)
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            skyc <SkyCoords object> - the position converted into a SkyCoords object
+        """
+        if unit in ['px', 'pixel', 'pixels']:
+            if relative:
+                skyc = SkyCoords.from_pixels(*position, **self.center.coordkw)
+            else:
+                skyc = SkyCoords.from_pixels(*position)
+        elif unit in ['arcsec', 'arcsecs', 'arcs']:
+            if relative:
+                if hasattr(self, 'lens') and self.lens is not None:
+                    origin = self.lens.arcsecs
+                elif self.center is not None:
+                    origin = self.center.arcsecs
+                else:
+                    origin = [0, 0]
+                skyc = SkyCoords.from_arcsec(*[o+p for o, p in zip(origin, position)])
+            else:
+                skyc = SkyCoords.from_arcsecs(*position)
+        else:  # unit is degrees
+            if relative:
+                if hasattr(self, 'lens') and self.lens is not None:
+                    origin = self.lens.radec
+                elif self.center is not None:
+                    origin = self.center.radec
+                else:
+                    origin = [0, 0]
+                skyc = SkyCoords.from_degrees(*[o+p for o, p in zip(origin, position)])
+            else:
+                skyc = SkyCoords.from_degrees(*position)
+        if verbose:
+            print(skyc.__v__)
+        return skyc
+
+    def theta(self, position, origin=None):
+        """
+        Transform pixel coordinates into theta vector coordinates with origin in center
+
+        Args:
+           position <int,int/SkyCoords object> - the pixel coordinates of the position
+
+        Kwargs:
+           origin <int,int/SkyCoords object>
+
+        Return:
+           theta <float,float> - theta vector coordinates in arcsecs
+        """
+        # position
+        if isinstance(position, (tuple, list, np.ndarray)):
+            position = self.p2skycoords(position, unit='pixel')
+        # origin
+        if origin is None:
+            if hasattr(self, 'lens'):
+                origin = self.lens
+            else:
+                origin = self.center
+        elif isinstance(origin, (tuple, list, np.ndarray)):
+            origin = self.p2skycoords(origin, unit='pixel')
+        theta = position.get_shift_to(origin, unit='arcsec', rectangular=True)
+        return theta
 
     @property
     def photzp(self):

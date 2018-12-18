@@ -141,7 +141,7 @@ class MultiLens(SkyPatch):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return super(MultiLens, self).tests + ['lens_objects', 'lens', 'srcimgs', 'srcimgs_xy',
+        return super(MultiLens, self).tests + ['lens_objects', 'lens', 'srcimgs_xy',
                                                'light_model']
 
     @property

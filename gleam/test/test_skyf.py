@@ -130,6 +130,15 @@ class TestSkyF(UnitTestPrototype):
         print(">>> {}".format(10000))
         self.assertEqual(self.skyf.total_magnitude(10000, **self.v), 22.723195552825928)
 
+    def test_roi(self):
+        """ # roi """
+        print(">>> {}, {}".format('circle', [(64, 64), 20]))
+        self.skyf.roi.select['circle']((64, 64), 20, **self.v)
+        print(">>> {}, {}".format('polygon', [(64, 64), (32, 32), (32, 64)]))
+        self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64), **self.v)
+        print(">>> {}, {}".format('rect', [(32, 32), (64, 64)]))
+        self.skyf.roi.select['rect']((32, 32), (64, 64), **self.v)
+
     def test_cutout(self):
         """ # cutout """
         print(">>> {}".format(10))
@@ -159,6 +168,12 @@ class TestSkyF(UnitTestPrototype):
         gain = self.skyf.gain(40, (20, 20), **self.v)
         self.assertIsInstance(gain, float)
         self.assertGreater(gain, 0)
+
+    def test_theta(self):
+        """ # theta """
+        print(">>> {}".format(self.skyf.center.xy))
+        theta = self.skyf.theta([36, 65], origin=[61, 68])
+        print(theta)
 
     def test_pxscale_from_hdr(self):
         """ # pxscale_from_hdr """
@@ -194,15 +209,6 @@ class TestSkyF(UnitTestPrototype):
             os.remove('test.pdf')
         except OSError:
             pass
-
-    def test_roi(self):
-        """ # roi """
-        print(">>> {}, {}".format('circle', [(64, 64), 20]))
-        self.skyf.roi.select['circle']((64, 64), 20, **self.v)
-        print(">>> {}, {}".format('polygon', [(64, 64), (32, 32), (32, 64)]))
-        self.skyf.roi.select['polygon']((64, 64), (32, 32), (32, 64), **self.v)
-        print(">>> {}, {}".format('rect', [(32, 32), (64, 64)]))
-        self.skyf.roi.select['rect']((32, 32), (64, 64), **self.v)
 
     def test_image_f(self):
         """ # image_f """

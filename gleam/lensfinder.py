@@ -62,8 +62,7 @@ class LensFinder(object):
             self.peak_positions, self.peak_values = self.peak_candidates(
                 self.lensobject.data, self.threshold, n=self.n, min_d=self.min_d,
                 centroid=centroid)
-            self.peaks = [self.lensobject.p2skycoords(p, unit='pixel', relative=False) for p
-                          in self.peak_positions]
+            self.peaks = [self.lensobject.p2skycoords(p, unit='px') for p in self.peak_positions]
             # choose lens in peaks
             self.lens_candidate, self.lens_value, self.lens_index = self.detect_lens(
                 self.peaks, self.peak_values)

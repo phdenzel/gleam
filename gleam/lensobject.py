@@ -213,51 +213,6 @@ class LensObject(SkyF):
         """
         self.srcimgs = [SkyCoords.from_pixels(*s, **self.center.coordkw) for s in srcs]
 
-    def p2skycoords(self, position, unit='arcsec', relative=True, verbose=False):
-        """
-        Convert a position into skycoords positions with the skyfs reference pixel information
-
-        Args:
-            position <int/float,int/float> - position (relative to lens position)
-
-        Kwargs:
-            unit <str> - unit of the position input (arcsec, degree, pixel)
-            relative <bool> - position relative to lens; if False position is assumed absolute
-            verbose <bool> -  verbose mode; print command line statements
-
-        Return:
-            skyc <SkyCoords object> - the position converted into a SkyCoords object
-        """
-        if unit in ['pixel', 'pixels']:
-            refp = [0, 0]
-            refv = [0., 0.]
-            if not relative and self.lens is not None:
-                refp = self.center.xy  # reference_pixel
-                refv = self.center.radec  # reference_value
-            elif not relative and self.center is not None:
-                refp = self.center.xy  # reference_pixel
-                refv = self.center.radec  # reference_value
-            p = SkyCoords.pixels2deg(position, px2arcsec_scale=self.center.px2arcsec_scale,
-                                     reference_pixel=refp, reference_value=refv)
-            if relative:
-                p[0] = -p[0]
-        elif unit in ['arcsec', 'arcsecs']:
-            p = SkyCoords.arcsec2deg(*position)
-        elif unit in ['degree', 'degrees']:
-            p = position
-        else:  # unit = 'degree' by default
-            p = position
-        if relative:
-            if self.lens is not None:
-                skyc = self.lens.shift(p, right_increase=True)
-            else:
-                skyc = self.center.shift(p, right_increase=True)
-        else:
-            skyc = SkyCoords(*p, **self.center.coordkw)
-        if verbose:
-            print(skyc.__v__)
-        return skyc
-
     def add_srcimg(self, position, unit='arcsec', relative=True, verbose=False):
         """
         Add a source image position to the list of source images

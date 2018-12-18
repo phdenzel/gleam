@@ -437,7 +437,7 @@ class SkyCoords(object):
         else:
             NotImplemented
 
-    def get_shift_to(self, other, unit='degree', verbose=False):
+    def get_shift_to(self, other, unit='degree', rectangular=False, verbose=False):
         """
         Recover rectangular shift of the coordinates to another coordinate point
 
@@ -448,7 +448,8 @@ class SkyCoords(object):
             unit <str> - unit of the shift (arcsec, degree, pixel)
 
         Return:
-            shift <list> - the rectangular shift (in degrees by default)
+            shift <list> - the vector between the two coordinates (in degrees by default)
+            rectangular <bool> - if True, shift is calculated on a Euclidean metric instead
 
         Note:
             - the sign of the RA in shift is flipped, because adding to RA means moving to the left
@@ -456,15 +457,21 @@ class SkyCoords(object):
         """
         dra = (self.ra-other.ra)*math.cos(*SkyCoords.deg2rad(other.dec))
         ddec = (self.dec-other.dec)
-        if unit in ['pixel', 'pixels']:
+        if unit in ['px', 'pixel', 'pixels']:
             shift = SkyCoords.deg2pixels(dra, ddec, px2arcsec_scale=self.px2arcsec_scale,
                                          reference_pixel=[0, 0], reference_value=[0., 0.])
-        elif unit in ['arcsec', 'arcsecs']:
+            if rectangular:
+                shift = [self.x-other.x, self.y-other.y]
+        elif unit in ['arcsec', 'arcsecs', 'arcs']:
             shift = SkyCoords.deg2arcsec(-dra, ddec)
-        elif unit in ['degree', 'degrees']:
+            if rectangular:
+                shift = [(self.x-other.x)*self.px2arcsec_scale[0],
+                         (self.y-other.y)*self.px2arcsec_scale[1]]
+        else:  # unit is degrees
             shift = [-dra, ddec]
-        else:
-            shift = [-dra, ddec]
+            if rectangular:
+                shift = [(self.x-other.x)*self.arcsec2deg(self.px2arcsec_scale[0]),
+                         (self.y-other.y)*self.arcsec2deg(self.px2arcsec_scale[1])]
         if verbose:
             print(shift)
         return shift
