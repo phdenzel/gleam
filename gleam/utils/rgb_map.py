@@ -21,7 +21,7 @@ def lupton_like(i, r, g, method='standard'):
         method <str> - method description; chooses the set of weights for the stacking
 
     Return:
-        stack <np.ndarray> - the stacked image data ready to use with matplotlib.pyplot.imshow
+        stack <np.ndarray> - stacked image data of shape(N,M,4); ready for matplotlib.pyplot.imshow
     """
     stack = np.zeros(i.shape+(4,))
     # determine type of stacking
@@ -64,21 +64,45 @@ def lupton_like(i, r, g, method='standard'):
     return stack
 
 
+def grayscale(rgba):
+    """
+    Transform rgba image data into a grayscale picture copy; see Digital ITU BT.601
+
+    Args:
+        composite <np.ndarray> - rgba image data of shape(N,M,4)
+
+    Kwargs:
+        None
+
+    Return:
+        gray <np.ndarray> - grayscale image of the rgba image data
+    """
+    if len(rgba.shape) != 3 and rgba.shape[-1] != 4:
+        raise IndexError("Wrong input shape! rgba requires shape of (N, M, 4)!")
+    gray = rgba*0
+    luminance = np.dot(rgba[..., :-1], [0.299, 0.587, 0.114])
+    gray[..., 0] = luminance
+    gray[..., 1] = luminance
+    gray[..., 2] = luminance
+    gray[..., 3] = 1.
+    return gray
+
+
 def primary_transf(rgba, roundup=0.5):
     """
     Pronounce pictures with primary colors
 
     Args:
-        rgba <np.ndarray> - rbga image data
+        rgba <np.ndarray> - rbga image data of shape(N,M,4)
 
     Kwargs:
         roundup <float> - roundup threshold
 
     Return:
-        primary <np.ndarray> - primary colors of the rgba image array
+        primary <np.ndarray> - primary color data of the rgba image
     """
     if len(rgba.shape) != 3 and rgba.shape[-1] != 4:
-        raise IndexError("Wrong input shape! rgba requires shape of (N, M, 4) with axis[-1] = 4!")
+        raise IndexError("Wrong input shape! rgba requires shape of (N, M, 4)!")
     primary = rgba*1
     primary[np.greater_equal(primary, roundup)] = 1
     primary[np.less(primary, roundup)] = 0
@@ -87,7 +111,18 @@ def primary_transf(rgba, roundup=0.5):
 
 def primary_mask(primary, r=True, g=True, b=True, verbose=False):
     """
-    Get a mask where the primary colors are
+    Get a mask where the primary colors are red, green, and/or blue
+
+    Args:
+        primary <np.ndarray> - primary color data of an rgba image
+
+    Kwargs:
+        r <bool> - include red in the mask
+        g <bool> - include green in the mask
+        b <bool> - include blue in the mask
+
+    Return:
+        msk <np.ndarray(bool)> - boolean mask of the selected primary colors
     """
     msk = False
     if verbose:
@@ -282,19 +317,6 @@ def primary_mask(primary, r=True, g=True, b=True, verbose=False):
 #     else:
 #         hsv_range[:, 2] = A
 #     return np.array([hsv_to_rgb(c[0], c[1], c[2]) for c in hsv_range])
-
-
-# def scale_gray(composite):
-#     """
-#     Return a grayscale copy of composite rgb picture; see Digital ITU BT.601
-#     """
-#     grayscale = composite*0
-#     luminance = np.dot(composite[..., :-1], [0.299, 0.587, 0.114])
-#     grayscale[..., 0] = luminance
-#     grayscale[..., 1] = luminance
-#     grayscale[..., 2] = luminance
-#     grayscale[..., 3] = 1.
-#     return grayscale
 
 
 # def filter_from_color(rgba, color, delta=0.1):
