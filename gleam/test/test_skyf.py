@@ -172,8 +172,8 @@ class TestSkyF(UnitTestPrototype):
     def test_theta(self):
         """ # theta """
         print(">>> {}".format(self.skyf.center.xy))
-        theta = self.skyf.theta([36, 65], origin=[61, 68])
-        print(theta)
+        theta = self.skyf.theta([36, 65], origin=[61, 68], **self.v)
+        self.assertEqual(len(theta), 2)
 
     def test_pxscale_from_hdr(self):
         """ # pxscale_from_hdr """

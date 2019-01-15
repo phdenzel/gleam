@@ -252,7 +252,7 @@ class SkyPatch(object):
             if self.__class__.__name__.lower() not in finput:
                 filename += ['{}#{}'.format(
                     self.__class__.__name__.lower(), self.encode()[:-3])]
-        if 'json' not in filename[-1]:
+        if 'json' not in filename:
             filename += ['json']
         filename = '.'.join(filter(None, filename))
         return filename

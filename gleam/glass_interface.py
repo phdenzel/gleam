@@ -140,7 +140,7 @@ def glass_renv(**kwargs):
     if Environment.global_opts['withgfx']:
         import glass.plots
     glass_basis('glass.basis.pixels', solver=None)
-    exclude_all_priors()
+    glass.basis.pixels.priors.exclude_all_priors()
     return glass
 
 

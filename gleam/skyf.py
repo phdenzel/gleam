@@ -705,7 +705,7 @@ class SkyF(object):
             print(skyc.__v__)
         return skyc
 
-    def theta(self, position, origin=None):
+    def theta(self, position, origin=None, verbose=False):
         """
         Transform pixel coordinates into theta vector coordinates with origin in center
 
@@ -730,6 +730,8 @@ class SkyF(object):
         elif isinstance(origin, (tuple, list, np.ndarray)):
             origin = self.p2skycoords(origin, unit='pixel')
         theta = position.get_shift_to(origin, unit='arcsec', rectangular=True)
+        if verbose:
+            print(theta)
         return theta
 
     @property
