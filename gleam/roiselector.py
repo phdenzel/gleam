@@ -534,6 +534,12 @@ class ROISelector(object):
             self.points = points
             if len(self.x) != len(self.y):  # by construction this should never happen
                 raise IndexError("Shape of x and y coordinates do not match!")
+            if len(self.points) > 4:  # Rectangles and Squares have 4 and less
+                _, idx = np.unique(self.points, axis=0, return_index=True)
+                if self.is_closed:
+                    self.points = np.concatenate((self.points[np.sort(idx)], [self.points[0]]))
+                else:
+                    self.points = self.points[np.sort(idx)]
             self._2ccw()
             verbose = kwargs.pop('verbose', False)
             if verbose:
@@ -680,7 +686,10 @@ class ROISelector(object):
             Return:
                 N <int> - number of vertices defining the polygon
             """
-            return len(np.unique(self.points, axis=0))
+            if self.N > 0:
+                return len(np.unique(self.points, axis=0))
+            else:
+                return 0
 
         @property
         def N_edges(self):
@@ -784,8 +793,9 @@ class ROISelector(object):
             if len(self.points) < 2:
                 return
             if self.is_ccw < 0:  # clockwise
-                self.x = np.concatenate((np.array([self.x[0]]), self.x[:0:-1]))
-                self.y = np.concatenate((np.array([self.y[0]]), self.y[:0:-1]))
+                if self.is_closed:
+                    self.x = self.x[::-1]
+                    self.y = self.y[::-1]
             if verbose:
                 print(self.__v__)
 
