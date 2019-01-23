@@ -169,9 +169,49 @@ class TestSkyF(UnitTestPrototype):
         self.assertIsInstance(gain, float)
         self.assertGreater(gain, 0)
 
+    def test_yx2idx(self):
+        """ # yx2idx """
+        print(">>> {}".format((0, 0)))
+        i = self.skyf.yx2idx(0, 0, **self.v)
+        self.assertIsInstance(i, int)
+        self.assertEqual(i, 0)
+        # if self.skyf.naxis1 and self.skyf.naxis2 are uneven, the tests will fail!
+        print(">>> {}".format((self.skyf.naxis1-1, self.skyf.naxis2-1)))
+        i = self.skyf.yx2idx(self.skyf.naxis1-1, self.skyf.naxis2-1, **self.v)
+        self.assertIsInstance(i, int)
+        self.assertEqual(i, self.skyf.naxis1*self.skyf.naxis2-1)
+        print(">>> {}".format((self.skyf.naxis1//2, self.skyf.naxis2//2)))
+        i = self.skyf.yx2idx(self.skyf.naxis1//2, self.skyf.naxis2//2, **self.v)
+        self.assertIsInstance(i, int)
+        self.assertEqual(i, ((self.skyf.naxis1+1)*self.skyf.naxis2)//2)
+
+    def test_idx2yx(self):
+        """ # idx2yx """
+        print(">>> {}".format(0))
+        yx = self.skyf.idx2yx(0, **self.v)
+        self.assertIsInstance(yx, tuple)
+        self.assertEqual(yx, (0, 0))
+        print(">>> {}".format(self.skyf.naxis1*self.skyf.naxis2-1))
+        yx = self.skyf.idx2yx(self.skyf.naxis1*self.skyf.naxis2-1, **self.v)
+        self.assertIsInstance(yx, tuple)
+        self.assertEqual(yx, (self.skyf.naxis1-1, self.skyf.naxis2-1))
+        print(">>> {}".format(((self.skyf.naxis1+1)*self.skyf.naxis2)//2))
+        yx = self.skyf.idx2yx(((self.skyf.naxis1+1)*self.skyf.naxis2)//2, **self.v)
+        self.assertIsInstance(yx, tuple)
+        self.assertEqual(yx, (self.skyf.naxis1//2, self.skyf.naxis2//2))
+
     def test_theta(self):
         """ # theta """
+        print(">>> {}".format(((self.skyf.naxis1+1)*self.skyf.naxis2)//2))
+        t = self.skyf.theta(0, **self.v)
+        self.assertTrue(len(t) == 2)
+        print(">>> {}".format(((self.skyf.naxis1+1)*self.skyf.naxis2)//2))
+        t = self.skyf.theta(((self.skyf.naxis1+1)*self.skyf.naxis2)//2, **self.v)
+        self.assertTrue(len(t) == 2)
         print(">>> {}".format(self.skyf.center.xy))
+        t = self.skyf.theta(self.skyf.center.xy, **self.v)
+        self.assertTrue(len(t) == 2)
+        print(">>> {}, {}".format([36, 65], [61, 68]))
         theta = self.skyf.theta([36, 65], origin=[61, 68], **self.v)
         self.assertEqual(len(theta), 2)
 

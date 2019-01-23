@@ -705,6 +705,51 @@ class SkyF(object):
             print(skyc.__v__)
         return skyc
 
+    def yx2idx(self, y, x, cols=None, verbose=False):
+        """
+        Index mapping scheme for the 2D plane to 1D indices
+
+        Args:
+            y, x <int,int> - the pixel index coordinates for each data point
+
+        Kwargs:
+            cols <int> - number of columns of the plane described by the pixel coordinates
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            idx <int> - unique 1D index of a pixel
+        """
+        if cols is None:
+            cols = self.data.shape[1]
+            # rows = self.data.shape[0]
+        idx = y * cols + x
+        if verbose:
+            print(idx)
+        return idx
+
+    def idx2yx(self, idx, cols=None, verbose=False):
+        """
+        Index mapping scheme for a 1D index to a plane, inverse of yx2idx
+
+        Args:
+            idx <int> - unique 1D index of a pixel
+
+        Kwargs:
+            cols <int> - number of columns of the plane described by the pixel coordinates
+            verbose <bool> -  verbose mode; print command line statements
+
+        Return:
+            y, x <int,int> - the pixel index coordinates for the pixel with the provided index
+        """
+        if cols is None:
+            cols = self.data.shape[1]
+            # rows = self.data.shape[0]
+        y = idx // cols
+        x = idx % cols
+        if verbose:
+            print(y, x)
+        return y, x
+
     def theta(self, position, origin=None, verbose=False):
         """
         Transform pixel coordinates into theta vector coordinates with origin in center
@@ -719,7 +764,9 @@ class SkyF(object):
            theta <float,float> - theta vector coordinates in arcsecs
         """
         # position
-        if isinstance(position, (tuple, list, np.ndarray)):
+        if isinstance(position, int):  # 1D pixel index position
+            position = self.idx2yx(position)
+        if isinstance(position, (tuple, list, np.ndarray)):  # 2D pixel index position
             position = self.p2skycoords(position, unit='pixel')
         # origin
         if origin is None:
