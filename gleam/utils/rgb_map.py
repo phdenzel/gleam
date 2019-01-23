@@ -64,12 +64,32 @@ def lupton_like(i, r, g, method='standard'):
     return stack
 
 
+def rgba(data, cmap=None):
+    """
+    Create a 4-channel rgba image array from data
+
+    Args:
+        data <np.ndarray> - data to be converted into an rgba array
+
+    Kwargs:
+        cmap <str> - color map to be used to create colors; default: matplotlib default
+    """
+    if len(data.shape) == 3 and data.shape[-1] == 4:  # already rgba
+        return data
+    if len(data.shape) != 2:
+        raise IndexError(
+            "Wrong input shape {}! Input 2D data with shape of (N, M)!".format(data.shape))
+    cmap = plt.get_cmap()
+    img = cmap(plt.Normalize(data.min(), data.max())(data))
+    return img
+
+
 def grayscale(rgba):
     """
     Transform rgba image data into a grayscale picture copy; see Digital ITU BT.601
 
     Args:
-        composite <np.ndarray> - rgba image data of shape(N,M,4)
+        rgba <np.ndarray> - rgba image data of shape(N,M,i=1,3,4)
 
     Kwargs:
         None
@@ -77,14 +97,22 @@ def grayscale(rgba):
     Return:
         gray <np.ndarray> - grayscale image of the rgba image data
     """
-    if len(rgba.shape) != 3 and rgba.shape[-1] != 4:
-        raise IndexError("Wrong input shape! rgba requires shape of (N, M, 4)!")
-    gray = rgba*0
-    luminance = np.dot(rgba[..., :-1], [0.299, 0.587, 0.114])
+    if len(rgba.shape) == 2:
+        rgba = rgba.reshape(rgba.shape+(1,))
+    if len(rgba.shape) != 3 and rgba.shape[-1] > 4:
+        raise IndexError("Wrong input shape! rgba requires shape of (N, M, i={1,3,4})!")
+    if rgba.shape[-1] < 4:
+        img = np.ones(rgba.shape[:-1]+(4,))
+        img[..., :-1] = rgba
+    else:
+        img = rgba
+    gray = img*0
+    luminance = np.dot(img[..., :-1], [0.299, 0.587, 0.114])
     gray[..., 0] = luminance
     gray[..., 1] = luminance
     gray[..., 2] = luminance
     gray[..., 3] = 1.
+    gray = plt.Normalize(gray[..., :-1].min(), gray[..., :-1].max())(gray)
     return gray
 
 
