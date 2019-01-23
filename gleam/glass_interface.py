@@ -46,7 +46,7 @@ def _detect_cpus():
             ncpus = os.sysconf("SC_NPROCESSORS_ONLN")
             if isinstance(ncpus, int) and ncpus > 0:
                 return ncpus
-        # OSX
+        # MacOS
         else:
             return int(subprocess.Popen(
                 "sysctl -n hw.ncpu", shell=True, stdout=subprocess.PIPE).communicate()[0])
@@ -69,15 +69,22 @@ def _detect_omp():
     global _omp_opts
     if _omp_opts is not None:
         return _omp_opts
-    try:
-        import weave
+    if 'clang' in sys.version:  # probably macOS clang build
+        kw = dict(
+            extra_compile_args=['-O3', '-DWITH_OMP', '-Wno-unused-variable'])
+    else:  # most likely some gcc build
         kw = dict(
             extra_compile_args=['-O3', '-fopenmp', '-DWITH_OMP',
                                 '-Wall', '-Wno-unused-variable'],
             extra_link_args=['-lgomp'],
             headers=['<omp.h>'])
-        weave.inline(' ', **kw)
+    try:
+        import weave
     except ImportError:
+        kw = {}
+    try:
+        weave.inline(' ', **kw)
+    except weave.build_tools.CompileError:
         kw = {}
     _omp_opts = kw
     return kw
