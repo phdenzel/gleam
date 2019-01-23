@@ -1,0 +1,97 @@
+### Automatically generated GLASS config script for a single lens
+###############################################################################
+import os
+import numpy as np
+
+
+### Meta info
+dpath = '/Users/phdenzel/gleam/gleam/test'
+fname = 'W3+3-2.12907_13034_7446_7573'
+fpath = os.path.join(dpath, fname)
+glass_basis('glass.basis.pixels', solver='rwalk')
+meta(author='GLSCFactory', notes='single-config-mode')
+setup_log(fpath+'.log')
+
+
+### Sampler config
+samplex_random_seed(0)
+samplex_acceptance(rate=0.25, tol=0.15)
+
+exclude_all_priors()
+include_prior(
+    'lens_eq',
+    'time_delay',
+    'profile_steepness',
+    'J3gradient',
+    'magnification',
+    'hubble_constant',
+    'PLsmoothness3',
+#   'shared_h',
+    'external_shear'
+)
+
+
+### Cosmology
+omega(0.27, 0.73)
+hubble_constant(72.032)
+# hubble_time(13.7)
+
+
+###############################################################################
+### Lens
+name = 'autogen'
+zl = 0.5
+globject(name)
+zlens(zl)
+
+pixrad(8)
+steepness(0, None)
+# hires(1, 5)
+
+smooth(2, include_central_pixel=False)
+local_gradient(45)
+shear(0.01)
+# symm()
+
+# maprad(2)
+
+
+### Source
+zs = 3.0
+
+lens = [60.99999999992178, 68.0000000000573]
+ABCD = [[35.99999999983447, 65.00000000000819], [37.99999999986812, 54.99999999993679], [67.00000000002274, 96.0000000000091], [73.00000000012415, 55.99999999999909]]
+parity = ['min', 'min', 'sad', 'sad']
+px2arcsec = [0.185733387468, 0.185733387468]
+
+for i in range(len(ABCD)):
+    ABCD[i] = (ABCD[i][0]-lens[0])*px2arcsec[0], (ABCD[i][1]-lens[1])*px2arcsec[1]
+
+print(ABCD)
+exit(1)
+
+tdelay = None
+tderr = None
+# idxs of tdelay ordered after delay times
+delay_order = np.argsort(tdelay) if tdelay else np.array([(i-1) % len(ABCD) for i in range(len(ABCD))])
+# idxs of ABCD ordered after delay times
+image_order = (delay_order+1) % len(ABCD)
+
+
+pos_par_td = [ABCD[image_order[0]], parity[0]]
+for i in range(1, len(ABCD)):
+    pos_par_td.append(ABCD[image_order[i]])  # position
+    pos_par_td.append(parity[i])             # parity
+    pos_par_td.append(None)                  # time delay default
+
+source(zs, *pos_par_td)
+
+# explicit time delays
+if tdelay:
+    for i, td in enumerate(tdelay[:-1]):
+        delay(ABCD[0], ABCD[i+1], [td-tderr[i], td+tderr[i]])
+
+
+###############################################################################
+model(1000)
+savestate(fpath+'.state')
