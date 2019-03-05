@@ -221,8 +221,13 @@ def filter_env(gls, selection):
         del envcpy.models[i]
         del envcpy.accepted_models[i]
         del envcpy.solutions[i]
-    envcpy.meta_info['filtered'] = (os.path.basename(env.global_opts['argv'][-1]),
-                                    len(gls.models), len(envcpy.models))
+    if 'argv' in gls.global_opts:
+        path = os.path.basename(gls.global_opts['argv'][-1])
+    elif 'filtered' in gls.meta_info:
+        path = gls.meta_info['filtered'][0]
+    else:
+        path = None
+    envcpy.meta_info['filtered'] = (path, len(gls.models), len(envcpy.models))
     return envcpy
 
 

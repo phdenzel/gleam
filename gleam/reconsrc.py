@@ -26,7 +26,7 @@ from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
 # from gleam.utils.sparse_funcs import (inplace_csr_row_normalize)
 import gleam.utils.rgb_map as glmrgb
-from gleam.glass_interface import glass_renv, filter_env, export_state
+from gleam.glass_interface import glass_renv, filter_env
 glass = glass_renv()
 
 __all__ = ['ReconSrc']
@@ -205,7 +205,7 @@ class ReconSrc(object):
             self.gls.make_ensemble_average()
             return self.gls.ensemble_average['obj,data'][0]
         else:
-            envcpy = glass.filter_env(self.gls, selection)
+            envcpy = filter_env(self.gls, selection)
             envcpy.make_ensemble_average()
             return envcpy.ensemble_average['obj,data'][0]
 
