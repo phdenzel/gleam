@@ -495,26 +495,26 @@ class _BaseModel(object):
     #         mask = np.full(data.shape, True)
     #     return np.sum(data[mask])
 
-    # @staticmethod
-    # def normalize(data, mask=None):
-    #     """
-    #     Calculate the normalized data map
+    @staticmethod
+    def normalize(data, mask=None):
+        """
+        Calculate the normalized data map
 
-    #     Args:
-    #         data <np.ndarray> - data to be normalized
+        Args:
+            data <np.ndarray> - data to be normalized
 
-    #     Kwargs:
-    #         mask <np.ndarray(bool)> - boolean mask used for integration
+        Kwargs:
+            mask <np.ndarray(bool)> - boolean mask used for integration
 
-    #     Return:
-    #         norm <np.ndarray> - normalized data map
-    #     TODO: move to ROISelector
-    #     """
-    #     data = np.asarray(data)
-    #     if mask is None:
-    #         mask = np.full(data.shape, True)
-    #     tot = np.sum(data[mask])
-    #     return data/tot
+        Return:
+            norm <np.ndarray> - normalized data map
+        TODO: move to ROISelector
+        """
+        data = np.asarray(data)
+        if mask is None:
+            mask = np.full(data.shape, True)
+        tot = np.sum(data[mask])
+        return data/tot
 
     def plot_map(self, log=False, colorbar=True, scalebar=None,
                  mask=None, contours=None, show=False, **kwargs):
