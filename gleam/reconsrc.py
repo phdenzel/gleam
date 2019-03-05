@@ -13,13 +13,20 @@ TODO:
 ###############################################################################
 import sys
 import os
+import copy
 import numpy as np
+from scipy.sparse import lil_matrix as sparse_matrix
+from scipy.sparse.linalg import lsqr, lsmr
+from sklearn.preprocessing import normalize as row_norm
+import matplotlib.pyplot as plt
 
 from gleam.skyf import SkyF
 from gleam.lensobject import LensObject
 from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
-from gleam.glass_interface import glass_renv
+# from gleam.utils.sparse_funcs import (inplace_csr_row_normalize)
+import gleam.utils.rgb_map as glmrgb
+from gleam.glass_interface import glass_renv, filter_env, export_state
 glass = glass_renv()
 
 __all__ = ['ReconSrc']
@@ -30,16 +37,16 @@ class ReconSrc(object):
     """
     Framework for source reconstruction
     """
-    def __init__(self, gleamobject, statefile, M=20, mask_keys=['polygon'], verbose=False):
+    def __init__(self, gleamobject, glsfile, M=20, mask_keys=['polygon'], verbose=False):
         """
         Initialize
 
         Args:
             gleamobject <GLEAM object> - a GLEAM object instance with .fits file's data
-            statefile <str> - filename of a GLASS .state file
+            glsfile <str> - filename of a GLASS .state file
 
         Kwargs:
-            M <int> - source plane pixel radius; the total source plane will be (2*M+1) x (2*M+1)
+            M <int> - source plane pixel radius; the total source plane will be (2*M+1)x(2*M+1)
 
         Return:
             <ReconSrc object> - standard initializer for ReconSrc
@@ -55,8 +62,8 @@ class ReconSrc(object):
             raise TypeError("ReconSrc needs a GLEAM object (LensObject/MultiLens) as input!")
         # grab first lensobject if there are more than one
         self.lensobject = self.lens_objects[0]
-        self.gls = glass.glcmds.loadstate(statefile)
-        self.model_index = 0
+        self.gls = glass.glcmds.loadstate(glsfile)
+        self.model_index = -1
 
         # source plane
         self.M = M
@@ -144,41 +151,6 @@ class ReconSrc(object):
             mask = np.logical_or.reduce([mask]+self.lensobject.roi._masks[k])
         return mask
 
-    # @property
-    # def plane(self):
-    #     """
-    #     The source plane data array
-
-    #     Args/Kwargs:
-    #         None
-
-    #     Return:
-    #         plane <np.ndarray> - the source plane data array
-    #     """
-    #     if not hasattr(self, '_plane'):
-    #         self._plane = np.zeros((self.N, self.N), dtype=list)
-    #     if self._plane.shape[0] > self.N:
-    #         self._plane = self._plane[:self.N, :self.N]
-    #     elif self._plane.shape[0] < self.N:
-    #         self._plane = np.pad(self._plane, int((self.N-self._plane.shape)/2),
-    #                              mode='constant', constant_values=0)
-    #     return self._plane
-
-    # @plane.setter
-    # def plane(self, plane):
-    #     """
-    #     (Re)set the source plane data array
-
-    #     Args:
-    #         plane <np.ndarray> - the source plane data array
-
-    #     Kwargs/Return:
-    #         None
-    #     """
-    #     self._plane = plane
-    #     if self._plane.shape[0] != self.N:
-    #         raise ValueError("Shape mismatch: source plane needs shape {0}x{0}".format(self.N))
-
     def chobj(self, index=None):
         """
         Change the lensobject; moves to the next lensobject in the list  by default
@@ -215,37 +187,27 @@ class ReconSrc(object):
         self.model_index = index
         # self.plane = np.zeros((self.N, self.N), dtype=list)
 
-    def inv_proj_matrix(self):
+    def ensavg_mdl(self, selection=None):
         """
-        The projection matrix to get from the image plane to the source plane
+        Get the ensemble average model of all models in the GLASS state (or a subselection thereof)
 
         Args:
+            None
+
         Kwargs:
+            selection <list(int)> - a subselection of the models used for ensemble averaging
+
         Return:
-
-        d_p = M^ij_p * dij
+            obj, data <glass.environment Object, dict> - GLASS environment and data dictionary
+                                                         of the ensemble average
         """
-        # src plane
-        NxN = self.N*self.N
-        p = range(NxN)
-        # lens plane
-        LxL = self.lensobject.naxis1*self.lensobject.naxis2
-        ij = range(LxL)
-        # ij_masked = [self.mask]
-        theta = np.array([self.lensobject.theta(i) for i in ij])
-        #
-        # d_source = np.array(map(self.delta_beta, theta))
-        d_source = self.delta_beta(theta)
-        print(d_source.shape)
-        
-        # inverse projection matrix
-        M_ij = np.zeros((LxL, NxN), dtype=int)
-
-
-        # DEBUG
-        print(self.mask.shape)
-
-        return M_ij
+        if selection is None:
+            self.gls.make_ensemble_average()
+            return self.gls.ensemble_average['obj,data'][0]
+        else:
+            envcpy = glass.filter_env(self.gls, selection)
+            envcpy.make_ensemble_average()
+            return envcpy.ensemble_average['obj,data'][0]
 
     def delta_beta(self, theta):
         """
@@ -253,58 +215,266 @@ class ReconSrc(object):
 
         Args:
             theta <list/tuple/complex> - 2D angular position coordinates
-            model_object
 
         Kwargs:
             None
 
         Return:
-            delta_beta <list/tuple> - beta from lens equation
+            delta_beta <np.ndarray> - beta from lens equation
         """
-        if not isinstance(theta, (list, tuple)) and len(theta) == 2:
-            ang_pos = complex(*theta)
-        elif isinstance(theta, np.ndarray) and len(theta) > 2:
+        if self.model_index >= 0:
+            obj, data = self.gls.models[self.model_index]['obj,data'][0]
+        else:
+            obj, data = self.ensavg_mdl()
+        if isinstance(theta, np.ndarray) and len(theta) > 2:  # seems to work with
             ang_pos = np.empty(theta.shape[:-1], dtype=np.complex)
             ang_pos.real = theta[..., 0]
             ang_pos.imag = theta[..., 1]
-        obj, data = self.gls.models[self.model_index+1]['obj,data'][0]
+            deflect = np.vectorize(obj.basis.deflect)  # , excluded=['data'])
+        elif not isinstance(theta, (list, tuple)) and len(theta) == 2:
+            ang_pos = complex(*theta)
+            deflect = obj.basis.deflect
+        else:
+            ang_pos = theta
+            deflect = obj.basis.deflect
         src = data['src'][0]
         zcap = obj.sources[0].zcap
-        print(ang_pos.shape)
-        print((src - ang_pos).shape)
-        return src - ang_pos + obj.basis.deflect(ang_pos, data) / zcap
+        dbeta = src - ang_pos + deflect(ang_pos, data) / zcap
+        return np.array([dbeta.real, dbeta.imag]).T
 
-    # @staticmethod
-    # def mapping(model, theta, srcplane):
-    #     """
-    #     Collect pixel indices from the lens plane mapped onto the source plane
-    #     for a specific model from a GLASS ensemble and theta coordinates
+    def d_ij(self, flat=True, composite=False):
+        """
+        Lens plane data array
 
-    #     Args:
-    #         model
-    #     """
-    #     obj, data = model['obj,data'][0]
-    #     src = data['src'][0]
-    #     zcap = obj.sources[0].zcap
+        Args:
+            None
 
-    #     # lensing equation
-    #     def delta_beta(theta):
-    #         return src - theta + obj.basis.deflect(theta, data) / zcap
+        Kwargs:
+            flat <bool> - return the flattened array
+            composite <bool> - return the composite data array
 
-    #     d_source = np.array(map(delta_beta, theta))
-    #     r = max(np.max(np.abs(np.real(d_source))),
-    #             np.max(np.abs(np.imag(d_source))))
-    #     X = np.int32(np.floor(M*(1+np.real(d_source)/r)+.5))
-    #     Y = np.int32(np.floor(M*(1+np.imag(d_source)/r)+.5))
-    # collect on source plane
+        Return:
+            dij <np.ndarray> - the lens plane data array
+        """
+        LxL = self.lensobject.naxis1*self.lensobject.naxis2
+        data = self.lensobject.data
+        if composite and isinstance(self.gleamobject, MultiLens):
+            data = self.lensobject.composite
+        if flat:
+            dij = np.array([data[self.lensobject.idx2yx(i)] for i in range(LxL)])
+        else:
+            dij = data
+        return dij
 
-    # srcplane = np.zeros((2*M+1, 2*M+1), dtype=list)
-    # for (x, y), _ in np.ndenumerate(srcplane):
-    #     srcplane[x, y] = []
-    # for i, _ in enumerate(d_source):
-    #     x, y = (X[i], Y[i])
-    #     srcplane[x, y].append(i)
-    # return srcplane
+    def lens_map(self, flat=False, mask=False, composite=False):
+        """
+        Lens plane data array
+
+        Args:
+            None
+
+        Kwargs:
+            flat <bool> - return the flattened array
+            mask <bool> - return only the masked part of the lens plane data
+            composite <bool> - return the composite data array
+
+        Return:
+            dij <np.ndarray> - the lens plane data array
+        """
+        dij = self.d_ij(flat=flat, composite=composite)
+        if mask:
+            if np.any(self.mask):
+                if flat:
+                    msk = self.mask.flatten()
+                else:
+                    msk = self.mask
+                dij[~msk] = 0
+        return dij
+
+    def inv_proj_matrix(self, asarray=False):
+        """
+        The projection matrix to get from the image plane to the source plane
+
+        Args:
+            None
+
+        Kwargs:
+            asarray <bool> - if True, return matrix as array, otherwise as scipy.sparse matrix
+
+        Return:
+            Mij_p <scipy.sparse.csc.csc_matrix> - inverse projection map from image to source plane
+        """
+        # # src plane
+        NxN = self.N*self.N
+        # p = range(NxN)
+        # # lens plane
+        LxL = self.lensobject.naxis1*self.lensobject.naxis2
+        ij = range(LxL)
+        if np.any(self.mask):
+            ij_masked = [self.lensobject.yx2idx(ix, iy) for ix, iy in zip(*np.where(self.mask))]
+        else:
+            ij_masked = ij  # in case self.mask is not available
+        theta = np.array([self.lensobject.theta(i) for i in ij_masked])  # grid coords [arcsec]
+        dbeta = self.delta_beta(theta)  # distance from source center on source plane [arcsec]
+        r = np.nanmax(np.abs(dbeta))  # maximal distance [arcsec]
+        xy = np.int16(np.floor(self.M*(1+dbeta/r))+.5)
+        # # init inverse projection matrix
+        Mij_p = sparse_matrix((LxL, NxN), dtype=np.int16)
+        for i, (x, y) in enumerate(xy):
+            ij_idx = ij_masked[i]
+            p_idx = self.lensobject.yx2idx(y, x, cols=self.N)
+            Mij_p[ij_idx, p_idx] = 1
+
+        Mij_p = row_norm(Mij_p, norm='l1', axis=0)
+        # Mij_p.data = Mij_p.data / np.repeat(
+        #     np.add.reduceat(Mij_p.data, Mij_p.indptr[:-1]), np.diff(Mij_p.indptr))
+        if asarray:
+            return Mij_p.toarray()
+        return Mij_p
+
+    def d_p(self, flat=True, composite=False):
+        """
+        Recover the source plane data using the inverse projection matrix: d_p = M^ij_p * d_ij
+
+        Args:
+            None
+
+        Kwargs:
+            flat <bool> - return the flattened array
+            composite <bool> - return the composite data array
+
+        Return:
+            dp <np.ndarray> - the source plane data
+        """
+        # LxL = self.lensobject.naxis1*self.lensobject.naxis2  # lens plane size
+        # projection data
+        dij = self.d_ij(flat=True, composite=composite)
+        Mij_p = self.inv_proj_matrix()
+        dp = dij * Mij_p
+        if not flat:
+            dp = dp.reshape((self.N, self.N))
+        return dp
+
+    def plane_map(self, flat=False, composite=False):
+        """
+        Recover the source plane data map using the inverse projection matrix: d_p = M^ij_p * d_ij
+
+        Args:
+            None
+
+        Kwargs:
+            flat <bool> - return the flattened array
+            composite <bool> - return the composite data array
+
+        Return:
+            dp <np.ndarray> - the source plane data
+        """
+        return self.d_p(flat=flat, composite=composite)
+
+    def proj_matrix(self, asarray=False):
+        """
+        The projection matrix to get from the source plane to the image plane
+
+        Args:
+            None
+
+        Kwargs:
+            asarray <bool> - if True, return matrix as array, otherwise as scipy.sparse matrix
+
+        Return:
+            Mp_ij <scipy.sparse.csc.csc_matrix> - projection map from source to image plane
+        """
+        Mij_p = self.inv_proj_matrix(asarray=asarray)
+        # TODO
+        # d_p = 1
+        # Mp_ij = splin_pinv(Mij_p.toarray(), d_p)
+        # TODO
+        Mp_ij = Mij_p
+        return Mp_ij
+
+    def reproj_d_ij(self, method='lsqr', flat=True, composite=False):
+        """
+        Solve the inverse projection problem to Mij_p * d_ij = d_p, where Mij_p and d_p are known
+
+        Args:
+            None
+
+        Kwargs:
+            method <str> - method which solves the inverse problem [lsqr, lsmr,]
+            flat <bool> - return the flattened array
+            composite <bool> - return the composite data array
+
+        Return:
+            dij <np.ndarray> - reprojection data based on the source reconstruction
+        """
+        dp = self.d_p(flat=True, composite=composite)
+        Mij_p = self.inv_proj_matrix()
+        if method == 'lsqr':
+            dij = lsqr(Mij_p.T, dp)[0]
+        elif method == 'lsmr':
+            dij = lsmr(Mij_p.T, dp)[0]
+        if not flat:
+            dij = dij.reshape((self.lensobject.naxis1, self.lensobject.naxis2))
+        return dij
+
+    def reproj_map(self, method='lsqr', flat=False, composite=False):
+        """
+        Solve the inverse projection problem to Mij_p * d_ij = d_p, where Mij_p and d_p are known
+
+        Args:
+            None
+
+        Kwargs:
+            method <str> - method which solves the inverse problem [lsqr, lsmr,]
+            flat <bool> - return the flattened array
+            composite <bool> - return the composite data array
+
+        Return:
+            dij <np.ndarray> - reprojection data based on the source reconstruction
+        """
+        return self.reproj_d_ij(method=method, flat=flat, composite=composite)
+
+    def synth_map(self, method='lsqr', flat=True, composite=False):
+        """
+        TODO
+        """
+        pass
+
+    def residual_map(self, method='lsqr', flat=False, composite=False):
+        """
+        Evaluate the reprojection by calculating the residual map to the lens map data
+
+        Args:
+            None
+
+        Kwargs:
+            method <str> - method which solves the inverse problem [lsqr, lsmr,]
+            flat <bool> - return the flattened array
+            composite <bool> - return the composite data array
+
+        Return:
+            residual <np.ndarray> - reprojection data based on the source reconstruction
+        """
+        reproj = self.reproj_map(method=method, flat=flat, composite=composite)
+        data = self.lens_map(flat=flat, mask=True, composite=composite)
+        return data-reproj
+
+    def reproj_residual(self, method='lsqr', composite=False):
+        """
+        Evaluate the reprojection by calculating the residuals to the data
+
+        Args:
+            None
+
+        Kwargs:
+            method <str> - method which solves the inverse problem [lsqr, lsmr,]
+            composite <bool> - return the composite data array
+
+        Return:
+            residual <float> - the residual between data and reprojection
+        """
+        residual = self.residual_map(method=method, flat=True, composite=composite)
+        return np.sum(residual)
 
     def mask_plot(self, data=None, bg=None):
         """
@@ -320,8 +490,6 @@ class ReconSrc(object):
         Return:
             img <np.ndarray> - masked data rgba array
         """
-        import gleam.utils.rgb_map as glmrgb
-        import matplotlib.pyplot as plt
         if data is None:
             data = self.lensobject.data
             if isinstance(self.gleamobject, (SkyPatch, MultiLens)):
@@ -385,35 +553,35 @@ if __name__ == '__main__':
              "/Users/phdenzel/adler/json/H36S0A0B90G0.json",
              "/Users/phdenzel/adler/json/H160S0A90B0G0.json",
              "/Users/phdenzel/adler/json/H234S0A0B90G0.json"]
-    statefiles = ["/Users/phdenzel/adler/H1S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H1S1A0B90G0.state",
-                  "/Users/phdenzel/adler/H2S1A0B90G0.state",
-                  "/Users/phdenzel/adler/H2S2A0B90G0.state",
-                  "/Users/phdenzel/adler/H2S7A0B90G0.state",
-                  "/Users/phdenzel/adler/H3S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H3S1A0B90G0.state",
-                  "/Users/phdenzel/adler/H4S3A0B0G90.state",
-                  "/Users/phdenzel/adler/H10S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H13S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H23S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H30S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H36S0A0B90G0.state",
-                  "/Users/phdenzel/adler/H160S0A90B0G0.state",
-                  "/Users/phdenzel/adler/H234S0A0B90G0.state"]
-    # for i in range(len(jsons)):
-    i = 4
-    with open(jsons[i]) as f:
-        ml = MultiLens.from_json(f)
-    recon_src = ReconSrc(ml, statefiles[i], verbose=1)
-    recon_src.chobj()
-    recon_src.inv_proj_matrix()
-    # import time
-    # ti = time.time()
-    # for m in recon_src.gls.models[:10]:
-    #     recon_src.inv_proj_matrix()
-    #     recon_src.chmdl()
-    # tf = time.time()
-    # print(tf-ti)
+    statefiles = ["/Users/phdenzel/adler/states/v1/H1S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H1S1A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H2S1A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H2S2A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H2S7A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H3S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H3S1A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H4S3A0B0G90.state",
+                  "/Users/phdenzel/adler/states/v1/H10S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H13S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H23S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H30S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H36S0A0B90G0.state",
+                  "/Users/phdenzel/adler/states/v1/H160S0A90B0G0.state",
+                  "/Users/phdenzel/adler/states/v1/H234S0A0B90G0.state"]
+    # i = 7
+    for i in range(len(jsons)):
+        with open(jsons[i]) as f:
+            ml = MultiLens.from_json(f)
+        # recon_src = ReconSrc(ml, statefiles[i], M=80, verbose=1)
+        recon_src = ReconSrc(ml, statefiles[i], M=20, verbose=1)
+        recon_src.chobj()
+        import time
+        ti = time.time()
+        print(recon_src.plane_map())
+        # print(all(self.lensobject.data.reshape(LxL) == np.array([self.lensobject.data[self.lensobject.idx2yx(i)] for i in range(LxL)])))
+        # nevertheless, as data vector use: np.array([self.lensobject.data[self.lensobject.idx2yx(i)] for i in range(LxL)])
+        tf = time.time()
+        print(tf-ti)
 
     # recon_src.mask_plot()
     # parser, case, args = parse_arguments()
