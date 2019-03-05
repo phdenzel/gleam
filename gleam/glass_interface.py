@@ -100,22 +100,30 @@ def glass_basis(gls, name, **kwargs):
 
     Kwargs:
         solver <str> - solver to be loaded
+        verbose <bool> - if True, warnings will be printed to stdout
 
     Return:
         None
+
+    Note:
+        The argument [gls <glass.Environment object> - the glass state environment]
+        is passed to command and is needed in common use
     """
+    verbose = kwargs.pop('verbose', False)
     gls.basis_options = kwargs
     f = __import__(name, globals(), locals())
     for name, [f, g, help_text] in Commands.glass_command_list.iteritems():
         if isinstance(__builtins__, dict):
             if name in __builtins__:
                 message = 'WARNING: Glass command {:s} ({:s}) overrides previous function {:s}'
-                print(message.format(name, f, __builtins__[name]))
+                if verbose:
+                    print(message.format(name, f, __builtins__[name]))
             __builtins__[name] = g
         else:
             if name in __builtins__.__dict__:
                 message = 'WARNING: Glass command {:s} ({:s}) overrides previous function {:s}'
-                print(message.format(name, f, __builtins__.__dict__[name]))
+                if verbose:
+                    print(message.format(name, f, __builtins__.__dict__[name]))
             __builtins__.__dict__[name] = g
 
 
@@ -189,6 +197,53 @@ def run(*args, **kwargs):
         execfile(args[0])
     except GLInputError as e:
         raise e("An error occurred! Figure out whats wrong and give it another go...")
+
+
+def filter_env(gls, selection):
+    """
+    Filter a GLASS environment according to a selection
+
+    Args:
+        gls <glass.environment object> - the glass state to be filtered
+        selection <list(int)> - list of indices used to filter out models
+
+    Kwargs:
+        None
+
+    Return:
+        envcpy <glass.environment object> - the filtered glass state
+    """
+    import copy
+    envcpy = copy.deepcopy(gls)
+    for i in range(len(envcpy.models)-1, -1, -1):
+        if i in selection:
+            continue
+        del envcpy.models[i]
+        del envcpy.accepted_models[i]
+        del envcpy.solutions[i]
+    envcpy.meta_info['filtered'] = (os.path.basename(env.global_opts['argv'][-1]),
+                                    len(gls.models), len(envcpy.models))
+    return envcpy
+
+
+def export_state(gls, selection=None, name="filtered.state"):
+    """
+    Save a filtered state in a new state file
+
+    Args:
+        gls <glass.environment object> - state to be exported
+
+    Kwargs:
+        selection <list(int)> - list of indices used to filter out models
+
+    Return:
+        None
+    """
+    if selection:
+        state = filter_env(gls, selection)
+    else:
+        state = gls
+    state.savestate(name)
 
 
 def parse_arguments():
