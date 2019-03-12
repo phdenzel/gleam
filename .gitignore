@@ -3,4 +3,6 @@ activate
 include/*
 lib/*
 src/glass/*
+src/bpz-1.99.3/*
 venv/*
+notebooks/.ipynb_checkpoints/*
