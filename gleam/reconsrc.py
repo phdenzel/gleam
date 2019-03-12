@@ -461,7 +461,7 @@ class ReconSrc(object):
 
     def reproj_residual(self, method='lsqr', composite=False):
         """
-        Evaluate the reprojection by calculating the residuals to the data
+        Evaluate the reprojection by calculating the absolute squared residuals to the data
 
         Args:
             None
@@ -474,7 +474,7 @@ class ReconSrc(object):
             residual <float> - the residual between data and reprojection
         """
         residual = self.residual_map(method=method, flat=True, composite=composite)
-        return np.sum(residual)
+        return np.sum(residual**2)
 
     def mask_plot(self, data=None, bg=None):
         """
