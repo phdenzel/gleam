@@ -13,7 +13,6 @@ TODO:
 ###############################################################################
 import sys
 import os
-import copy
 import numpy as np
 from scipy.sparse import lil_matrix as sparse_matrix
 from scipy.sparse.linalg import lsqr, lsmr
@@ -26,10 +25,10 @@ from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
 # from gleam.utils.sparse_funcs import (inplace_csr_row_normalize)
 import gleam.utils.rgb_map as glmrgb
-from gleam.glass_interface import glass_renv, filter_env
+from gleam.glass_interface import glass_renv, filter_env, export_state
 glass = glass_renv()
 
-__all__ = ['ReconSrc']
+__all__ = ['ReconSrc', 'synth_filter']
 
 
 ###############################################################################
@@ -503,6 +502,56 @@ class ReconSrc(object):
         plt.imshow(img)
         plt.show()
         return img
+
+
+def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50], save=False, verbose=False):
+    """
+    Filter a GLASS state file using GLEAM's source reconstruction feature
+
+    Args:
+        statefile <str> - the GLASS statefile
+        gleamobject <GLEAM object> - a GLEAM object instance with .fits file's data
+
+    Kwargs:
+        percentiles <list(float)> - percentages the filter retains
+        save <bool> - save the filtered states automatically
+        verbose <bool> - verbose mode; print command line statements
+
+    Return:
+        filtered_states <list(glass.Environment object)> - the filtered states ready for export
+    """
+    if verbose:
+        print(statefile)
+    recon_src = ReconSrc(gleamobject, statefile, M=20, verbose=verbose)
+
+    residuals = []
+    N_models = len(recon_src.gls.models)
+    for i in range(N_models):
+        recon_src.chmdl(i)
+        delta = recon_src.reproj_residual()
+        residuals.append(delta)
+        if verbose:
+            message = "{:4d} / {:4d}: {:4.4f}\r".format(i+1, N_models, delta)
+            sys.stdout.write(message)
+            sys.stdout.flush()
+
+    if verbose:
+        print("Number of residual models: {}".format(len(residuals)))
+
+    rhi = [np.percentile(residuals, p, interpolation='higher') for p in percentiles]
+    rlo = [0 for r in rhi]
+    selected = [[i for i, r in enumerate(residuals) if rh > r > rl] for rh, rl in zip(rhi, rlo)]
+
+    filtered = [filter_env(recon_src.gls, s) for s in selected]
+
+    if save:
+        dirname = os.path.dirname(statefile)
+        basename = ".".join(os.path.basename(statefile).split('.')[:-1])
+        saves = [dirname+'/'+basename+'_synthf{}.state'.format(p) for p in percentiles]
+        for f, s in zip(filtered, saves):
+            export_state(f, name=s)
+
+    return filtered, selected
 
 
 # MAIN FUNCTION ###############################################################
