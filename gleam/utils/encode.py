@@ -8,6 +8,7 @@ Encoding utilities to help JSON serializing GLEAM objects
 # Imports
 ###############################################################################
 import json
+import re
 import numpy as np
 
 
@@ -80,3 +81,24 @@ class GLEAMDecoder(object):
             else:
                 return jcls(**jdict)
         return jdict
+
+
+def an_sort(data):
+    """
+    Perform an alpha-numeric, natural sort
+
+    Args:
+        data <list> - list of strings
+
+    Kwargs:
+        None
+
+    Return:
+        sorted <list> - the alpha-numerically, naturally sorted list of strings
+    """
+    def convert(text):
+        return int(text) if text.isdigit() else text.lower()
+
+    def an_key(key):
+        return [convert(c) for c in re.split('([0-9]+)', key)]
+    return sorted(data, key=an_key)
