@@ -107,3 +107,21 @@ def inner_product(grid1, grid2):
         None
     """
     return np.sum(grid1*grid2)/(np.linalg.norm(grid1)*np.linalg.norm(grid2))
+
+
+def sigma_product(grid1, grid2):
+    """
+    The inner product of two grids in order to compare likeness as deviations from the mean
+
+    Args:
+        grid1, grid2 <np.ndarray> - the grid data, e.g. of two different models
+
+    Kwargs:
+        None
+
+    Return:
+        None
+    """
+    grid1 = grid1 - np.mean(grid1)
+    grid2 = grid2 - np.mean(grid2)
+    return inner_product(grid1, grid2)
