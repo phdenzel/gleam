@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw
 
 from gleam.utils import colors as glmc
 
-__all__ = ['ROISelector']
+__all__ = ['ROISelector', 'Polygon', 'Rectangle', 'Square', 'Circle', 'Amorph']
 
 
 ###############################################################################
@@ -1776,6 +1776,17 @@ class ROISelector(object):
             if verbose:
                 print(contained)
             return contained
+
+
+Polygon = ROISelector.Polygon
+
+Rectangle = ROISelector.Rectangle
+
+Square = ROISelector.Square
+
+Circle = ROISelector.Circle
+
+Amorph = ROISelector.Amorph
 
 
 def parse_arguments():
