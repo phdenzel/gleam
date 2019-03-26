@@ -14,6 +14,8 @@ TODO:
 import sys
 import os
 import numpy as np
+from functools import partial
+from pathos.multiprocessing import ProcessingPool as Pool
 from scipy.sparse import lil_matrix as sparse_matrix
 from scipy.sparse.linalg import lsqr, lsmr
 from sklearn.preprocessing import normalize as row_norm
@@ -28,7 +30,11 @@ import gleam.utils.rgb_map as glmrgb
 from gleam.glass_interface import glass_renv, filter_env, export_state
 glass = glass_renv()
 
-__all__ = ['ReconSrc', 'synth_filter']
+__all__ = ['ReconSrc', 'synth_filter', 'synth_filter_mp', 'eval_residuals']
+
+
+class KeyboardInterruptError(Exception):
+    pass
 
 
 ###############################################################################
@@ -72,6 +78,12 @@ class ReconSrc(object):
         # some verbosity
         if verbose:
             print(self.__v__)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            self.chmdl(key)
+        else:
+            NotImplemented
 
     def __str__(self):
         return "ReconSrc{}".format(self.plane.shape)
@@ -534,6 +546,85 @@ def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50], save=False, v
             message = "{:4d} / {:4d}: {:4.4f}\r".format(i+1, N_models, delta)
             sys.stdout.write(message)
             sys.stdout.flush()
+
+    if verbose:
+        print("Number of residual models: {}".format(len(residuals)))
+
+    rhi = [np.percentile(residuals, p, interpolation='higher') for p in percentiles]
+    rlo = [0 for r in rhi]
+    selected = [[i for i, r in enumerate(residuals) if rh > r > rl] for rh, rl in zip(rhi, rlo)]
+
+    filtered = [filter_env(recon_src.gls, s) for s in selected]
+
+    if save:
+        dirname = os.path.dirname(statefile)
+        basename = ".".join(os.path.basename(statefile).split('.')[:-1])
+        saves = [dirname+'/'+basename+'_synthf{}.state'.format(p) for p in percentiles]
+        for f, s in zip(filtered, saves):
+            export_state(f, name=s)
+
+    return filtered, selected
+
+
+def eval_residuals(index, reconsrc, N_total=0, verbose=False):
+    """
+    Helper function to evaluate the residual of a single model within a multiprocessing loop
+
+    Args:
+        reconsrc <ReconSrc object> - pass
+        index <int> - index of the model to analyse
+        residuals <list> - container of the output
+
+    Kwargs:
+        N_total <int> - the total size of loop range
+        verbose <bool> - verbose mode; print command line statements
+
+    Return:
+        delta <float> - the residual
+    """
+    reconsrc.chmdl(index)
+    try:
+        delta = reconsrc.reproj_residual()
+        if verbose:
+            message = "{:4d} / {:4d}: {:4.4f}\r".format(index+1, N_total, delta)
+            sys.stdout.write(message)
+            sys.stdout.flush()
+        return delta
+    except KeyboardInterrupt:
+        raise KeyboardInterruptError()
+
+
+def synth_filter_mp(statefile, gleamobject, percentiles=[10, 25, 50], nproc=2,
+                    save=False, verbose=False):
+    """
+    Filter a GLASS state file using GLEAM's source reconstruction feature
+
+    Args:
+        statefile <str> - the GLASS statefile
+        gleamobject <GLEAM object> - a GLEAM object instance with .fits file's data
+
+    Kwargs:
+        percentiles <list(float)> - percentages the filter retains
+        save <bool> - save the filtered states automatically
+        verbose <bool> - verbose mode; print command line statements
+
+    Return:
+        filtered_states <list(glass.Environment object)> - the filtered states ready for export
+    """
+    if verbose:
+        print(statefile)
+    recon_src = ReconSrc(gleamobject, statefile, M=20, verbose=verbose)
+    N_models = len(recon_src.gls.models)
+    # residuals = [0]*N_models
+
+    pool = Pool(processes=nproc)
+    try:
+        f = partial(eval_residuals,
+                    reconsrc=recon_src, N_total=N_models, verbose=verbose)
+        residuals = pool.map(f, range(N_models))
+        pool.clear()
+    except KeyboardInterrupt:
+        pool.terminate()
 
     if verbose:
         print("Number of residual models: {}".format(len(residuals)))
