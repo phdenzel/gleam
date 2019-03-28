@@ -512,7 +512,6 @@ class ReconSrc(object):
         rgba = glmrgb.rgba(data)
         img[self.mask] = rgba[self.mask]
         plt.imshow(img)
-        plt.show()
         return img
 
 
