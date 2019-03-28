@@ -363,6 +363,7 @@ def synth_loop(keys, jsons, states, save=False, optimized=False, verbose=False):
 
     Kwargs:
         save <bool> - save the filtered states automatically
+        optimized <bool> - run the multiprocessing synth filter
         verbose <bool> - verbose mode; print command line statements
 
     Return:
@@ -564,7 +565,6 @@ if __name__ == "__main__":
         kwargs = dict(save=False, optimized=True, verbose=1)
         sfiles = states  # filtererd_states
         synth_filtered_states = synth_loop(keys, jsons, sfiles, **kwargs)
-        print(synth_filtered_states)
 
     # residual analysis
     if 0:
@@ -572,7 +572,6 @@ if __name__ == "__main__":
         kwargs = dict(method='e2g', verbose=1)
         # sfiles = synthf50  # prefiltered_synthf50  # states  # filtered_states
         residuals = residual_loop(k, kappa_files, sfiles, **kwargs)
-        print(len(residuals))
 
     # inertia tensor analysis
     if 0:
