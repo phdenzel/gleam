@@ -639,10 +639,11 @@ class SkyF(object):
         Note:
             - those entry changes will not be saved in the .fits file, only in the dict
         """
-        self.hdr['CD1_1'] = -pxscale[0]/3600.
-        self.hdr['CD1_2'] = 0
-        self.hdr['CD2_1'] = 0
-        self.hdr['CD2_2'] = pxscale[1]/3600.
+        if pxscale[0] and pxscale[1]:
+            self.hdr['CD1_1'] = -pxscale[0]/3600.
+            self.hdr['CD1_2'] = 0
+            self.hdr['CD2_1'] = 0
+            self.hdr['CD2_2'] = pxscale[1]/3600.
 
     @property
     def extent(self):
