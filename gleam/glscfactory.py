@@ -175,8 +175,9 @@ class GLSCFactory(object):
             self._parameter = dict()
         text_info = self.text_extract(self.text, filter_=True)
         lens_info = self.lens_extract(self.lensobject)
-        self._parameter.update(text_info)
+        # execution order is important!
         self._parameter.update(lens_info)
+        self._parameter.update(text_info)
         return self._parameter
 
     @parameter.setter
