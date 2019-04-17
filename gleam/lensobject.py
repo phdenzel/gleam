@@ -18,6 +18,7 @@ import sys
 import os
 import math
 import warnings
+import numpy as np
 from PIL import Image, ImageDraw
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -34,7 +35,7 @@ class LensObject(SkyF):
     params = SkyF.params + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr',
                             '_light_model', 'stel_mass', 'lens_map']
 
-    def __init__(self, filepath, lens=None, srcimgs=None, zl=None, zs=None,
+    def __init__(self, filepath, lens=None, srcimgs=None, zl=None, zs=None, mapr=None,
                  tdelay=None, tderr=None, _light_model=None, stel_mass=None, lens_map=None,
                  auto=False,
                  glscfactory_options={}, finder_options={},
@@ -54,13 +55,14 @@ class LensObject(SkyF):
             photzp <float> - overwrite photometric zero-point information
             lens <int,int> - overwrite the lens pixel coordinates
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
-            zl <float> - TODO
-            zs <float> - TODO
-            tdelay <list(float)> - TODO
-            tderr <list(float) - TODO
+            zl <float> - redshift of the lens plane
+            zs <float> - redshift of the source plane
+            mapr <float> - maprad for lens modeler (in arcsec)
+            tdelay <list(float)> - time delays of the images
+            tderr <list(float) - errors on the time delays
             _light_model <dict/gleam.model object> - a dict or direct input of the light model
-            stel_mass <float> - TODO
-            lens_map <np.ndarray> - TODO
+            stel_mass <float> - estimate of the stellar mass
+            lens_map <np.ndarray> - mass map of the lens
             auto <bool> - use LensFinder for automatic image recognition (can be unreliable)
             verbose <bool> - verbose mode; print command line statements
             glscfactory_options <dict> - options for the GLSCFactory encompassing the following:
@@ -86,6 +88,7 @@ class LensObject(SkyF):
         # a few additional properties like redshifts and time delays
         self.zl = None
         self.zs = None
+        self.mapr = None
         self.tdelay = None
         self.tderr = None
         self._light_model = {}
@@ -104,6 +107,9 @@ class LensObject(SkyF):
                 self.lens = self.finder.lens_candidate
             for p in self.finder.source_candidates:
                 self.srcimgs.append(p)
+            shifts = self.src_shifts(unit='arcsec')
+            src_sep = np.sqrt([x[0]*x[0]+x[1]*x[1] for x in shifts])
+            self.mapr = max(2*sum(src_sep)/len(src_sep), 1.25*max(src_sep))
         # set lens parameters manually
         self._lens = None
         if lens is not None:
@@ -114,6 +120,8 @@ class LensObject(SkyF):
             self.zl = zl
         if zs is not None:
             self.zs = zs
+        if mapr is not None:
+            self.mapr = mapr
         if tdelay is not None:
             self.tdelay = tdelay
         if tderr is not None:
@@ -155,8 +163,8 @@ class LensObject(SkyF):
             tests <list(str)> - a list of test variable strings
         """
         return super(LensObject, self).tests \
-            + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr', 'light_model', 'stel_mass',
-               'glscfactory', 'finder']
+            + ['lens', 'srcimgs', 'zl', 'zs', 'mapr', 'tdelay', 'tderr',
+               'light_model', 'stel_mass', 'glscfactory', 'finder']
 
     @property
     def lens(self):

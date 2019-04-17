@@ -15,7 +15,6 @@ Note:
 # Imports
 ###############################################################################
 import gleam  # avoids cyclic imports with gleam.lensobject this way
-from gleam.utils.makedir import mkdir_p
 
 import sys
 import os
@@ -126,7 +125,8 @@ class GLSCFactory(object):
         if lensobject is None:
             self.lensobject = None
             if fits_file is not None:
-                self.lensobject = gleam.lensobject.LensObject(fits_file, auto=True, **kwargs)
+                from gleam.lensobject import LensObject
+                self.lensobject = LensObject(fits_file, auto=True, **kwargs)
         else:
             self.lensobject = lensobject
         if sync:
@@ -420,8 +420,7 @@ class GLSCFactory(object):
         else:
             ABCD = [ABCD[i] if len(ABCD) > i else [] for i in range(4)]
             parity = ['min', 'min', 'sad', 'sad']
-        info.update({'ABCD': ABCD, 'lens': lens,
-                     'parity': parity})
+        info.update({'ABCD': ABCD, 'lens': lens, 'parity': parity, 'mapr': lo.mapr})
         # some defaults
         if not info['zl']:
             info['zl'] = 0.5
@@ -446,6 +445,7 @@ class GLSCFactory(object):
         Return:
             None
         """
+        from gleam.utils.makedir import mkdir_p
         if filename is not None:
             if '~' in filename:
                 filename = os.path.expanduser(filename)
@@ -534,7 +534,33 @@ class GLSCFactory(object):
 
 # MAIN FUNCTION ###############################################################
 def main(case, args):
-    pass
+    # TODO: find general settings
+    if args.config_single:
+        params = {'zl': args.redshifts[0], 'zs': args.redshifts[1]}
+        kwargs = dict(parameter=params, text_file=args.text_file, filter_=args.filter_,
+                      reorder=args.reorder, name=args.name, output=args.config_single,
+                      verbose=args.verbose)
+        verbose = kwargs.pop('verbose', False)
+        if len(case) > 1:
+            from gleam.multilens import MultiLens
+            fopt = [dict(n=5, sigma=4.5, centroid=2, min_q=0.05)]*len(case)
+            ml = MultiLens(case, auto=True, finder_options=fopt)
+            for l in ml:
+                factory = GLSCFactory(lensobject=l, **kwargs)
+                print("".join(factory.config['single']))
+            # TODO: decide which band to save
+        else:
+            fopt = dict(n=6, sigma=3.0, centroid=2, min_q=0.05)
+            kwargs.update({'finder_options': fopt})
+            from gleam.lensobject import LensObject
+            lo = LensObject(case[0], auto=True, finder_options=fopt)
+            lo.show_f(lens=True, source_images=True)
+            factory = GLSCFactory(fits_file=case[0], **kwargs)
+            if verbose:
+                print("".join(factory.config['single']))
+            factory.write()
+    elif args.config_multi:  # TODO
+        pass
 
 
 def parse_arguments():
@@ -561,8 +587,9 @@ def parse_arguments():
                         default=False)
     parser.add_argument("--text-file", dest="text_file", metavar="<path-to-file>", type=str,
                         help="Path to text file with additional info for glass config generation",
-                        default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                                             "test", "test_lensinfo.txt"))
+                        default=None)
+    #                     default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
+    #                     "test", "test_lensinfo.txt"))
     parser.add_argument("--filter", dest="filter_", action="store_true",
                         help="Use GLSCFactory's additional filter for extracted text info",
                         default=False)
