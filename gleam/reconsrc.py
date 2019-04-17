@@ -69,6 +69,7 @@ class ReconSrc(object):
         self.lensobject = self.lens_objects[0]
         self.gls = glass.glcmds.loadstate(glsfile)
         self.model_index = -1
+        self.obj_index = 0
 
         # source plane
         self.M = M
@@ -162,9 +163,9 @@ class ReconSrc(object):
             mask = np.logical_or.reduce([mask]+self.lensobject.roi._masks[k])
         return mask
 
-    def chobj(self, index=None):
+    def chbnd(self, index=None):
         """
-        Change the lensobject; moves to the next lensobject in the list  by default
+        Change the lensobject/band; moves to the next lensobject/band in the list by default
 
         Args:
             None
@@ -178,6 +179,24 @@ class ReconSrc(object):
         if index is None:
             index = (self.lens_objects.index(self.lensobject)+1) % len(self.lens_objects)
         self.lensobject = self.lens_objects[index]
+        # self.plane = np.zeros((self.N, self.N), dtype=list)
+
+    def chobj(self, index=None):
+        """
+        Change the glass object; moves to the next glass object in the list by default
+
+        Args:
+            None
+
+        Kwargs:
+            index <int> - the index which to swtich to next
+
+        Return:
+            None
+        """
+        if index is None:
+            index = (self.obj_index + 1) % len(self.gls.objects)
+        self.obj_index = index
         # self.plane = np.zeros((self.N, self.N), dtype=list)
 
     def chmdl(self, index=None):
@@ -194,7 +213,7 @@ class ReconSrc(object):
             None
         """
         if index is None:
-            index = self.model_index + 1
+            index = (self.model_index + 1) % len(self.gls.models)
         self.model_index = index
         # self.plane = np.zeros((self.N, self.N), dtype=list)
 
@@ -214,11 +233,11 @@ class ReconSrc(object):
         """
         if selection is None:
             self.gls.make_ensemble_average()
-            return self.gls.ensemble_average['obj,data'][0]
+            return self.gls.ensemble_average['obj,data'][self.obj_index]
         else:
             envcpy = filter_env(self.gls, selection)
             envcpy.make_ensemble_average()
-            return envcpy.ensemble_average['obj,data'][0]
+            return envcpy.ensemble_average['obj,data'][self.obj_index]
 
     def delta_beta(self, theta):
         """
@@ -234,7 +253,7 @@ class ReconSrc(object):
             delta_beta <np.ndarray> - beta from lens equation
         """
         if self.model_index >= 0:
-            obj, data = self.gls.models[self.model_index]['obj,data'][0]
+            obj, data = self.gls.models[self.model_index]['obj,data'][self.obj_index]
         else:
             obj, data = self.ensavg_mdl()
         if isinstance(theta, np.ndarray) and len(theta) > 2:  # seems to work with
@@ -470,7 +489,7 @@ class ReconSrc(object):
         data = self.lens_map(flat=flat, mask=True, composite=composite)
         return data-reproj
 
-    def reproj_residual(self, method='lsqr', composite=False):
+    def reproj_chi2(self, method='lsqr', normalize=True, sigma=1, composite=False):
         """
         Evaluate the reprojection by calculating the absolute squared residuals to the data
 
@@ -479,13 +498,19 @@ class ReconSrc(object):
 
         Kwargs:
             method <str> - method which solves the inverse problem [lsqr, lsmr,]
+            normalize <bool> - TODO
+            sigma <float> - TODO
             composite <bool> - return the composite data array
 
         Return:
             residual <float> - the residual between data and reprojection
         """
         residual = self.residual_map(method=method, flat=True, composite=composite)
-        return np.sum(residual**2)
+        chi2 = np.sum(residual**2)
+        if normalize:
+            N = np.count_nonzero(self.mask)
+            chi2 /= N*sigma*sigma
+        return chi2
 
     def mask_plot(self, data=None, bg=None):
         """
@@ -515,7 +540,8 @@ class ReconSrc(object):
         return img
 
 
-def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50], save=False, verbose=False):
+def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50],
+                 normalize=True, sigma=1, save=False, verbose=False):
     """
     Filter a GLASS state file using GLEAM's source reconstruction feature
 
@@ -530,6 +556,8 @@ def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50], save=False, v
 
     Return:
         filtered_states <list(glass.Environment object)> - the filtered states ready for export
+        selected <list(int)> - index list of selected models
+        residuals <list(float)> - list of chi2s
     """
     if verbose:
         print(statefile)
@@ -539,10 +567,10 @@ def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50], save=False, v
     N_models = len(recon_src.gls.models)
     for i in range(N_models):
         recon_src.chmdl(i)
-        delta = recon_src.reproj_residual()
+        delta = recon_src.reproj_chi2(normalize=normalize, sigma=sigma)
         residuals.append(delta)
         if verbose:
-            message = "{:4d} / {:4d}: {:4.4f}\r".format(i+1, N_models, delta)
+            message = "{:4d} / {:4d}: {:4.8f}\r".format(i+1, N_models, delta)
             sys.stdout.write(message)
             sys.stdout.flush()
 
@@ -562,7 +590,7 @@ def synth_filter(statefile, gleamobject, percentiles=[10, 25, 50], save=False, v
         for f, s in zip(filtered, saves):
             export_state(f, name=s)
 
-    return filtered, selected
+    return filtered, selected, residuals
 
 
 def eval_residuals(index, reconsrc, N_total=0, verbose=False):
@@ -583,7 +611,7 @@ def eval_residuals(index, reconsrc, N_total=0, verbose=False):
     """
     reconsrc.chmdl(index)
     try:
-        delta = reconsrc.reproj_residual()
+        delta = reconsrc.reproj_chi2()
         if verbose:
             message = "{:4d} / {:4d}: {:4.4f}\r".format(index+1, N_total, delta)
             sys.stdout.write(message)
@@ -609,6 +637,8 @@ def synth_filter_mp(statefile, gleamobject, percentiles=[10, 25, 50], nproc=2,
 
     Return:
         filtered_states <list(glass.Environment object)> - the filtered states ready for export
+        selected <list(int)> - index list of selected models
+        residuals <list(float)> - list of chi2s
     """
     if verbose:
         print(statefile)
@@ -641,7 +671,7 @@ def synth_filter_mp(statefile, gleamobject, percentiles=[10, 25, 50], nproc=2,
         for f, s in zip(filtered, saves):
             export_state(f, name=s)
 
-    return filtered, selected
+    return filtered, selected, residuals
 
 
 # MAIN FUNCTION ###############################################################
