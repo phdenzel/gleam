@@ -62,14 +62,15 @@ def synth_loop(keys, jsons, states, save=False, optimized=False, verbose=False):
         with open(json) as f:
             ml = MultiLens.from_json(f)
         for sf in states[k]:
-            synths, _ = synthf(sf, ml, percentiles=[10, 25, 50], save=save, verbose=verbose)
+            synths, _, _ = synthf(sf, ml, percentiles=[10, 25, 50], save=save, verbose=verbose)
             filtered_states[sf] = synths
     return filtered_states
 
 
 if __name__ == "__main__":
     # root directories
-    rdir = "/Users/phdenzel/tdlmc"
+    home = os.path.expanduser("~")
+    rdir = home+"/tdlmc"
     jsondir = rdir+"/json/"
     statedir = rdir+"/states/"
 
@@ -97,7 +98,7 @@ if __name__ == "__main__":
                                               or f.endswith('_synthf50.state'))]
     states = {k: [f for f in ls_states if k in f] for k in keys}
 
-    if 0:  # synth filtering
+    if 1:  # synth filtering
         kwargs = dict(save=True, optimized=True, verbose=True)
         synth_filtered_states = synth_loop(keys, jsons, states, **kwargs)
 

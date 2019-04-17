@@ -378,7 +378,7 @@ def synth_loop(keys, jsons, states, save=False, optimized=False, verbose=False):
         with open(json) as f:
             ml = MultiLens.from_json(f)
         for sf in states[k]:
-            synths, _ = synthf(sf, ml, percentiles=[10, 25, 50], save=save, verbose=verbose)
+            synths, _, _ = synthf(sf, ml, percentiles=[10, 25, 50], save=save, verbose=verbose)
             filtered_states[sf] = synths
     return filtered_states
 

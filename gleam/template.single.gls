@@ -53,7 +53,8 @@ local_gradient(45)
 shear(0.01)
 # symm()
 
-# maprad(2)
+_mapr =
+maprad(mapr)
 
 
 ### Source
