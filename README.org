@@ -92,3 +92,14 @@ Two dimensional, softened power-law elliptical mass distribution mapper. Calcula
 
 ** TODO
   + standardize docstrings and use sphinx to auto-generate documentation page
+
+
+* Libraries
+
+** GLASS
+   GLEAM interfaces with GLASS heavily, which is why GLASS is included in as a package in ~src~.
+   To install it on macOS simply use the ~compile~ and ~install~ scripts.
+   On linux, glpk sometimes installs its build library in ~src/glass/build/glpk_build/lib64~ which needs
+   to be renamed to ~src/glass/build/glpk_build/lib~.
+   For now this has to be done manually. Automatic fixes are in work...
+
