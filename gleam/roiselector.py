@@ -18,8 +18,10 @@ Usage example:
 ###############################################################################
 import copy
 import numpy as np
+from scipy import ndimage
 from PIL import Image, ImageDraw
 
+from gleam.lensfinder import LensFinder
 from gleam.utils import colors as glmc
 
 __all__ = ['ROISelector', 'Polygon', 'Rectangle', 'Square', 'Circle', 'Amorph']
@@ -237,6 +239,45 @@ class ROISelector(object):
             for s in self._buffer[k]:
                 masks[k].append(s.contains(self.xidcs, self.yidcs))
         return masks
+
+    def auto_polygon(self, threshold=None, sigma=3):
+        """
+        Auto-detect a polygon along a threshold value
+
+        Args:
+            None
+
+        Kwargs:
+            threshold <float> - threshold value above which the data is selected
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            autop <ROISelector.Polygon object> - auto-selected polygon
+
+        TODO: complete and add tests
+        """
+        if threshold is None:
+            noise_levels = LensFinder.threshold_estimate(self.data, sigma=3)
+            threshold = noise_levels.max()
+        pass
+
+    def auto_select(self, threshold=None, sigma=3):
+        """
+        Auto-detect a region of interest above a threshold value
+
+        Args:
+            None
+
+        Kwargs:
+            threshold <float> - threshold value above which the data is selected
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            selection <np.ndarray(bool)> - auto-selected region
+
+        TODO: complete and add tests
+        """
+        pass
 
     @property
     def select(self):
@@ -485,6 +526,8 @@ class ROISelector(object):
             mask <np.ndarray(bool)> - boolean mask used for integration
             center <float,float> - center from which to sum up the pixels (in pixels)
             R <float> - the radius up to which to sum up the pixels (in pixels)
+
+        TODO
         """
         data = np.asarray(data)
         if center is None:
@@ -506,6 +549,8 @@ class ROISelector(object):
     def mpl_interface(self):
         """
         Plot the data and provide a GUI to select ROI objects manually
+
+        TODO
         """
         import matplotlib as mpl
         mpl.pyplot.plot(self.data)

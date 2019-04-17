@@ -125,6 +125,7 @@ class LensFinder(object):
             threshold <float> - threshold ready to use in a peak finding algorithm
         """
         def clip(filtered_data, lower_sig, upper_sig):
+            # lower_sig, upper_sig are the sigma multipliers not the actual sigma values
             # get stats
             median = centf(filtered_data)
             std = stdf(filtered_data)
@@ -152,8 +153,7 @@ class LensFinder(object):
             lower_sig = sigma[0]
             upper_sig = sigma[1]
         elif isinstance(sigma, (int, float)):
-            lower_sig = sigma
-            upper_sig = sigma
+            lower_sig = upper_sig = sigma
         else:
             lower_sig = upper_sig = 3
         # filter data, i.e. perform sigma clip
@@ -179,7 +179,7 @@ class LensFinder(object):
         return bkgrd + (error*snr)
 
     @staticmethod
-    def peak_candidates(data, threshold, min_d=3, n=1e12, mask_region=None, ignore_border=True,
+    def peak_candidates(data, threshold, min_d=3, n=1e10, mask_region=None, ignore_border=True,
                         centroid=0, verbose=False):
         """
         Recover peak candidate positions (in pixels) and their flux values above a threshold
