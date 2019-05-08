@@ -44,14 +44,12 @@ _zl =
 globject(name)
 zlens(zl)
 
-pixrad(8)
+pixrad(12)
 steepness(0, None)
-# hires(1, 5)
+hires(1, 5)
 
 smooth(2, include_central_pixel=False)
-local_gradient(45)
-shear(0.01)
-# symm()
+local_gradient(80)
 
 _mapr =
 maprad(mapr)
@@ -67,6 +65,12 @@ _px2arcsec =
 
 for i in range(len(ABCD)):
     ABCD[i] = (ABCD[i][0]-lens[0])*px2arcsec[0], (ABCD[i][1]-lens[1])*px2arcsec[1]
+
+if len(ABCD) < 4:
+    symm()
+    shear(0.01)
+else:
+    shear(0.1)
 
 _tdelay = 
 _tderr = 
