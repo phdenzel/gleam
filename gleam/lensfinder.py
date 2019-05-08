@@ -27,7 +27,8 @@ class LensFinder(object):
     """
     Framework for finding peaks in the sky (.fits files)
     """
-    def __init__(self, lensobject, n=5, min_q=0.1, sigma=(4, 4), centroid=5, verbose=False):
+    def __init__(self, lensobject, n=5, min_q=0.1, sigma=(4, 4), centroid=5, separate_lens=True,
+                 verbose=False):
         """
         Initialize peak finding in a lensobject
 
@@ -40,6 +41,7 @@ class LensFinder(object):
             sigma <int(,int)> - lower/upper sigma factor for signal-to-noise estimate
             centroid <int> - use COM positions around a pixel slice of size of centroid
                              around peak center if centroid > 1
+            separate_lens <bool> - separate lens from peak candidates
             verbose <bool> - verbose mode; print command line statements
 
         Return:
@@ -66,12 +68,15 @@ class LensFinder(object):
             # choose lens in peaks
             self.lens_candidate, self.lens_value, self.lens_index = self.detect_lens(
                 self.peaks, self.peak_values)
-            # sources are all the rest
             self.source_candidates, self.source_values, self.source_indices = (
-                [self.peaks[i] for i in range(len(self.peaks)) if i != self.lens_index],
-                [self.peak_values[i] for i in range(len(self.peak_values))
-                 if i != self.lens_index],
-                [i for i in range(len(self.peak_positions)) if i != self.lens_index])
+                self.peaks[:], self.peak_values[:], [i for i in range(len(self.peak_positions))])
+            if separate_lens:
+                # sources are all the rest
+                self.source_candidates, self.source_values, self.source_indices = (
+                    [self.peaks[i] for i in range(len(self.peaks)) if i != self.lens_index],
+                    [self.peak_values[i] for i in range(len(self.peak_values))
+                     if i != self.lens_index],
+                    [i for i in range(len(self.peak_positions)) if i != self.lens_index])
             # if self.source_candidates is not None and self.lens_candidate is not None:
             #     self.order_by_distance(self.source_candidates, self.lens_candidate)
         # some verbosity
@@ -179,7 +184,7 @@ class LensFinder(object):
         return bkgrd + (error*snr)
 
     @staticmethod
-    def peak_candidates(data, threshold, min_d=3, n=1e10, mask_region=None, ignore_border=True,
+    def peak_candidates(data, threshold, min_d=3, n=1e12, mask_region=None, ignore_border=True,
                         centroid=0, verbose=False):
         """
         Recover peak candidate positions (in pixels) and their flux values above a threshold
