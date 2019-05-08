@@ -544,18 +544,23 @@ def main(case, args):
         if len(case) > 1:
             from gleam.multilens import MultiLens
             fopt = [dict(n=5, sigma=4.5, centroid=2, min_q=0.05)]*len(case)
-            ml = MultiLens(case, auto=True, finder_options=fopt)
+            if case.endswith('json'):
+                with open(case) as f:
+                    ml = MultiLens.from_json(f)
+            else:
+                ml = MultiLens(case, auto=True, finder_options=fopt)
             for l in ml:
                 factory = GLSCFactory(lensobject=l, **kwargs)
                 print("".join(factory.config['single']))
             # TODO: decide which band to save
         else:
-            fopt = dict(n=6, sigma=3.0, centroid=2, min_q=0.05)
+            fopt = dict(n=4, sigma=2.0, centroid=2, min_q=0.1, separate_lens=False)
             kwargs.update({'finder_options': fopt})
+            factory = GLSCFactory(fits_file=case[0], **kwargs)
+            # For a visual response
             from gleam.lensobject import LensObject
             lo = LensObject(case[0], auto=True, finder_options=fopt)
             lo.show_f(lens=True, source_images=True)
-            factory = GLSCFactory(fits_file=case[0], **kwargs)
             if verbose:
                 print("".join(factory.config['single']))
             factory.write()
@@ -572,7 +577,8 @@ def parse_arguments():
                         default=os.path.join(os.path.abspath(os.path.dirname(__file__)),
                                              'test', 'W3+3-2.U.12907_13034_7446_7573.fits'))
     parser.add_argument("-z", "--redshifts", metavar=("<zl", "zs>"), nargs=2, type=float,
-                        help="Redshifts for lens and source")
+                        help="Redshifts for lens and source",
+                        default=[None, None])
 
     # gls config factory args
     parser.add_argument("--single-config", dest="config_single", metavar="<output-name>", type=str,
