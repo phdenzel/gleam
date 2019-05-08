@@ -12,13 +12,16 @@ Usage example:
     s.select['circle']((64, 64), 10)
     data[s()]
 
+TODO:
+    - add Ring tests
+
 """
 ###############################################################################
 # Imports
 ###############################################################################
 import copy
 import numpy as np
-from scipy import ndimage
+# from scipy import ndimage
 from PIL import Image, ImageDraw
 
 from gleam.lensfinder import LensFinder
@@ -292,6 +295,7 @@ class ROISelector(object):
         """
         return {
             'circle': self.select_circle,
+            'ring': self.select_ring,
             'rect': self.select_rect,
             'square': self.select_square,
             'polygon': self.select_polygon,
@@ -318,6 +322,31 @@ class ROISelector(object):
         self._focus = -1
         self._buffer[self._selection].append(circle)
         selection = circle.contains(self.xidcs, self.yidcs)
+        if verbose:
+            print(self.__v__)
+        return selection
+
+    def select_ring(self, inner, outer, verbose=False):
+        """
+        Select all pixels within a ring
+
+        Args:
+            inner <tuple> - parameter for the inner circle
+            outer <tuple> - parameter for the outer circle
+
+        Kwargs:
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            selection <np.ndarray(bool)> - boolean array with same shape as data
+        """
+        inner_circle = ROISelector.Circle(*inner)
+        outer_circle = ROISelector.Circle(*outer)
+        ring = ROISelector.Ring.from_circles(inner_circle, outer_circle)
+        self._selection = 'ring'
+        self._focus = -1
+        self._buffer[self._selection].append(ring)
+        selection = ring.contains(self.xidcs, self.yidcs)
         if verbose:
             print(self.__v__)
         return selection
@@ -438,6 +467,7 @@ class ROISelector(object):
         """
         return {
             'circle': self.focus_circle,
+            'ring': self.focus_ring,
             'rect': self.focus_rect,
             'square': self.focus_square,
             'polygon': self.focus_polygon,
@@ -1260,9 +1290,9 @@ class ROISelector(object):
 
             Args:
                 center <float,float> - center coordinates of the circle
-                radius <float> - radius of the circle
 
             Kwargs:
+                radius <float> - radius of the circle
                 verbose <bool> - verbose mode; print command line statements
 
             Return:
@@ -1580,6 +1610,128 @@ class ROISelector(object):
             draw.ellipse((cx0, cy0, cx1, cy1), fill=fill, outline=outline)
             del draw
             return img
+
+###############################################################################
+    class Ring(object):
+        """
+        A data structure describing a circle
+        """
+        params = ['inner_center', 'outer_center', 'inner_radius', 'outer_radius']
+
+        def __init__(self, inner_center, outer_center,
+                     inner_radius=0, outer_radius=0, verbose=False):
+            """
+            Initialize a ring data structure
+
+            Args:
+                inner_center <float,float> - center coordinates of the inner circle
+                outer_center <float,float> - center coordinates of the outer circle
+
+            Kwargs:
+                inner_radius <float> - radius of the inner circle
+                outer_radius <float> - radius of the outer circle
+                verbose <bool> - verbose mode; print command line statements
+
+            Return:
+                <ROISelector.Ring object> - standard initializer
+            """
+            # circles
+            self.inner_circle = ROISelector.Circle(self.inner_radius, self.inner_center)
+            self.outer_circle = ROISelector.Circle(self.outer_radius, self.outer_center)
+            # centers
+            self.inner_center = self.inner_circle.center
+            self.outer_center = self.outer_circle.center
+            # radii
+            self.inner_radius = self.inner_circle.radius
+            self.outer_radius = self.outer_circle.radius
+            if isinstance(inner_radius, (int, float)):
+                self.inner_radius = abs(inner_radius)
+            elif hasattr(inner_radius, '__len__') and len(inner_radius) == 2:
+                dx = inner_radius[0]-self.inner_center[0]
+                dy = inner_radius[1]-self.inner_center[1]
+                self.inner_radius = np.sqrt(dx*dx+dy*dy)
+            if isinstance(outer_radius, (int, float)):
+                self.outer_radius = abs(outer_radius)
+            elif hasattr(outer_radius, '__len__') and len(outer_radius) == 2:
+                dx = outer_radius[0]-self.outer_center[0]
+                dy = outer_radius[1]-self.outer_center[1]
+                self.outer_radius = np.sqrt(dx*dx+dy*dy)
+            if verbose:
+                print(self.__v__)
+
+        def __eq__(self, other):
+            if isinstance(other, self.__class__):
+                return self.inner_radius == other.inner_radius \
+                    and self.outer_radius == other.outer_radius \
+                    and self.inner_center[0] == other.inner_center[0] \
+                    and self.inner_center[1] == other.inner_center[1] \
+                    and self.outer_center[0] == other.outer_center[0] \
+                    and self.outer_center[1] == other.outer_center[1]
+            else:
+                NotImplemented
+
+        @property
+        def __json__(self):
+            """
+            Select attributes for json write
+            """
+            jsn_dict = {}
+            for k in self.__class__.params:
+                if hasattr(self, k):
+                    jsn_dict[k] = self.__getattribute__(k)
+            jsn_dict['__type__'] = 'ROISelector.' + self.__class__.__name__
+            return jsn_dict
+
+        def encode(self):
+            """
+            Using md5 to encode specific information
+            """
+            import hashlib
+            s = ', '.join([str(self.inner_radius), str(self.outer_radius),
+                           str(self.inner_center), str(self.outer_center)]).encode('utf-8')
+            code = hashlib.md5(s).hexdigest()
+            return code
+
+        def __hash__(self):
+            """
+            Using encode to create hash
+            """
+            return hash(self.encode())
+
+        def __str__(self):
+            return "{}({}@{}, {}@{})#{}".format(
+                self.__class__.__name__,
+                self.inner_radius, self.inner_center,
+                self.outer_radius, self.outer_center,
+                self.encode())
+
+        @property
+        def __v__(self):
+            """
+            Info string for test printing
+
+            Args/Kwargs:
+                None
+
+            Return:
+                <str> - test of ROISelector.Circle attributes
+            """
+            return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t))
+                              for t in self.tests])
+
+        @property
+        def tests(self):
+            """
+            A list of attributes being tested when calling __v__
+
+            Args/Kwargs:
+                None
+
+            Return:
+                tests <list(str)> - a list of test variable strings
+            """
+            return ['inner_center', 'inner_radius', 'diameters', 'circumferences', 'area']
+
 
 ###############################################################################
     class Amorph(np.ndarray):
