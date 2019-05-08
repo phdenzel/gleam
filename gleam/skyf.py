@@ -1034,28 +1034,112 @@ class SkyF(object):
             print(cutout)
         return cutout
 
-    def gain(self, window=20, center=(10, 10), factor=1, verbose=False):
+    @staticmethod
+    def flatfield(data, size=0.25, npts=500, verbose=False):
         """
-        Calculate the gain from an empty, noisy square region in the .fits image
+        Calculate signals and variances from random image data cutouts
+        using a compensation method for the flat-field effect
+
+        Args:
+            data <np.ndarray> - image data array, must be 2D
+
+        Kwargs:
+            size <float> - window size as a number between [0, 1]
+            npts <int> - number of points with coordinates (variance, signal)
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            signals, variances <np.ndarrays> - signals and variances for linear regression method
+        """
+        dims = data.shape
+        if len(dims) > 2:
+            raise ValueError("Please input the image as a 2D np.ndarray!")
+        w, h = int(size*dims[0]), int(size*dims[1])
+        rcs = np.c_[np.random.randint(h//2, dims[1]-h//2, (npts)),
+                    np.random.randint(w//2, dims[0]-w//2, (npts))]
+        s = [(slice(p[0]-h//2, p[0]+h//2), slice(p[1]-w//2, p[1]+w//2)) for p in rcs]
+        A = [data[si] for si in s]
+        signals = [np.mean(wA) for wA in A]
+        r = [A[0]/wB for wB in A]
+        B = [wB*rAB for wB, rAB in zip(A, r)]
+        AB = [a-b for a, b in zip(A, B)]
+        sgs = [np.std(ab) for ab in AB]
+        variances = [sg*sg for sg in sgs]
+        return np.asarray(signals[1:]), np.asarray(variances[1:])
+
+    def gain(self, **kwargs):
+        """
+        Calculate an estimate for the gain of the .fits image
 
         Args:
             None
 
         Kwargs:
-            window <int> - window size in pixels of the empty, noisy region
-            center <int,int> - pixel coordinates of the window's center
-            factor <float> - efficiency factor for the gain estimation
-            verbose <bool> -  verbose mode; print command line statements
+            signals <np.ndarray> - calculate gain from given signals
+            variances <np.ndarray> - calculate gain from given variances
+            size <float> - window size as a number between [0, 1]
+            npts <int> - number of points with coordinates (variance, signal)
+            verbose <bool> - verbose mode; print command line statements
 
         Return:
-            gain <float> - an estimate of the gain with sigma^2/mean
+            gain <float> - an estimate of the gain
+            bias <float> - an estimate of other (missing) noise components
         """
-        noisecut = self.cutout(window, center)
-        # gain = factor*abs(np.std(noisecut)**2/np.mean(noisecut))
-        gain = (np.sqrt(np.mean(noisecut))/np.std(noisecut))**2
+        verbose = kwargs.pop('verbose', False)
+        signals = kwargs.pop('signals', None)
+        variances = kwargs.pop('variances', None)
+        if signals is None and variances is None:
+            signals, variances = self.flatfield(self.data, **kwargs)
+        A = np.vstack([variances, np.ones(len(signals))]).T
+        gain, bias = np.linalg.lstsq(A, signals, rcond=None)[0]
         if verbose:
-            print(gain)
-        return gain
+            print("Gain: {}".format(gain))
+            print("Bias: {}".format(bias))
+        return gain, bias
+
+    def sigma(self, f=1, add_bias=0, flat=False, verbose=False):
+        """
+        Noise sigma estimation map
+
+        Args:
+            None
+
+        Kwargs:
+            f <float> - a fudge factor for tuning
+            add_bias <float> - other noise components
+
+        Return:
+            sigma <np.ndarray> - noise estimates for each data pixel
+        """
+        sgma = np.sqrt(np.abs(self.data))
+        if flat:
+            sgma = np.array([sgma[self.idx2yx(i)] for i in range(sgma.size)])
+        if add_bias:
+            sgma = sgma + add_bias
+        return f*sgma
+
+    def sigma2(self, f=1, add_bias=0, add_bias2=0, flat=False, verbose=False):
+        """
+        Squared noise sigma estimation map
+
+        Args:
+            None
+
+        Kwargs:
+            f <float> - a fudge factor for tuning
+
+        Return:
+            sigma <np.ndarray> - noise estimates for each data pixel
+        """
+        sgma2 = np.abs(self.data)
+        if flat:
+            sgma2 = np.array([sgma2[self.idx2yx(i)] for i in range(sgma2.size)])
+        if add_bias2:
+            return f*sgma2 + add_bias2
+        elif add_bias:
+            return f*sgma2 + add_bias*add_bias
+        else:
+            return f*sgma2
 
     @staticmethod
     def pxscale_from_hdr(hdr, as_degrees=False, verbose=False):
