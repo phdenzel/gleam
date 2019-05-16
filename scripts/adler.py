@@ -10,17 +10,59 @@ from pathos.multiprocessing import ProcessingPool as Pool
 from astropy.io import fits
 import matplotlib.pyplot as plt
 
-from gleam.reconsrc import synth_filter, synth_filter_mp
+from gleam.reconsrc import ReconSrc, synth_filter, synth_filter_mp
 from gleam.multilens import MultiLens
 from gleam.glass_interface import glass_renv
 from gleam.utils.encode import an_sort
 from gleam.utils.lensing import downsample_model, upsample_model, inertia_tensor, qpm_props, potential_grid, degarr_grid
 from gleam.utils.linalg import sigma_product
+from gleam.utils.makedir import mkdir_p
 glass = glass_renv()
 
 
 class KeyboardInterruptError(Exception):
     pass
+
+
+def mkdir_structure(keys, root=None):
+    """
+    Create a directory structure
+    """
+    for k in keys:
+        d = os.path.join(root, k)
+        mkdir_p(d)
+
+
+def chi2_analysis(reconsrc, optimized=False, verbose=False):
+    """
+    Args:
+        reconsrc <ReconSrc object> - loaded object, preferentially with loaded cache
+
+    Kwargs:
+        optimized <bool> - run the multiprocessing synth filter
+        verbose <bool> - verbose mode; print command line statements
+
+    Return:
+        chi2 <list(float)> - non-reduced chi2 values
+    """
+    synthf = synth_filter
+    if optimized:
+        synthf = synth_filter_mp
+    # Construct the noise map
+    lo = reconsrc.lensobject
+    signals, variances = lo.flatfield(lo.data, size=0.2)
+    gain, _ = lo.gain(signals=signals, variances=variances)
+    f = gain
+    bias = 0.01*np.max(f * lo.data)
+    sgma2 = lo.sigma2(f=f, add_bias=bias)
+    dta_noise = np.random.normal(0, 1, size=lo.data.shape)
+    dta_noise = dta_noise * np.sqrt(sgma2)
+    # recalculate the chi2s
+    kwargs = dict(reconsrc=reconsrc, percentiles=[],
+                  noise=dta_noise, sigma2=sgma2,
+                  reduced=False, return_obj=False, save=False, verbose=verbose)
+    _, _, chi2 = synthf(**kwargs)
+    return chi2
 
 
 def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
@@ -349,12 +391,13 @@ def iprod_analysis(eagle_degarr, ens_degarrs, verbose=False):
     if verbose:
         print("{} models".format(len(ens_degarrs)))
     for i, d in enumerate(ens_degarrs):
-        iprod = sigma_product(eagle_degarr, d)
-        iprods.append(iprod)
+        s = sigma_product(eagle_degarr, d)
+        iprods.append(s)
     return iprods
 
 
-def synth_loop(keys, jsons, states, save=False, optimized=False, verbose=False):
+def synth_loop(keys, jsons, states, cached=False, save_state=False, save_obj=False, load_obj=False,
+               path=None, optimized=False, verbose=False):
     """
     Args:
         keys <list(str)> - the keys which correspond to jsons' and states' keys
@@ -362,7 +405,9 @@ def synth_loop(keys, jsons, states, save=False, optimized=False, verbose=False):
         states <dict> - state dictionary holding a list of filenames for each key
 
     Kwargs:
-        save <bool> - save the filtered states automatically
+        save_state <bool> - save the filtered states automatically
+        save_obj <bool> - save the ReconSrc object as a pickle file
+        load_obj <bool> - load the ReconSrc object from a pickle file
         optimized <bool> - run the multiprocessing synth filter
         verbose <bool> - verbose mode; print command line statements
 
@@ -377,10 +422,101 @@ def synth_loop(keys, jsons, states, save=False, optimized=False, verbose=False):
         json = jsons[k][0]
         with open(json) as f:
             ml = MultiLens.from_json(f)
+        # generate noise map
+        signals, variances = ml[0].flatfield(ml[0].data, size=0.2)
+        gain, _ = ml[0].gain(signals=signals, variances=variances)
+        f = gain
+        bias = 0.01*np.max(f * ml[0].data)
+        sgma2 = ml[0].sigma2(f=f, add_bias=bias)
+        dta_noise = np.random.normal(0, 1, size=ml[0].data.shape)
+        dta_noise = dta_noise * np.sqrt(sgma2)
         for sf in states[k]:
-            synths, _, _ = synthf(sf, ml, percentiles=[10, 25, 50], save=save, verbose=verbose)
-            filtered_states[sf] = synths
+            if verbose:
+                print(sf)
+            if load_obj:
+                loadname = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
+                if path is None:
+                    path = ""
+                if os.path.exists(path + k):
+                    loadname = os.path.join(path, k, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                        if verbose:
+                            print(recon_src.__v__)
+                else:
+                    recon_src = ReconSrc(ml, sf, M=2*ml[0].naxis1, verbose=verbose)
+            else:
+                recon_src = ReconSrc(ml, sf, M=2*ml[0].naxis1, verbose=verbose)
+            if save_obj:
+                recon_src = synthf(reconsrc=recon_src, percentiles=[],
+                                   noise=dta_noise, sigma2=sgma2,
+                                   return_obj=save_obj, save=False, verbose=verbose)
+                # save the object
+                savename = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
+                if path is None:
+                    path = ""
+                if os.path.exists(path+k):
+                    savename = os.path.join(path, k, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                with open(savename, 'wb') as f:
+                    pickle.dump(recon_src, f)
+            else:
+                recon_src = synthf(reconsrc=recon_src, percentiles=[],
+                                   noise=dta_noise, sigma2=sgma2,
+                                   return_obj=save_obj, save=False, verbose=verbose)
+            if save_state:
+                synthf(reconsrc=recon_src, percentiles=[],
+                       noise=dta_noise, sigma2=sgma2,
+                       save=save_state, verbose=verbose)
     return filtered_states
+
+
+def cache_loop(keys, jsons, states, path=None, variables=['inv_proj', 'N_nil', 'reproj_d_ij'],
+               save_obj=False, verbose=False):
+    """
+    Args:
+        keys <list(str)> - the keys which correspond to jsons' and states' keys
+        jsons <dict> - json dictionary holding a list of filenames for each key
+        states <dict> - state dictionary holding a list of filenames for each key
+
+    Kwargs:
+        save_state <bool> - save the filtered states automatically
+        save_obj <bool> - save the ReconSrc object as a pickle file
+        load_obj <bool> - load the ReconSrc object from a pickle file
+        optimized <bool> - run the multiprocessing synth filter
+        verbose <bool> - verbose mode; print command line statements
+
+    Return:
+        filtered_states
+    """
+    for k in keys:
+        json = jsons[k][0]
+        with open(json) as f:
+            ml = MultiLens.from_json(f)
+        for sf in states[k]:
+            loadname = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
+            if path is None:
+                path = ""
+            if os.path.exists(path + k):
+                loadname = os.path.join(path, k, loadname)
+            elif os.path.exists(path):
+                loadname = os.path.join(path, loadname)
+            if verbose:
+                print(loadname)
+            if os.path.exists(loadname):
+                with open(loadname, 'rb') as f:
+                    old_recon_src = pickle.load(f)
+            new_recon_src = ReconSrc(ml, sf, M=2*ml[0].naxis1, verbose=verbose)
+            new_recon_src.update_cache(old_recon_src._cache, variables=variables)
+            # print(new_recon_src._cache)
+            if save_obj:
+                if os.path.exists(loadname):
+                    with open(loadname, 'wb') as f:
+                        pickle.dump(new_recon_src, f)
 
 
 def residual_loop(keys, kappa_files, states, method='e2g', verbose=False):
@@ -514,9 +650,12 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 if __name__ == "__main__":
     # root directories
     rdir = "/Users/phdenzel/adler"
+    version = "v2/"
     jsondir = rdir+"/json/"
-    statedir = rdir+"/states/v3/"
+    statedir = rdir+"/states/" + version
+    anlysdir = rdir+"/analysis/" + version
     kappadir = rdir+"/kappa/"
+
     keys = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
             "H3S0A0B90G0", "H3S1A0B90G0", "H4S3A0B0G90", "H10S0A0B90G0", "H13S0A0B90G0",
             "H23S0A0B90G0", "H30S0A0B90G0", "H36S0A0B90G0", "H160S0A90B0G0", "H234S0A0B90G0"]
@@ -560,31 +699,145 @@ if __name__ == "__main__":
 
     sfiles = states  # filtered_states  # synthf50  # prefiltered_synthf50
 
-    # synth filtering
+    # # create a directory structure
     if 0:
-        kwargs = dict(save=False, optimized=True, verbose=1)
-        sfiles = states  # filtererd_states
-        synth_filtered_states = synth_loop(keys, jsons, sfiles, **kwargs)
+        mkdir_structure(keys, root=anlysdir+"states/")
 
-    # residual analysis
+    # # reload cache into new reconsrc objects
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        # k = keys
+        kwargs = dict(path=anlysdir+"states/", variables=['inv_proj', 'N_nil'], save_obj=True,
+                      verbose=1)
+        sfiles = states  # filtered_states
+        cache_loop(k, jsons, sfiles, **kwargs)
+
+    # # reconsrc synth caching
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        # k = ["H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
+        #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
+        #      "H160S0A90B0G0", "H234S0A0B90G0"]
+        # k = keys
+        kwargs = dict(save_state=False, save_obj=True, load_obj=True, path=anlysdir+"states/",
+                      optimized=True, verbose=1)
+        # kwargs = dict(save_state=True, save_obj=False, load_obj=True, path=anlysdir+"states/",
+        #               optimized=False, verbose=1)
+        sfiles = states  # filtered_states
+        synth_filtered_states = synth_loop(k, jsons, sfiles, **kwargs)
+
+    # # chi2 histograms (takes long!!!)
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        # k = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
+        #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
+        #      "H160S0A90B0G0", "H234S0A0B90G0"]
+        kwargs = dict(optimized=False, verbose=1)
+        sfiles = states  # filtered_states
+        path = anlysdir+"states/"
+        for ki in k:
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                loadname = "reconsrc_{}.pkl".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    loadname = os.path.join(path, ki, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                if kwargs.get('verbose', False):
+                    print('Loading '+loadname)
+                # gather chi2 values
+                chi2 = chi2_analysis(recon_src, **kwargs)
+                sortedidcs = np.argsort(chi2)
+                plt.hist(chi2, bins=20, color='#A0DED2')
+                plt.title(name)
+                # save the figure
+                savename = "chi2_hist_{}.pdf".format(name)
+                textname = 'chi2_{}.txt'.format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                    textname = os.path.join(path, ki, textname)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                    textname = os.path.join(path, textname)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                    print('Saving '+textname)
+                np.savetxt(textname, np.c_[chi2, sortedidcs], fmt='%12d', delimiter=' ', newline=os.linesep)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # kappa diff analysis
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(method='e2g', verbose=1)
-        # sfiles = synthf50  # prefiltered_synthf50  # states  # filtered_states
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
         residuals = residual_loop(k, kappa_files, sfiles, **kwargs)
 
-    # inertia tensor analysis
+    # # kappa diff histograms
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        kwargs = dict(method='e2g', verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        residuals = residual_loop(k, kappa_files, sfiles, **kwargs)
+        for ki in k:
+            print(ki)
+            for idx in range(len(states[ki])):
+                sf = states[ki][idx]
+                name = os.path.basename(sf).replace(".state", "")
+                savename = "kappa_diff_hist_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print(savename)
+                plt.hist(residuals[sf], color='#386BF1')
+                plt.xlim(left=0, right=200)
+                plt.ylim(bottom=0, top=375)
+                plt.title(name)
+                plt.savefig(savename)
+                plt.close()
+
+    # # inertia tensor analysis
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(method='e2g', activation=0.25, verbose=1)
-        # sfiles = synthf50  # prefiltered_synthf50  # states  # filtered_states
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
         qpms = inertia_loop(k, kappa_files, sfiles, **kwargs)
-        with open('qpms.pkl', 'wb') as f:
-            pickle.dump(qpms, f)
+        if 1:
+            savename = 'qpms.pkl'
+            if path is None:
+                path = ""
+            elif os.path.exists(path):
+                savename = os.path.join(path, savename)
+            with open(savename, 'wb') as f:
+                print("Saving "+savename)
+                pickle.dump(qpms, f)
+
+    # # inertia histograms
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
-        # sfiles = synthf50  # prefiltered_synthf50  # states  # filtered_states
-        with open('qpms.pkl', 'r') as f:
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        loadname = 'qpms.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
             qpms = pickle.load(f)
         # iprod histograms
         for ki in k:
@@ -597,69 +850,590 @@ if __name__ == "__main__":
                 ga, gb, gphi = [p[0] for p in gprops], \
                                [p[1] for p in gprops], \
                                [p[2] for p in gprops]
-                name = "".join(os.path.basename(f).split('.')[:-1])
+                name = os.path.basename(f).replace(".state", "")
                 for i, (eprop, gprop) in enumerate(zip([ea, eb, ephi], [ga, gb, gphi])):
-                    plt.hist(gprop, bins=14)
-                    plt.axvline(eprop)
-                    plt.title(lbl[i]+' '+name)
-                    plt.savefig(lbl[i]+' '+name+'_hist.png')
+                    savename = lbl[i]+"_hist_{}.pdf".format(name)
+                    if path is None:
+                        path = ""
+                    if os.path.exists(path + ki):
+                        savename = os.path.join(path, ki, savename)
+                    elif os.path.exists(path):
+                        savename = os.path.join(path, savename)
+                    if kwargs.get('verbose', False):
+                        print(savename)
+                    plt.hist(gprop, bins=14, color='#FF6767')
+                    plt.axvline(eprop, color='#F52549')
+                    if lbl[i] == 'phi':
+                        plt.xlim(left=0, right=2*np.pi)
+                    # if lbl[i] == 'a' or lbl[i] == 'b':
+                    #     plt.xlim(left=(2*max(eprop, np.max(gprop))-2), right=2)
+                    # plt.ylim(bottom=0, top=200)
+                    plt.title(name)
+                    plt.savefig(savename)
                     plt.close()
-                    # plt.show()
 
-    # potential analysis
+    # # potential analysis
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(N=85, verbose=1)
-        # sfiles = synthf50  # prefiltered_synthf50  # states  # filtered_states
-        gx, gy, potentials = potential_loop(k, kappa_files, sfiles, **kwargs)
-        with open('pots.pkl', 'wb') as f:
-            pickle.dump(potentials, f)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        potentials = potential_loop(k, kappa_files, sfiles, **kwargs)
+        if 1:
+            savename = 'pots.pkl'
+            if path is None:
+                path = ""
+            elif os.path.exists(path):
+                savename = os.path.join(path, savename)
+            with open(savename, 'wb') as f:
+                print("Saving "+savename)
+                pickle.dump(potentials, f)
 
-    # deg. arrival time surface analysis
+    # # potential maps
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        loadname = 'pots.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            pots = pickle.load(f)
+        for ki in k:
+            print(ki)
+            for idx in range(len(states[ki])):
+                sf = states[ki][idx]
+                print(sf)
+                name = os.path.basename(sf).replace(".state", "")
+                egx, egy, eagle_map = pots[sf][0]
+                gls_models = pots[sf][1]
+                gx, gy = [g[0] for g in gls_models], [g[1] for g in gls_models]
+                potentials = [g[2] for g in gls_models]
+                ens_avg = np.average(potentials, axis=0)
+                # start plotting
+                fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+                pltkw = dict(cmap='magma', vmin=eagle_map.min(), vmax=eagle_map.max(),
+                             levels=np.linspace(np.min((ens_avg, eagle_map)), np.max((ens_avg, eagle_map)), 25))
+                eimg = axes[0].contourf(egx, egy, eagle_map, **pltkw)
+                axes[0].set_title('EAGLE model', fontsize=12)
+                gimg = axes[1].contourf(gx[0], gy[0], ens_avg[::-1, :], **pltkw)
+                axes[1].set_title('Ensemble average', fontsize=12)
+                plt.colorbar(eimg, ax=axes.ravel().tolist(), shrink=0.9)
+                axes[0].set_aspect('equal')
+                axes[1].set_aspect('equal')
+                plt.suptitle(name)
+                # save the figure
+                savename = "potential_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print(savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # deg. arrival time surfaces and inner products
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(N=85, calc_iprod=True, optimized=True, verbose=1)
-        # sfiles = synthf50  # prefiltered_synthf50  # states  # filtered_states
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
         degarrs, iprods = degarr_loop(k, kappa_files, sfiles, **kwargs)
-        with open('degarrs.pkl', 'wb') as f:
-            pickle.dump(degarrs, f)
-        with open('iprods.pkl', 'wb') as f:
-            pickle.dump(iprods, f)
+        if 1:
+            savenames = ['degarrs.pkl', 'iprods.pkl']
+            for o, savename in zip([degarrs, iprods], ['degarrs.pkl', 'iprods.pkl']):
+                if path is None:
+                    path = ""
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                with open(savename, 'wb') as f:
+                    print("Saving " + savename)
+                    pickle.dump(o, f)
+
+    # # deg. arrival time surface histograms
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
-        # sfiles = synthf50  # prefiltered_synthf50  # states  # filtererd_states
-        with open('degarrs.pkl', 'r') as f:
-            degarrs = pickle.load(f)
-        # with open('iprods.pkl', 'r') as f:
-        #     iprods = pickle.load(f)
-
-        # degarr product histograms
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtererd_states
+        path = anlysdir+"states/"
+        o = []
+        for loadname in ['degarrs.pkl', 'iprods.pkl']:
+            if path is None:
+                path = ""
+            elif os.path.exists(path):
+                loadname = os.path.join(path, loadname)
+            with open(loadname, 'rb') as f:
+                o.append(pickle.load(f))
+        degarrs, iprods = o
         for ki in k:
             files = sfiles[ki]
-            for f in files:
-                gx, gy, eagle_degarr, glass_degarrs = degarrs[f]
-                ip = [sigma_product(eagle_degarr[2], gdegarr[2]) for gdegarr in glass_degarrs]
-                name = "".join(os.path.basename(f).split('.')[:-1])
-                plt.hist(ip, bins=14)
+            for sf in files:
+                gx, gy, eagle_degarr, glass_degarrs = degarrs[sf]
+                # ip = [sigma_product(eagle_degarr, gdegarr) for gdegarr in glass_degarrs]
+                ip = iprods[sf]
+                name = os.path.basename(sf).replace(".state", "")
+                plt.hist(ip, bins=14, color='#4FB09E')
+                plt.xlim(left=-1, right=1)
                 plt.title(name)
-                plt.savefig('iprod'+' '+name+'_hist.png')
-                plt.close()
+                # save the figure
+                savename = "scalar_degarr_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print(savename)
+                plt.savefig(savename)
                 # plt.show()
+                plt.close()
 
-        # best degarr grid plot
+    # # deg. arrival time surface maps
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtererd_states
+        path = anlysdir+"states/"
+        loadnames = ['degarrs.pkl', 'iprods.pkl']
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadnames = [os.path.join(path, l) for l in loadnames]
+        with open(loadnames[0], 'rb') as f1:
+            degarrs = pickle.load(f1)
+        with open(loadnames[1], 'rb') as f2:
+            iprods = pickle.load(f2)
         for ki in k:
             files = sfiles[ki]
-            for f in files:
-                gx, gy, eagle_degarr, glass_degarrs = degarrs[f]
-                ip = [sigma_product(eagle_degarr, gdegarr) for gdegarr in glass_degarrs]
-                name = "".join(os.path.basename(f).split('.')[:-1])
-                minidx = np.argmax(ip)
-                da = glass_degarrs[minidx]
-                lim = max(abs(da.min()), abs(da.max()))
-                plt.contourf(gx, gy, da, levels=np.linspace(da.min(), da.max(), 14),
-                             vmin=-lim, vmax=lim, cmap='RdBu')
+            for sf in files:
+                gx, gy, eagle_degarr, glass_degarrs = degarrs[sf]
+                # ip = [sigma_product(eagle_degarr, gdegarr) for gdegarr in glass_degarrs]
+                ip = iprods[sf]
+                sortedidcs = np.argsort(ip)
+                name = os.path.basename(sf).replace(".state", "")
+                ens_avg = np.average(glass_degarrs, axis=0)
+                minidx = sortedidcs[-1]
+                min_model = glass_degarrs[minidx]
+                maxidx = np.argmin(ip)
+                max_model = glass_degarrs[maxidx]
+                fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+                lim = np.max([np.abs(eagle_degarr), np.abs(ens_avg),
+                              np.abs(min_model), np.abs(max_model)])
+                pltkw = dict(cmap='RdBu', vmin=-lim, vmax=lim, levels=np.linspace(-lim, lim, 25))
+                img0 = axes[0, 0].contourf(gx, gy, eagle_degarr, **pltkw)
+                axes[0, 0].set_title('EAGLE model', fontsize=12)
+                axes[0, 0].set_aspect('equal')
+                img1 = axes[0, 1].contourf(gx, gy, ens_avg, **pltkw)
+                axes[0, 1].set_title('Ensemble average', fontsize=12)
+                axes[0, 1].set_aspect('equal')
+                img2 = axes[1, 0].contourf(gx, gy, min_model, **pltkw)
+                axes[1, 0].set_title('Best model', fontsize=12)
+                axes[1, 0].set_aspect('equal')
+                img3 = axes[1, 1].contourf(gx, gy, max_model, **pltkw)
+                axes[1, 1].set_title('Worst model', fontsize=12)
+                axes[1, 1].set_aspect('equal')
+                plt.colorbar(img3, ax=axes.ravel().tolist(), shrink=0.9)
+                plt.suptitle(name)
+                # save the figure
+                savename = "degarrs_{}.pdf".format(name)
+                textname = "iprods_{}.txt".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                    textname = os.path.join(path, ki, textname)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                    textname = os.path.join(path, textname)
+                if kwargs.get('verbose', False):
+                    print(savename)
+                    print("Best/worst model of {}: {:4d}/{:4d}".format(name, minidx, maxidx))
+                    print(textname)
+                np.savetxt(textname, np.c_[ip, sortedidcs], fmt='%4.4g', delimiter=' ', newline=os.linesep)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # chi2 vs iprods (takes long!!!)
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        kwargs = dict(optimized=True, verbose=1)
+        sfiles = states  # filtered_states
+        path = anlysdir+"states/"
+        loadname = 'iprods.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            iprods = pickle.load(f)
+        for ki in k:
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                loadname = "reconsrc_{}.pkl".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    loadname = os.path.join(path, ki, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                if kwargs.get('verbose', False):
+                    print('Loading '+loadname)
+                # gather chi2 values
+                chi2 = chi2_analysis(recon_src, **kwargs)
+                ip = iprods[sf]
+                # Plot chi2 vs scalar product
+                plt.plot(chi2, ip, marker='o', lw=0, color='#756bb1')
+                plt.xlabel("chi2")
+                plt.ylabel('scalar')
+                plt.title(name)
+                # save the figure
+                savename = "chi2_vs_scalar_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # data maps
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        # k = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
+        #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
+        #      "H160S0A90B0G0", "H234S0A0B90G0"]
+        k = keys
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        for ki in k:
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                loadname = "reconsrc_{}.pkl".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    loadname = os.path.join(path, ki, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                if kwargs.get('verbose', False):
+                    print('Loading '+loadname)
+                # Ensemble average
+                data = recon_src.lensobject.data
+                extent = recon_src.lensobject.extent
+                extent = [extent[0], extent[2], extent[1], extent[3]]
+                plt.imshow(data, cmap='Spectral_r',
+                           origin='Lower', extent=extent)
                 plt.colorbar()
                 plt.title(name)
-                plt.gca().set_aspect('equal')
-                plt.savefig('degarr_best'+' '+name+'.png')
+                # save the figure
+                savename = "data_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # source plane map
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        # k = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
+        #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
+        #      "H160S0A90B0G0", "H234S0A0B90G0"]
+        k = keys
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        for ki in k:
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                loadname = "reconsrc_{}.pkl".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    loadname = os.path.join(path, ki, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                if kwargs.get('verbose', False):
+                    print('Loading '+loadname)
+                # noise map
+                lo = recon_src.lensobject
+                signals, variances = lo.flatfield(lo.data, size=0.2)
+                gain, _ = lo.gain(signals=signals, variances=variances)
+                f = gain
+                bias = 0.01*np.max(f * lo.data)
+                sgma2 = lo.sigma2(f=f, add_bias=bias)
+                dta_noise = np.random.normal(0, 1, size=lo.data.shape)
+                dta_noise = dta_noise * np.sqrt(sgma2)
+                # Ensemble average
+                recon_src.chmdl(-1)
+                r = recon_src.r_antialias
+                if r is not None:
+                    extent = [-r, r, -r, r]
+                else:
+                    extent = None
+                plt.imshow(recon_src.plane_map(), cmap='Spectral_r',
+                           origin='Lower', extent=extent)
+                plt.colorbar()
+                plt.title(name)
+                # save the figure
+                savename = "rconsrc_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # synth maps the ensemble averages
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        # k = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
+        #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
+        #      "H160S0A90B0G0", "H234S0A0B90G0"]
+        k = keys
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        for ki in k:
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                loadname = "reconsrc_{}.pkl".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    loadname = os.path.join(path, ki, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                if kwargs.get('verbose', False):
+                    print('Loading '+loadname)
+                # Ensemble average
+                recon_src.chmdl(-1)
+                extent = recon_src.lensobject.extent
+                extent = [extent[0], extent[2], extent[1], extent[3]]
+                plt.imshow(recon_src.reproj_map(), cmap='Spectral_r',
+                           origin='Lower', extent=extent)
+                plt.colorbar()
+                plt.title(name)
+                # save the figure
+                savename = "synth_{}.pdf".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+                
+    # # Best/worst chi2/iprods synths
+    if 0:
+        ki = "H3S0A0B90G0"
+        kwargs = dict(verbose=1)
+        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        chi2_sorted = [4, 36, 1, 2, 96, 6, 5, 35, 34, 0, 38, 71, 97, 39, 3, 72, 94, 75, 23, 40,
+                       54, 93, 74, 41, 53, 70, 27, 28, 26, 76, 24, 95, 52, 21, 32, 92, 91, 50, 37,
+                       49, 22, 25, 33, 31, 55, 43, 14, 29, 51, 30, 44, 73, 46, 47, 15, 45, 42, 20,
+                       17, 19, 48, 16, 79, 77, 18, 60, 59, 58, 62, 61, 57, 78, 56, 82, 83, 81, 80,
+                       64, 86, 69, 67, 68, 63, 88, 84, 66, 65, 98, 89, 90, 87, 99, 85, 7, 8, 9, 11,
+                       12, 10, 13]
+        iprods_sorted = [65, 21, 48, 26, 84, 18, 81, 68, 37, 99, 83, 85, 75, 63, 67, 66, 19, 92,
+                         56, 78, 91, 17, 69, 30, 70, 80, 64, 0, 31, 6, 25, 82, 61, 8, 73, 57, 33,
+                         16, 32, 9, 10, 20, 76, 55, 87, 13, 59, 5, 24, 29, 93, 90, 41, 74, 22, 27,
+                         51, 43, 94, 42, 23, 47, 86, 1, 50, 28, 11, 60, 38, 2, 15, 62, 52, 12, 58,
+                         71, 54, 14, 72, 53, 89, 77, 44, 97, 49, 95, 98, 45, 79, 88, 40, 4, 46, 3,
+                         7, 96, 39, 35, 34, 36]
+        path = anlysdir+"states/"
+        name = os.path.basename(sf).replace(".state", "")
+        loadname = "reconsrc_{}.pkl".format(name)
+        if path is None:
+            path = ""
+        if os.path.exists(path + ki):
+            loadname = os.path.join(path, ki, loadname)
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        if os.path.exists(loadname):
+            with open(loadname, 'rb') as f:
+                recon_src = pickle.load(f)
+        if kwargs.get('verbose', False):
+            print('Loading '+loadname)
+        extent = recon_src.lensobject.extent
+        extent = [extent[0], extent[2], extent[1], extent[3]]
+        # chi2 synths
+        if 1:
+            for i, ichi2 in enumerate(chi2_sorted):
+                if 9 < i and i < 90:  # only the edges
+                    continue
+                label = "chi2_{}".format(i)
+                recon_src.chmdl(ichi2)
+                plt.imshow(recon_src.reproj_map(), cmap='Spectral_r',
+                           origin='Lower', extent=extent)
+                plt.colorbar()
+                plt.title("Model {}".format(ichi2))
+                # save the figure
+                savename = "{}_synth.pdf".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/synths")
+                    savename = os.path.join(path, ki, "synths", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/synths")
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+        # iprods synths
+        if 1:
+            for i, iiprods in enumerate(iprods_sorted[::-1]):
+                if 9 < i and i < 90:  # only the edges
+                    continue
+                label = "iprods_{}".format(i)
+                recon_src.chmdl(iiprods)
+                plt.imshow(recon_src.reproj_map(), cmap='Spectral_r',
+                           origin='Lower', extent=extent)
+                plt.colorbar()
+                plt.title("Model {}".format(iiprods))
+                # save the figure
+                savename = "{}_synth.pdf".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/synths")
+                    savename = os.path.join(path, ki, "synths", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/synths")
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # Best/worst chi2/iprods arival time surfaces
+    if 0:
+        ki = "H3S0A0B90G0"
+        kwargs = dict(verbose=1)
+        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        chi2_sorted = [4, 36, 1, 2, 96, 6, 5, 35, 34, 0, 38, 71, 97, 39, 3, 72, 94, 75, 23, 40,
+                       54, 93, 74, 41, 53, 70, 27, 28, 26, 76, 24, 95, 52, 21, 32, 92, 91, 50, 37,
+                       49, 22, 25, 33, 31, 55, 43, 14, 29, 51, 30, 44, 73, 46, 47, 15, 45, 42, 20,
+                       17, 19, 48, 16, 79, 77, 18, 60, 59, 58, 62, 61, 57, 78, 56, 82, 83, 81, 80,
+                       64, 86, 69, 67, 68, 63, 88, 84, 66, 65, 98, 89, 90, 87, 99, 85, 7, 8, 9, 11,
+                       12, 10, 13]
+        iprods_sorted = [65, 21, 48, 26, 84, 18, 81, 68, 37, 99, 83, 85, 75, 63, 67, 66, 19, 92,
+                         56, 78, 91, 17, 69, 30, 70, 80, 64, 0, 31, 6, 25, 82, 61, 8, 73, 57, 33,
+                         16, 32, 9, 10, 20, 76, 55, 87, 13, 59, 5, 24, 29, 93, 90, 41, 74, 22, 27,
+                         51, 43, 94, 42, 23, 47, 86, 1, 50, 28, 11, 60, 38, 2, 15, 62, 52, 12, 58,
+                         71, 54, 14, 72, 53, 89, 77, 44, 97, 49, 95, 98, 45, 79, 88, 40, 4, 46, 3,
+                         7, 96, 39, 35, 34, 36]
+        path = anlysdir+"states/"
+        name = os.path.basename(sf).replace(".state", "")
+        loadname = "reconsrc_{}.pkl".format(name)
+        if path is None:
+            path = ""
+        if os.path.exists(path + ki):
+            loadname = os.path.join(path, ki, loadname)
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        if os.path.exists(loadname):
+            with open(loadname, 'rb') as f:
+                recon_src = pickle.load(f)
+        if kwargs.get('verbose', False):
+            print('Loading '+loadname)
+        # chi2 arrival time surfaces
+        if 1:
+            for i, ichi2 in enumerate(chi2_sorted):
+                if 9 < i and i < 90:  # only the edges
+                    continue
+                label = "chi2_{}".format(i)
+                m = recon_src.gls.models[ichi2]
+                recon_src.gls.img_plot(obj_index=0, color='#fe4365')
+                recon_src.gls.arrival_plot(m, obj_index=0,
+                                           only_contours=True, clevels=75,
+                                           colors=['#603dd0'])
+                plt.title("Model {}".format(ichi2))
+                # save the figure
+                savename = "{}_arriv.pdf".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/arrivs")
+                    savename = os.path.join(path, ki, "arrivs", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/arrivs")
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+        # iprods arrival time surfaces
+        if 1:
+            for i, iiprods in enumerate(iprods_sorted[::-1]):
+                if 9 < i and i < 90:  # only the edges
+                    continue
+                label = "iprods_{}".format(i)
+                recon_src.gls.models[ichi2]
+                m = recon_src.gls.models[ichi2]
+                recon_src.gls.img_plot(obj_index=0, color='#fe4365')
+                recon_src.gls.arrival_plot(m, obj_index=0,
+                                           only_contours=True, clevels=75,
+                                           colors=['#603dd0'])
+                plt.title("Model {}".format(iiprods))
+                # save the figure
+                savename = "{}_arriv.pdf".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/arrivs")
+                    savename = os.path.join(path, ki, "arrivs", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/arrivs")
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
                 plt.close()
