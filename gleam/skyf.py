@@ -1135,9 +1135,9 @@ class SkyF(object):
         if flat:
             sgma2 = np.array([sgma2[self.idx2yx(i)] for i in range(sgma2.size)])
         if add_bias2:
-            return f*sgma2 + add_bias2
+            return f*sgma2 + add_bias2 + 2 * np.sqrt(f*sgma2*add_bias2)
         elif add_bias:
-            return f*sgma2 + add_bias*add_bias
+            return f*sgma2 + add_bias*add_bias + 2 * np.sqrt(f*sgma2)*add_bias
         else:
             return f*sgma2
 
