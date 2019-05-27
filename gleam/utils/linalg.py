@@ -90,7 +90,31 @@ def angle(v1, v2):
     v2 = np.asarray(v2)
     vdotv = v1.dot(v2)
     vvnorm = np.sqrt(v1.dot(v1)) * np.sqrt(v2.dot(v2))
-    return np.arccos(vdotv/(vvnorm))
+    return vdotv/(vvnorm)
+
+
+def is_symm2D(data, center=None):
+    """
+    Test if a 2D array is symmetric in its values
+
+    Args:
+        data <np.ndarray> - 2D data array
+
+    Kwargs:
+        center <tuple/list> - indices of center of symmetry
+
+    Return:
+        is_symm <bool> - True if data is symmetric, False otherwise
+    """
+    if center is None:
+        center = [X//2 for X in data.shape]
+    is_odd = [X % 2 for X in data.shape]
+    left = data[:center[0], :]
+    right = data[center[0]+is_odd[0]:, :][::-1]
+    upper = data[:, :center[1]]
+    lower = data[:, center[1]+is_odd[1]:][:, ::-1]
+    is_symm = np.all(right == left) and np.all(upper == lower)
+    return is_symm
 
 
 def inner_product(grid1, grid2):

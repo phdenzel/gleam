@@ -9,6 +9,7 @@ Lensing utility functions for calculating various analytics from lensing mass ma
 ###############################################################################
 import numpy as np
 from scipy import interpolate
+from scipy.integrate import odeint
 from gleam.utils.linalg import eigvals, eigvecs, angle
 
 
@@ -88,10 +89,103 @@ def upsample_model(gls_model, extent, shape, verbose=False):
     Xnew, Ynew = np.meshgrid(xnew, ynew)
 
     rescale = interpolate.Rbf(Xmdl, Ymdl, kappa_map)
-    kappa_resmap = rescale(Xnew, Ynew)
+    # rescale = interpolate.interp2d(xmdl, ymdl, kappa_map)
+    kappa_resmap = rescale(xnew, ynew)
     kappa_resmap[kappa_resmap < 0] = 0
 
     return kappa_resmap
+
+
+def radial_profile(data, center=None, bins=None):
+    """
+    Calculate radial profiles of some data maps
+
+    Args:
+        data <np.ndarray> - 2D data array
+
+    Kwarg:
+        center <tuple/list> - center indices of profile
+
+    Return:
+        radial_profile <np.ndarray> - radially-binned 1D profile
+    """
+    N = data.shape[0]
+    if bins is None:
+        bins = N//2
+    if center is None:
+        # center = np.unravel_index(data.argmax(), data.shape)
+        center = [c//2 for c in data.shape]
+    x, y = np.indices((data.shape))
+    r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+    r = r.reshape(r.size)
+    data = data.reshape(data.size)
+    rbins = np.linspace(0, N//2, bins)
+    encavg = [np.sum(data[r < ri])/len(data[r < ri]) for ri in rbins]
+    return encavg
+
+
+def complex_ellipticity(a, b, phi):
+    """
+    Calculate the complex ellipticity
+
+    Args:
+        a <float> - semi-major axis
+        b <float> - semi-minor axis
+        phi <float> - position angle
+
+    Kwargs:
+        None
+
+    Return:
+        e1, e2 <float,float> - complex ellipticty vector components
+    """
+    a = np.asarray(a)
+    b = np.asarray(b)
+    phi = np.asarray(phi)
+    Q = (a-b)/(a+b)
+    return np.array([Q*np.cos(2*phi), Q*np.sin(2*phi)])
+
+
+def Dcomov(r, a, cosmology=None):
+    """
+    Calculate the comoving distance from scale factor, for odeint
+
+    Args:
+        r <float> - distance of
+    """
+    if cosmology is None:
+        Omega_l = 0.72
+        Omega_r = 4.8e-5
+        Omega_k = 0
+        Omega_m = 1. - Omega_r - Omega_l - Omega_k
+    else:
+        Omega_l = cosmology['Omega_l']
+        Omega_r = cosmology['Omega_r']
+        Omega_k = cosmology['Omega_k']
+        Omega_m = cosmology['Omega_m']
+    H = (Omega_m/a**3 + Omega_r/a**4 + Omega_l + Omega_k/a**2)**.5
+    return 1./(a*a*H)
+
+
+def DSDL(zl, zs):
+    """
+    Distance ratio D_S/D_L (for scaling kappa maps)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        ratio <float> - distance ratio D_S/D_L
+    """
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(Dcomov, [0], a)[:, 0]
+    return r[1]/r[2]
 
 
 def center_of_mass(kappa, pixel_scale=1, center=True):
@@ -158,7 +252,7 @@ def inertia_tensor(kappa, pixel_scale=1, activation=None, com_correct=True):
     return np.matrix([[Ixx, Ixy], [Iyx, Iyy]])
 
 
-def qpm_props(qpm):
+def qpm_props(qpm, verbose=False):
     """
     Calculate properties of the quadrupole moment:
         semi-major axis, semi-minor axis, and position angle
@@ -178,8 +272,11 @@ def qpm_props(qpm):
     evl = eigvals(qpm)
     evc = eigvecs(qpm)
     a, b = 2*np.sqrt(evl)
-    phi = angle(evc[0], [1, 0])
-    return a, b, phi
+    cosphi = angle(evc[0], [1, 0])
+    sinphi = angle(evc[0], [0, 1])
+    if verbose:
+        print("Eigen vectors: {}".format(evc))
+    return a, b, np.arctan2(sinphi, cosphi)
 
 
 def lnr_indef(x, y, x2=None, y2=None):
