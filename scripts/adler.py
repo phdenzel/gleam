@@ -14,7 +14,8 @@ from gleam.reconsrc import ReconSrc, synth_filter, synth_filter_mp
 from gleam.multilens import MultiLens
 from gleam.glass_interface import glass_renv
 from gleam.utils.encode import an_sort
-from gleam.utils.lensing import downsample_model, upsample_model, inertia_tensor, qpm_props, potential_grid, degarr_grid
+from gleam.utils.lensing import downsample_model, upsample_model, radial_profile, \
+    DSDL, complex_ellipticity, inertia_tensor, qpm_props, potential_grid, degarr_grid
 from gleam.utils.linalg import sigma_product
 from gleam.utils.makedir import mkdir_p
 glass = glass_renv()
@@ -33,7 +34,7 @@ def mkdir_structure(keys, root=None):
         mkdir_p(d)
 
 
-def chi2_analysis(reconsrc, optimized=False, verbose=False):
+def chi2_analysis(reconsrc, optimized=False, psf_file=None, verbose=False):
     """
     Args:
         reconsrc <ReconSrc object> - loaded object, preferentially with loaded cache
@@ -58,7 +59,7 @@ def chi2_analysis(reconsrc, optimized=False, verbose=False):
     dta_noise = np.random.normal(0, 1, size=lo.data.shape)
     dta_noise = dta_noise * np.sqrt(sgma2)
     # recalculate the chi2s
-    kwargs = dict(reconsrc=reconsrc, percentiles=[],
+    kwargs = dict(reconsrc=reconsrc, percentiles=[], use_psf=True, psf_file=psf_file,
                   noise=dta_noise, sigma2=sgma2,
                   reduced=False, return_obj=False, save=False, verbose=verbose)
     _, _, chi2 = synthf(**kwargs)
@@ -154,6 +155,8 @@ def inertia_analysis(eagle_model, glass_state, method='e2g', activation=None, ve
         for m in glass_state.models:
             obj, data = m['obj,data'][0]
             glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
+            dsdl = DSDL(obj.z, obj.sources[0].z)
+            glass_kappa_map = dsdl * glass_kappa_map
             i = inertia_tensor(glass_kappa_map,
                                pixel_scale=glass_pixel, activation=activation)
             inertias.append(i)
@@ -201,7 +204,7 @@ def potential_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=Fal
     potentials = []
     eagle_kappa_map, eagle_hdr = eagle_model
     if method == 'e2g':
-        obj, _ = glass_state.models[0]['obj,data'][0]
+        obj, data = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
         glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
         glass_extent = (-glass_maprad, glass_maprad, -glass_maprad, glass_maprad)
@@ -212,6 +215,8 @@ def potential_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=Fal
         for i, m in enumerate(glass_state.models):
             obj, data = m['obj,data'][0]
             glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
+            dsdl = DSDL(obj.z, obj.sources[0].z)
+            glass_kappa_map = dsdl * glass_kappa_map
             gx, gy, pot = potential_grid(glass_kappa_map, N, 2*glass_maprad, verbose=0)
             potentials.append((gx[:], gy[:], pot[:]))
             if verbose:
@@ -271,6 +276,8 @@ def degarr_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=False)
         for i, m in enumerate(glass_state.models):
             obj, data = m['obj,data'][0]
             glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
+            dsdl = DSDL(obj.z, obj.sources[0].z)
+            glass_kappa_map = dsdl * glass_kappa_map
             gx, gy, degarr = degarr_grid(glass_kappa_map, N, 2*glass_maprad, verbose=0)
             degarrs.append(degarr[:])
             if verbose:
@@ -318,6 +325,8 @@ def degarr_single(index, gls, N=85, grid_size=1, N_total=0, verbose=False):
     obj, data = gls.models[index]['obj,data'][0]
     try:
         glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
+        dsdl = DSDL(obj.z, obj.sources[0].z)
+        glass_kappa_map = dsdl * glass_kappa_map
         _, _, degarr = degarr_grid(glass_kappa_map, N, grid_size, verbose=0)
         if verbose:
             message = "{:4d} / {:4d}\r".format(index+1, N_total)
@@ -396,8 +405,75 @@ def iprod_analysis(eagle_degarr, ens_degarrs, verbose=False):
     return iprods
 
 
-def synth_loop(keys, jsons, states, cached=False, save_state=False, save_obj=False, load_obj=False,
-               path=None, optimized=False, verbose=False):
+def kappa_profileX(gls_model, eagle_model=None, obj_index=0, plot_imgs=True, **kwargs):
+    """
+    Kappa profiles of the individual GLASS models
+    """
+    obj, data = gls_model['obj,data'][obj_index]
+    kappaR = data['kappa(<R)']
+    R = data['R']['arcsec']
+    img = plt.plot(kappaR, color='green', **kwargs)
+    plt.axhline(1, lw=1, ls='-')
+    # if plot_imgs:
+    #     for i,src in enumerate(obj.sources):
+    #         for img in src.images:
+    #             imgs[i].add(convert('arcsec to %s' % x_units, np.abs(img.pos), obj.dL, data['nu']))
+    return img
+
+
+def scaled_kappa_maps(gls_model, eagle_model, obj_index=0, method='e2g'):
+    eagle_kappa_map, eagle_hdr = eagle_model
+    if method == 'e2g':
+        obj, dta = gls_model['obj,data'][obj_index]
+        eagle_pixel = eagle_hdr['CDELT2']*3600
+        glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+        glass_extent = (-glass_maprad, glass_maprad, -glass_maprad, glass_maprad)
+        glass_shape = (2*obj.basis.pixrad+1,)*2
+        eagle_kappa_map = downsample_model(eagle_kappa_map, glass_extent, glass_shape,
+                                           pixel_scale=eagle_pixel)
+        glass_kappa_map = obj.basis._to_grid(dta['kappa'], 1)
+    elif method == 'g2e':
+        eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
+        eagle_maprad = eagle_pixrad[1]*eagle_hdr['CDELT2']*3600
+        eagle_extent = [-eagle_maprad, eagle_maprad, -eagle_maprad, eagle_maprad]
+        glass_kappa_map = upsample_model(gls_model, eagle_extent, eagle_kappa_map.shape)
+    return glass_kappa_map, eagle_kappa_map
+
+
+def kappa_profile(gls_model, eagle_model, obj_index=0, plot_imgs=True, **kwargs):
+    """
+    Kappa profiles of the individual GLASS models
+    """
+    obj, data = gls_model['obj,data'][obj_index]
+    # glass_kappa_map, eagle_kappa_map = scaled_kappa_maps(gls_model, eagle_model)
+    dsdl = DSDL(obj.z, obj.sources[obj_index].z)
+    glass_kappa_map = dsdl * obj.basis._to_grid(data['kappa'], 1)
+    eagle_kappa_map = eagle_model[0]
+    if glass_kappa_map.shape != eagle_kappa_map.shape:
+        print("Maps were not be resampled!")
+    eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
+    eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
+
+    glass_pixrad = obj.basis.pixrad
+    glass_pixel = obj.basis.top_level_cell_size
+    glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+
+    gls_profile = radial_profile(glass_kappa_map, bins=8)
+    eagle_profile = radial_profile(eagle_kappa_map, bins=8)
+    eagle_original = radial_profile(eagle_model[0])
+    r = np.linspace(0, glass_maprad, len(gls_profile))
+    plt.plot(r, gls_profile, color='blue', label='GLASS', **kwargs)
+    r = np.linspace(0, eagle_maprad, len(eagle_profile))
+    plt.plot(r, eagle_profile, color='red', label='EAGLE', **kwargs)
+    # plt.plot(np.linspace(0, len(eagle_profile), len(eagle_original)), eagle_original, color='magenta', label='EAGLE orig.', **kwargs)
+    # plt.ylim(top=4)
+    plt.legend()
+    plt.axhline(1, lw=1, ls='-', color='k')
+
+
+def synth_loop(keys, jsons, states,
+               cached=False, save_state=False, save_obj=False, load_obj=False, psf_file=None,
+               use_psf=True, path=None, optimized=False, verbose=False, **kwargs):
     """
     Args:
         keys <list(str)> - the keys which correspond to jsons' and states' keys
@@ -408,6 +484,9 @@ def synth_loop(keys, jsons, states, cached=False, save_state=False, save_obj=Fal
         save_state <bool> - save the filtered states automatically
         save_obj <bool> - save the ReconSrc object as a pickle file
         load_obj <bool> - load the ReconSrc object from a pickle file
+        psf_file <str> - path to the psf .fits file
+        use_psf <bool> - use the PSF in the reprojection
+        path <str> - path to the pickle files to load from
         optimized <bool> - run the multiprocessing synth filter
         verbose <bool> - verbose mode; print command line statements
 
@@ -447,13 +526,13 @@ def synth_loop(keys, jsons, states, cached=False, save_state=False, save_obj=Fal
                         if verbose:
                             print(recon_src.__v__)
                 else:
-                    recon_src = ReconSrc(ml, sf, M=2*ml[0].naxis1, verbose=verbose)
+                    recon_src = ReconSrc(ml, sf, M=40, verbose=verbose)
             else:
-                recon_src = ReconSrc(ml, sf, M=2*ml[0].naxis1, verbose=verbose)
+                recon_src = ReconSrc(ml, sf, M=40, verbose=verbose)
             if save_obj:
-                recon_src = synthf(reconsrc=recon_src, percentiles=[],
-                                   noise=dta_noise, sigma2=sgma2,
-                                   return_obj=save_obj, save=False, verbose=verbose)
+                recon_src = synthf(reconsrc=recon_src, percentiles=[], psf_file=psf_file,
+                                   noise=dta_noise, sigma2=sgma2, use_psf=use_psf,
+                                   return_obj=save_obj, save=False, verbose=verbose, **kwargs)
                 # save the object
                 savename = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
                 if path is None:
@@ -465,13 +544,13 @@ def synth_loop(keys, jsons, states, cached=False, save_state=False, save_obj=Fal
                 with open(savename, 'wb') as f:
                     pickle.dump(recon_src, f)
             else:
-                recon_src = synthf(reconsrc=recon_src, percentiles=[],
-                                   noise=dta_noise, sigma2=sgma2,
-                                   return_obj=save_obj, save=False, verbose=verbose)
+                recon_src = synthf(reconsrc=recon_src, percentiles=[], psf_file=psf_file,
+                                   noise=dta_noise, sigma2=sgma2, use_psf=use_psf,
+                                   return_obj=save_obj, save=False, verbose=verbose, **kwargs)
             if save_state:
-                synthf(reconsrc=recon_src, percentiles=[],
-                       noise=dta_noise, sigma2=sgma2,
-                       save=save_state, verbose=verbose)
+                synthf(reconsrc=recon_src, percentiles=[], psf_file=psf_file,
+                       noise=dta_noise, sigma2=sgma2, use_psf=use_psf,
+                       save=save_state, verbose=verbose, **kwargs)
     return filtered_states
 
 
@@ -650,9 +729,10 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 if __name__ == "__main__":
     # root directories
     rdir = "/Users/phdenzel/adler"
-    version = "v2/"
+    version = "v3/"
     jsondir = rdir+"/json/"
     statedir = rdir+"/states/" + version
+    lensdir = rdir+"/lenses/"
     anlysdir = rdir+"/analysis/" + version
     kappadir = rdir+"/kappa/"
 
@@ -696,6 +776,7 @@ if __name__ == "__main__":
                                               or f.endswith('_synthf50.state'))]
     states = {k: [f for f in ls_states if k in f] for k in keys}
     kappa_files = {k: [f for f in ls_kappas if k in f] for k in keys}
+    psf_file = lensdir + "psf.fits"
 
     sfiles = states  # filtered_states  # synthf50  # prefiltered_synthf50
 
@@ -713,16 +794,20 @@ if __name__ == "__main__":
         cache_loop(k, jsons, sfiles, **kwargs)
 
     # # reconsrc synth caching
-    if 0:
+    if 1:
+        # k = ["H3S0A0B90G0"]
+        # k = ["H10S0A0B90G0", "H36S0A0B90G0"]
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         # k = ["H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
         #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         # k = keys
-        kwargs = dict(save_state=False, save_obj=True, load_obj=True, path=anlysdir+"states/",
-                      optimized=True, verbose=1)
-        # kwargs = dict(save_state=True, save_obj=False, load_obj=True, path=anlysdir+"states/",
-        #               optimized=False, verbose=1)
+        kwargs = dict(save_state=0, save_obj=1, load_obj=1, path=anlysdir+"states/",
+                      psf_file=psf_file, use_psf=1, optimized=1,
+                      from_cache=1, cached=1, save_to_cache=1,
+                      verbose=1)
+        # kwargs = dict(save_state=1, save_obj=0, load_obj=1, path=anlysdir+"states/",
+        #               psf_file=psf_file, use_psf=1, optimized=0, verbose=1)
         sfiles = states  # filtered_states
         synth_filtered_states = synth_loop(k, jsons, sfiles, **kwargs)
 
@@ -756,7 +841,7 @@ if __name__ == "__main__":
                 plt.hist(chi2, bins=20, color='#A0DED2')
                 plt.title(name)
                 # save the figure
-                savename = "chi2_hist_{}.pdf".format(name)
+                savename = "chi2_hist_{}.png".format(name)
                 textname = 'chi2_{}.txt'.format(name)
                 if path is None:
                     path = ""
@@ -793,7 +878,7 @@ if __name__ == "__main__":
             for idx in range(len(states[ki])):
                 sf = states[ki][idx]
                 name = os.path.basename(sf).replace(".state", "")
-                savename = "kappa_diff_hist_{}.pdf".format(name)
+                savename = "kappa_diff_hist_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -804,7 +889,7 @@ if __name__ == "__main__":
                     print(savename)
                 plt.hist(residuals[sf], color='#386BF1')
                 plt.xlim(left=0, right=200)
-                plt.ylim(bottom=0, top=375)
+                plt.ylim(bottom=0, top=int(0.3*len(residuals[sf])))
                 plt.title(name)
                 plt.savefig(savename)
                 plt.close()
@@ -845,14 +930,16 @@ if __name__ == "__main__":
             for f in files:
                 lbl = ['a', 'b', 'phi']
                 eq, gq = qpms[f]
-                ea, eb, ephi = qpm_props(eq)
+                ea, eb, ephi = qpm_props(eq, verbose=True)
+                # ephi = abs(ephi)
                 gprops = [qpm_props(q) for q in gq]
                 ga, gb, gphi = [p[0] for p in gprops], \
                                [p[1] for p in gprops], \
                                [p[2] for p in gprops]
+                               # [abs(p[2]) for p in gprops]
                 name = os.path.basename(f).replace(".state", "")
                 for i, (eprop, gprop) in enumerate(zip([ea, eb, ephi], [ga, gb, gphi])):
-                    savename = lbl[i]+"_hist_{}.pdf".format(name)
+                    savename = lbl[i]+"_hist_{}.png".format(name)
                     if path is None:
                         path = ""
                     if os.path.exists(path + ki):
@@ -864,13 +951,58 @@ if __name__ == "__main__":
                     plt.hist(gprop, bins=14, color='#FF6767')
                     plt.axvline(eprop, color='#F52549')
                     if lbl[i] == 'phi':
-                        plt.xlim(left=0, right=2*np.pi)
+                        plt.xlim(left=-np.pi, right=np.pi)
                     # if lbl[i] == 'a' or lbl[i] == 'b':
                     #     plt.xlim(left=(2*max(eprop, np.max(gprop))-2), right=2)
                     # plt.ylim(bottom=0, top=200)
                     plt.title(name)
                     plt.savefig(savename)
                     plt.close()
+
+    # # complex ellipticity plots
+    if 0:
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        kwargs = dict(verbose=1)
+        sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        loadname = 'qpms.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            qpms = pickle.load(f)
+        # iprod histograms
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                eq, gq = qpms[f]
+                ea, eb, ephi = qpm_props(eq)
+                gprops = [qpm_props(q) for q in gq]
+                ga, gb, gphi = [p[0] for p in gprops], \
+                               [p[1] for p in gprops], \
+                               [p[2] for p in gprops]
+                eagle_epsilon = complex_ellipticity(ea, eb, ephi)
+                glass_epsilon = complex_ellipticity(ga, gb, gphi)
+                name = os.path.basename(f).replace(".state", "")
+                savename = "ellipticity_{}.png".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if kwargs.get('verbose', False):
+                    print(savename)
+                plt.scatter(*eagle_epsilon, color='#FF6767')
+                plt.scatter(*glass_epsilon, color='#6767FF')
+                xlim = 1.1 * max([abs(eagle_epsilon[0]), np.abs(glass_epsilon[0]).max()])
+                ylim = 1.1 * max([abs(eagle_epsilon[1]), np.abs(glass_epsilon[1]).max()])
+                plt.xlim(left=-xlim, right=xlim)
+                plt.ylim(bottom=-ylim, top=ylim)
+                plt.title(name)
+                plt.savefig(savename)
+                plt.close()
 
     # # potential analysis
     if 0:
@@ -915,18 +1047,23 @@ if __name__ == "__main__":
                 ens_avg = np.average(potentials, axis=0)
                 # start plotting
                 fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-                pltkw = dict(cmap='magma', vmin=eagle_map.min(), vmax=eagle_map.max(),
-                             levels=np.linspace(np.min((ens_avg, eagle_map)), np.max((ens_avg, eagle_map)), 25))
-                eimg = axes[0].contourf(egx, egy, eagle_map, **pltkw)
+                pltkw = dict(cmap='magma')
+                # vmin=eagle_map.min(), vmax=eagle_map.max(),
+                # levels=np.linspace(np.min((ens_avg, eagle_map)),
+                #                    np.max((ens_avg, eagle_map)), 25))
+                levels = 25
+                eimg = axes[0].contourf(egx, egy, eagle_map, levels, **pltkw)
                 axes[0].set_title('EAGLE model', fontsize=12)
-                gimg = axes[1].contourf(gx[0], gy[0], ens_avg[::-1, :], **pltkw)
+                plt.colorbar(eimg, ax=axes[0])
+                gimg = axes[1].contourf(gx[0], gy[0], ens_avg[::-1, :], levels, **pltkw)
                 axes[1].set_title('Ensemble average', fontsize=12)
-                plt.colorbar(eimg, ax=axes.ravel().tolist(), shrink=0.9)
+                plt.colorbar(gimg, ax=axes[1])
+                # plt.colorbar(eimg, ax=axes.ravel().tolist(), shrink=0.9)
                 axes[0].set_aspect('equal')
                 axes[1].set_aspect('equal')
                 plt.suptitle(name)
                 # save the figure
-                savename = "potential_{}.pdf".format(name)
+                savename = "potential_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -983,7 +1120,7 @@ if __name__ == "__main__":
                 plt.xlim(left=-1, right=1)
                 plt.title(name)
                 # save the figure
-                savename = "scalar_degarr_{}.pdf".format(name)
+                savename = "scalar_degarr_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1015,35 +1152,50 @@ if __name__ == "__main__":
             files = sfiles[ki]
             for sf in files:
                 gx, gy, eagle_degarr, glass_degarrs = degarrs[sf]
+                eagle_degarr = eagle_degarr - eagle_degarr[eagle_degarr.shape[0]//2, eagle_degarr.shape[1]//2]
+                eagle_degarr = eagle_degarr/(-eagle_degarr.min())
                 # ip = [sigma_product(eagle_degarr, gdegarr) for gdegarr in glass_degarrs]
                 ip = iprods[sf]
                 sortedidcs = np.argsort(ip)
                 name = os.path.basename(sf).replace(".state", "")
                 ens_avg = np.average(glass_degarrs, axis=0)
+                ens_avg = ens_avg - ens_avg[ens_avg.shape[0]//2, ens_avg.shape[1]//2]
+                eagle_degarr = ens_avg/(-ens_avg.min())
                 minidx = sortedidcs[-1]
                 min_model = glass_degarrs[minidx]
+                min_model = min_model - min_model[min_model.shape[0]//2, min_model.shape[1]//2]
+                min_model = min_model/(-min_model.min())
+                print(min_model.min())
                 maxidx = np.argmin(ip)
                 max_model = glass_degarrs[maxidx]
+                max_model = max_model - max_model[max_model.shape[0]//2, max_model.shape[1]//2]
+                max_model = max_model/(-max_model.min())
+                print(max_model.min())
                 fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-                lim = np.max([np.abs(eagle_degarr), np.abs(ens_avg),
-                              np.abs(min_model), np.abs(max_model)])
-                pltkw = dict(cmap='RdBu', vmin=-lim, vmax=lim, levels=np.linspace(-lim, lim, 25))
-                img0 = axes[0, 0].contourf(gx, gy, eagle_degarr, **pltkw)
+                #, vmin=-lim, vmax=lim, levels=np.linspace(-lim, lim, 25))
+                levels = 50
+                lim = np.linspace(-1, 5, levels)
+                pltkw = dict(cmap='magma_r', levels=lim)
+                img0 = axes[0, 0].contourf(gx, gy, eagle_degarr, levels, **pltkw)
                 axes[0, 0].set_title('EAGLE model', fontsize=12)
                 axes[0, 0].set_aspect('equal')
-                img1 = axes[0, 1].contourf(gx, gy, ens_avg, **pltkw)
+                plt.colorbar(img0, ax=axes[0, 0])
+                img1 = axes[0, 1].contourf(gx, gy, ens_avg, levels, **pltkw)
                 axes[0, 1].set_title('Ensemble average', fontsize=12)
                 axes[0, 1].set_aspect('equal')
-                img2 = axes[1, 0].contourf(gx, gy, min_model, **pltkw)
+                plt.colorbar(img1, ax=axes[0, 1])
+                img2 = axes[1, 0].contourf(gx, gy, min_model, levels, **pltkw)
                 axes[1, 0].set_title('Best model', fontsize=12)
                 axes[1, 0].set_aspect('equal')
-                img3 = axes[1, 1].contourf(gx, gy, max_model, **pltkw)
+                plt.colorbar(img2, ax=axes[1, 0])
+                img3 = axes[1, 1].contourf(gx, gy, max_model, levels, **pltkw)
                 axes[1, 1].set_title('Worst model', fontsize=12)
                 axes[1, 1].set_aspect('equal')
-                plt.colorbar(img3, ax=axes.ravel().tolist(), shrink=0.9)
+                plt.colorbar(img3, ax=axes[1, 1])
+                # plt.colorbar(img3, ax=axes.ravel().tolist(), shrink=0.9)
                 plt.suptitle(name)
                 # save the figure
-                savename = "degarrs_{}.pdf".format(name)
+                savename = "degarrs_{}.png".format(name)
                 textname = "iprods_{}.txt".format(name)
                 if path is None:
                     path = ""
@@ -1065,7 +1217,7 @@ if __name__ == "__main__":
     # # chi2 vs iprods (takes long!!!)
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
-        kwargs = dict(optimized=True, verbose=1)
+        kwargs = dict(optimized=True, psf_file=psf_file, verbose=1)
         sfiles = states  # filtered_states
         path = anlysdir+"states/"
         loadname = 'iprods.pkl'
@@ -1099,7 +1251,7 @@ if __name__ == "__main__":
                 plt.ylabel('scalar')
                 plt.title(name)
                 # save the figure
-                savename = "chi2_vs_scalar_{}.pdf".format(name)
+                savename = "chi2_vs_scalar_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1146,7 +1298,7 @@ if __name__ == "__main__":
                 plt.colorbar()
                 plt.title(name)
                 # save the figure
-                savename = "data_{}.pdf".format(name)
+                savename = "data_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1166,7 +1318,7 @@ if __name__ == "__main__":
         #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         k = keys
-        kwargs = dict(verbose=1)
+        verbose = 1
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
         path = anlysdir+"states/"
         for ki in k:
@@ -1182,37 +1334,39 @@ if __name__ == "__main__":
                 if os.path.exists(loadname):
                     with open(loadname, 'rb') as f:
                         recon_src = pickle.load(f)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Loading '+loadname)
                 # noise map
                 lo = recon_src.lensobject
                 signals, variances = lo.flatfield(lo.data, size=0.2)
                 gain, _ = lo.gain(signals=signals, variances=variances)
-                f = gain
-                bias = 0.01*np.max(f * lo.data)
+                f = 1./(25*gain)
+                bias = 0.001*np.max(f * lo.data)
                 sgma2 = lo.sigma2(f=f, add_bias=bias)
                 dta_noise = np.random.normal(0, 1, size=lo.data.shape)
                 dta_noise = dta_noise * np.sqrt(sgma2)
                 # Ensemble average
                 recon_src.chmdl(-1)
-                r = recon_src.r_antialias
+                kwargs = dict(method='minres', use_psf=True, cached=False, sigma2=sgma2)
+                src = recon_src.plane_map(**kwargs)
+                r = recon_src.r_max
                 if r is not None:
                     extent = [-r, r, -r, r]
                 else:
                     extent = None
-                plt.imshow(recon_src.plane_map(), cmap='Spectral_r',
-                           origin='Lower', extent=extent)
+                plt.imshow(src, cmap='Spectral_r',
+                           origin='Lower', extent=extent, vmin=0)
                 plt.colorbar()
                 plt.title(name)
                 # save the figure
-                savename = "rconsrc_{}.pdf".format(name)
+                savename = "rconsrc_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Saving '+savename)
                 plt.savefig(savename)
                 # plt.show()
@@ -1225,7 +1379,7 @@ if __name__ == "__main__":
         #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         k = keys
-        kwargs = dict(verbose=1)
+        verbose = 1
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
         path = anlysdir+"states/"
         for ki in k:
@@ -1241,48 +1395,50 @@ if __name__ == "__main__":
                 if os.path.exists(loadname):
                     with open(loadname, 'rb') as f:
                         recon_src = pickle.load(f)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Loading '+loadname)
+                # noise map
+                lo = recon_src.lensobject
+                signals, variances = lo.flatfield(lo.data, size=0.2)
+                gain, _ = lo.gain(signals=signals, variances=variances)
+                f = 1./(25*gain)
+                bias = 0.001*np.max(f * lo.data)
+                sgma2 = lo.sigma2(f=f, add_bias=bias)
+                dta_noise = np.random.normal(0, 1, size=lo.data.shape)
+                dta_noise = dta_noise * np.sqrt(sgma2)
                 # Ensemble average
                 recon_src.chmdl(-1)
+                kwargs = dict(method='minres', use_psf=True, cached=False,
+                              from_cache=False, sigma2=sgma2)
+                synth = recon_src.reproj_map(**kwargs)
                 extent = recon_src.lensobject.extent
                 extent = [extent[0], extent[2], extent[1], extent[3]]
-                plt.imshow(recon_src.reproj_map(), cmap='Spectral_r',
+                plt.imshow(synth, cmap='Spectral_r',
                            origin='Lower', extent=extent)
                 plt.colorbar()
                 plt.title(name)
                 # save the figure
-                savename = "synth_{}.pdf".format(name)
+                savename = "synth_{}.png".format(name)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Saving '+savename)
                 plt.savefig(savename)
                 # plt.show()
                 plt.close()
-                
+
     # # Best/worst chi2/iprods synths
     if 0:
         ki = "H3S0A0B90G0"
-        kwargs = dict(verbose=1)
+        verbose = False
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        chi2_sorted = [4, 36, 1, 2, 96, 6, 5, 35, 34, 0, 38, 71, 97, 39, 3, 72, 94, 75, 23, 40,
-                       54, 93, 74, 41, 53, 70, 27, 28, 26, 76, 24, 95, 52, 21, 32, 92, 91, 50, 37,
-                       49, 22, 25, 33, 31, 55, 43, 14, 29, 51, 30, 44, 73, 46, 47, 15, 45, 42, 20,
-                       17, 19, 48, 16, 79, 77, 18, 60, 59, 58, 62, 61, 57, 78, 56, 82, 83, 81, 80,
-                       64, 86, 69, 67, 68, 63, 88, 84, 66, 65, 98, 89, 90, 87, 99, 85, 7, 8, 9, 11,
-                       12, 10, 13]
-        iprods_sorted = [65, 21, 48, 26, 84, 18, 81, 68, 37, 99, 83, 85, 75, 63, 67, 66, 19, 92,
-                         56, 78, 91, 17, 69, 30, 70, 80, 64, 0, 31, 6, 25, 82, 61, 8, 73, 57, 33,
-                         16, 32, 9, 10, 20, 76, 55, 87, 13, 59, 5, 24, 29, 93, 90, 41, 74, 22, 27,
-                         51, 43, 94, 42, 23, 47, 86, 1, 50, 28, 11, 60, 38, 2, 15, 62, 52, 12, 58,
-                         71, 54, 14, 72, 53, 89, 77, 44, 97, 49, 95, 98, 45, 79, 88, 40, 4, 46, 3,
-                         7, 96, 39, 35, 34, 36]
         path = anlysdir+"states/"
+        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
+        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         name = os.path.basename(sf).replace(".state", "")
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
@@ -1294,23 +1450,38 @@ if __name__ == "__main__":
         if os.path.exists(loadname):
             with open(loadname, 'rb') as f:
                 recon_src = pickle.load(f)
-        if kwargs.get('verbose', False):
+        if verbose:
             print('Loading '+loadname)
+        # noise map
+        lo = recon_src.lensobject
+        signals, variances = lo.flatfield(lo.data, size=0.2)
+        gain, _ = lo.gain(signals=signals, variances=variances)
+        f = 1./(25*gain)
+        bias = 0.001*np.max(f * lo.data)
+        sgma2 = lo.sigma2(f=f, add_bias=bias)
+        dta_noise = np.random.normal(0, 1, size=lo.data.shape)
+        dta_noise = dta_noise * np.sqrt(sgma2)
+
         extent = recon_src.lensobject.extent
         extent = [extent[0], extent[2], extent[1], extent[3]]
+        kwargs = dict(method='minres', use_psf=True, cached=True,
+                      from_cache=True, sigma2=sgma2)
         # chi2 synths
         if 1:
             for i, ichi2 in enumerate(chi2_sorted):
-                if 9 < i and i < 90:  # only the edges
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
                     continue
                 label = "chi2_{}".format(i)
                 recon_src.chmdl(ichi2)
-                plt.imshow(recon_src.reproj_map(), cmap='Spectral_r',
-                           origin='Lower', extent=extent)
+                synth = recon_src.reproj_map(**kwargs)
+                plt.imshow(synth, cmap='Spectral_r',
+                           origin='Lower', extent=extent,
+                           vmin=0, vmax=recon_src.lensobject.data.max())
                 plt.colorbar()
                 plt.title("Model {}".format(ichi2))
                 # save the figure
-                savename = "{}_synth.pdf".format(label)
+                savename = "{}_synth.png".format(label)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1319,7 +1490,7 @@ if __name__ == "__main__":
                 elif os.path.exists(path):
                     mkdir_p(path + "/synths")
                     savename = os.path.join(path, savename)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Saving '+savename)
                 plt.savefig(savename)
                 # plt.show()
@@ -1327,16 +1498,18 @@ if __name__ == "__main__":
         # iprods synths
         if 1:
             for i, iiprods in enumerate(iprods_sorted[::-1]):
-                if 9 < i and i < 90:  # only the edges
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
                     continue
                 label = "iprods_{}".format(i)
                 recon_src.chmdl(iiprods)
-                plt.imshow(recon_src.reproj_map(), cmap='Spectral_r',
-                           origin='Lower', extent=extent)
+                synth = recon_src.reproj_map(**kwargs)
+                plt.imshow(synth, cmap='Spectral_r',
+                           origin='Lower', extent=extent, vmin=0)
                 plt.colorbar()
                 plt.title("Model {}".format(iiprods))
                 # save the figure
-                savename = "{}_synth.pdf".format(label)
+                savename = "{}_synth.png".format(label)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1345,30 +1518,20 @@ if __name__ == "__main__":
                 elif os.path.exists(path):
                     mkdir_p(path + "/synths")
                     savename = os.path.join(path, savename)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Saving '+savename)
                 plt.savefig(savename)
                 # plt.show()
                 plt.close()
 
-    # # Best/worst chi2/iprods arival time surfaces
+    # # Best/worst chi2/iprods arrival time surfaces
     if 0:
         ki = "H3S0A0B90G0"
-        kwargs = dict(verbose=1)
+        verbose = 1
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        chi2_sorted = [4, 36, 1, 2, 96, 6, 5, 35, 34, 0, 38, 71, 97, 39, 3, 72, 94, 75, 23, 40,
-                       54, 93, 74, 41, 53, 70, 27, 28, 26, 76, 24, 95, 52, 21, 32, 92, 91, 50, 37,
-                       49, 22, 25, 33, 31, 55, 43, 14, 29, 51, 30, 44, 73, 46, 47, 15, 45, 42, 20,
-                       17, 19, 48, 16, 79, 77, 18, 60, 59, 58, 62, 61, 57, 78, 56, 82, 83, 81, 80,
-                       64, 86, 69, 67, 68, 63, 88, 84, 66, 65, 98, 89, 90, 87, 99, 85, 7, 8, 9, 11,
-                       12, 10, 13]
-        iprods_sorted = [65, 21, 48, 26, 84, 18, 81, 68, 37, 99, 83, 85, 75, 63, 67, 66, 19, 92,
-                         56, 78, 91, 17, 69, 30, 70, 80, 64, 0, 31, 6, 25, 82, 61, 8, 73, 57, 33,
-                         16, 32, 9, 10, 20, 76, 55, 87, 13, 59, 5, 24, 29, 93, 90, 41, 74, 22, 27,
-                         51, 43, 94, 42, 23, 47, 86, 1, 50, 28, 11, 60, 38, 2, 15, 62, 52, 12, 58,
-                         71, 54, 14, 72, 53, 89, 77, 44, 97, 49, 95, 98, 45, 79, 88, 40, 4, 46, 3,
-                         7, 96, 39, 35, 34, 36]
         path = anlysdir+"states/"
+        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
+        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         name = os.path.basename(sf).replace(".state", "")
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
@@ -1380,12 +1543,13 @@ if __name__ == "__main__":
         if os.path.exists(loadname):
             with open(loadname, 'rb') as f:
                 recon_src = pickle.load(f)
-        if kwargs.get('verbose', False):
+        if verbose:
             print('Loading '+loadname)
         # chi2 arrival time surfaces
         if 1:
             for i, ichi2 in enumerate(chi2_sorted):
-                if 9 < i and i < 90:  # only the edges
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
                     continue
                 label = "chi2_{}".format(i)
                 m = recon_src.gls.models[ichi2]
@@ -1395,7 +1559,7 @@ if __name__ == "__main__":
                                            colors=['#603dd0'])
                 plt.title("Model {}".format(ichi2))
                 # save the figure
-                savename = "{}_arriv.pdf".format(label)
+                savename = "{}_arriv.png".format(label)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1404,7 +1568,7 @@ if __name__ == "__main__":
                 elif os.path.exists(path):
                     mkdir_p(path + "/arrivs")
                     savename = os.path.join(path, savename)
-                if kwargs.get('verbose', False):
+                if verbose:
                     print('Saving '+savename)
                 plt.savefig(savename)
                 # plt.show()
@@ -1412,18 +1576,19 @@ if __name__ == "__main__":
         # iprods arrival time surfaces
         if 1:
             for i, iiprods in enumerate(iprods_sorted[::-1]):
-                if 9 < i and i < 90:  # only the edges
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
                     continue
                 label = "iprods_{}".format(i)
-                recon_src.gls.models[ichi2]
-                m = recon_src.gls.models[ichi2]
+                recon_src.gls.models[iiprods]
+                m = recon_src.gls.models[iiprods]
                 recon_src.gls.img_plot(obj_index=0, color='#fe4365')
                 recon_src.gls.arrival_plot(m, obj_index=0,
                                            only_contours=True, clevels=75,
                                            colors=['#603dd0'])
                 plt.title("Model {}".format(iiprods))
                 # save the figure
-                savename = "{}_arriv.pdf".format(label)
+                savename = "{}_arriv.png".format(label)
                 if path is None:
                     path = ""
                 if os.path.exists(path + ki):
@@ -1432,7 +1597,269 @@ if __name__ == "__main__":
                 elif os.path.exists(path):
                     mkdir_p(path + "/arrivs")
                     savename = os.path.join(path, savename)
-                if kwargs.get('verbose', False):
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # Best/worst chi2/iprods kappa maps
+    if 0:
+        ki = "H3S0A0B90G0"
+        verbose = 1
+        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
+        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
+        name = os.path.basename(sf).replace(".state", "")
+        loadname = "reconsrc_{}.pkl".format(name)
+        if path is None:
+            path = ""
+        if os.path.exists(path + ki):
+            loadname = os.path.join(path, ki, loadname)
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        if os.path.exists(loadname):
+            with open(loadname, 'rb') as f:
+                recon_src = pickle.load(f)
+        if verbose:
+            print('Loading '+loadname)
+
+        extent = recon_src.lensobject.extent
+        extent = [extent[0], extent[2], extent[1], extent[3]]
+        # chi2 kappa maps
+        if 1:
+            for i, ichi2 in enumerate(chi2_sorted):
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
+                    continue
+                label = "chi2_{}".format(i)
+                m = recon_src.gls.models[ichi2]
+                obj, dta = m['obj,data'][0]
+                grid = obj.basis._to_grid(dta['kappa'], 1)
+                grid = np.log10(grid+1)
+                plt.contourf(grid, 25, cmap='afmhot', origin='lower',
+                             extent=extent)
+                plt.colorbar()
+                plt.contour(grid, levels=[np.log10(2)], colors=['k'],
+                            extent=extent, origin='lower')
+                plt.title("Model {}".format(ichi2))
+                # save the figure
+                savename = "{}_kappa.png".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/kappas")
+                    savename = os.path.join(path, ki, "kappas", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/kappas")
+                    savename = os.path.join(path, savename)
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+        # iprods kappa maps
+        if 1:
+            for i, iiprods in enumerate(iprods_sorted[::-1]):
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
+                    continue
+                label = "iprods_{}".format(i)
+                recon_src.gls.models[iiprods]
+                m = recon_src.gls.models[iiprods]
+                obj, dta = m['obj,data'][0]
+                grid = obj.basis._to_grid(dta['kappa'], 1)
+                grid = np.log10(grid+1)
+                plt.contourf(grid, 25, cmap='afmhot', origin='lower',
+                             extent=extent)
+                plt.colorbar()
+                plt.contour(grid, levels=[np.log10(2)], colors=['k'],
+                            extent=extent, origin='lower')
+                plt.title("Model {}".format(iiprods))
+                # save the figure
+                savename = "{}_kappa.png".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/kappas")
+                    savename = os.path.join(path, ki, "kappas", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/kappas")
+                    savename = os.path.join(path, savename)
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # Best/worst chi2/iprods degarrs
+    if 0:
+        ki = "H3S0A0B90G0"
+        verbose = 1
+        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
+        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
+        # Load recon_src
+        name = os.path.basename(sf).replace(".state", "")
+        loadname = "reconsrc_{}.pkl".format(name)
+        if path is None:
+            path = ""
+        if os.path.exists(path + ki):
+            loadname = os.path.join(path, ki, loadname)
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        if os.path.exists(loadname):
+            with open(loadname, 'rb') as f:
+                recon_src = pickle.load(f)
+        if verbose:
+            print('Loading '+loadname)
+        # Load degarrs
+        loadname = 'degarrs.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            degarrs = pickle.load(f)
+        gx, gy, eagle_degarr, glass_degarrs = degarrs[sf]
+        # chi2 degarr maps
+        if 1:
+            for i, ichi2 in enumerate(chi2_sorted):
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
+                    continue
+                label = "chi2_{}".format(i)
+                fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+                model = glass_degarrs[ichi2]
+                pltkw = dict(cmap='magma_r')
+                levels = 25
+                eimg = axes[0].contourf(gx, gy, eagle_degarr, levels, **pltkw)
+                plt.colorbar(eimg, ax=axes[0])
+                mimg = axes[1].contourf(gx, gy, model, levels, **pltkw)
+                plt.colorbar(mimg, ax=axes[1])
+                axes[0].set_aspect('equal')
+                axes[1].set_aspect('equal')
+                plt.title("Model {}".format(ichi2))
+                # save the figure
+                savename = "{}_degarr.png".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/degarrs")
+                    savename = os.path.join(path, ki, "degarrs", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/degarrs")
+                    savename = os.path.join(path, savename)
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+        # iprods degarr maps
+        if 1:
+            for i, iiprods in enumerate(iprods_sorted[::-1]):
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
+                    continue
+                label = "iprods_{}".format(i)
+                fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+                model = glass_degarrs[iiprods]
+                pltkw = dict(cmap='magma_r')
+                levels = 25
+                eimg = axes[0].contourf(gx, gy, eagle_degarr, levels, **pltkw)
+                plt.colorbar(eimg, ax=axes[0])
+                mimg = axes[1].contourf(gx, gy, model, levels, **pltkw)
+                plt.colorbar(mimg, ax=axes[1])
+                axes[0].set_aspect('equal')
+                axes[1].set_aspect('equal')
+                plt.title("Model {}".format(ichi2))
+                # save the figure
+                savename = "{}_degarr.png".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/degarrs")
+                    savename = os.path.join(path, ki, "degarrs", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/degarrs")
+                    savename = os.path.join(path, savename)
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # # Best/worst chi2/iprods kappa profiles
+    if 0:
+        ki = "H3S0A0B90G0"
+        verbose = 1
+        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        path = anlysdir+"states/"
+        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
+        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
+        eagle_model = fits.getdata(kappa_files[ki][0], header=True)
+        name = os.path.basename(sf).replace(".state", "")
+        loadname = "reconsrc_{}.pkl".format(name)
+        if path is None:
+            path = ""
+        if os.path.exists(path + ki):
+            loadname = os.path.join(path, ki, loadname)
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        if os.path.exists(loadname):
+            with open(loadname, 'rb') as f:
+                recon_src = pickle.load(f)
+        if verbose:
+            print('Loading '+loadname)
+        # chi2 kappa profiles
+        if 1:
+            for i, ichi2 in enumerate(chi2_sorted):
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
+                    continue
+                label = "chi2_{}".format(i)
+                m = recon_src.gls.models[ichi2]
+                img = kappa_profile(m, eagle_model, lw=2)
+                plt.title("Model {}".format(ichi2))
+                # save the figure
+                savename = "{}_kappaR.png".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/profiles")
+                    savename = os.path.join(path, ki, "profiles", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/profiles")
+                    savename = os.path.join(path, savename)
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+        # iprods kappa profiles
+        if 1:
+            for i, iiprods in enumerate(iprods_sorted[::-1]):
+                # if 9 < i and i < 90:  # only the edges
+                if 29 < i and i < 69:
+                    continue
+                label = "iprods_{}".format(i)
+                recon_src.gls.models[iiprods]
+                m = recon_src.gls.models[iiprods]
+                img = kappa_profile(m, eagle_model, lw=2)
+                plt.title("Model {}".format(iiprods))
+                # save the figure
+                savename = "{}_kappaR.png".format(label)
+                if path is None:
+                    path = ""
+                if os.path.exists(path + ki):
+                    mkdir_p(path + ki + "/profiles")
+                    savename = os.path.join(path, ki, "profiles", savename)
+                elif os.path.exists(path):
+                    mkdir_p(path + "/profiles")
+                    savename = os.path.join(path, savename)
+                if verbose:
                     print('Saving '+savename)
                 plt.savefig(savename)
                 # plt.show()
