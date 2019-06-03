@@ -898,7 +898,8 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
                  reduced=False, nonzero_only=True, method='lsmr', use_psf=True,
                  from_cache=True, cached=True, save_to_cache=True,
                  noise=0, sigma=1, sigma2=None, sigmaM2=None,
-                 N_models=None, save=False, return_obj=False, verbose=False):
+                 N_models=None, save=False, return_obj=False,
+                 stdout_flush=True, verbose=False):
     """
     Filter a GLASS state file using GLEAM's source reconstruction feature
 
@@ -924,6 +925,7 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
         N_models <int> - number of models to loop through
         save <bool> - save the filtered states automatically
         return_obj <bool> - return the object with all reprojections cached instead
+        stdout_flush <bool> - flush stdout and update line in verbose mode
         verbose <bool> - verbose mode; print command line statements
 
     Return:
@@ -972,7 +974,8 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
         if verbose:
             message = "{:4d} / {:4d}: {:4.8f}\r".format(i+1, N_models, chi2)
             sys.stdout.write(message)
-            sys.stdout.flush()
+            if stdout_flush:
+                sys.stdout.flush()
 
     if verbose:
         print("Number of residual models: {}".format(len(chi2s)))
@@ -1001,7 +1004,7 @@ def eval_residuals(index, reconsrc, data=None,
                    sigma=1, sigma2=None, sigmaM2=None,
                    save_to_cache=True, from_cache=True,
                    cached=True, method='lsmr', use_psf=True,
-                   N_total=0, verbose=False):
+                   N_total=0, stdout_flush=True, verbose=False):
     """
     Helper function to evaluate the residual of a single model within a multiprocessing loop
 
@@ -1022,6 +1025,7 @@ def eval_residuals(index, reconsrc, data=None,
         sigma2 <float/np.ndarray> - squared sigma for the chi2 calculation
         sigmaM2 <scipy.sparse.diags> - sparse diagonal matrix with inverse sigma2s
         N_total <int> - the total size of loop range
+        stdout_flush <bool> - flush stdout and update line in verbose mode
         verbose <bool> - verbose mode; print command line statements
 
     Return:
@@ -1036,7 +1040,8 @@ def eval_residuals(index, reconsrc, data=None,
         if verbose:
             message = "{:4d} / {:4d}: {:4.4f}\r".format(index+1, N_total, delta)
             sys.stdout.write(message)
-            sys.stdout.flush()
+            if stdout_flush:
+                sys.stdout.flush()
         return reconsrc._cache, delta
     except KeyboardInterrupt:
         raise KeyboardInterruptError()
@@ -1049,7 +1054,7 @@ def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=No
                     from_cache=True, cached=True, save_to_cache=True,
                     noise=0, sigma=1, sigma2=None, sigmaM2=None,
                     N_models=None, save=False, return_obj=False,
-                    verbose=False):
+                    stdout_flush=True, verbose=False):
     """
     Filter a GLASS state file using GLEAM's source reconstruction feature
 
@@ -1075,6 +1080,7 @@ def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=No
         N_models <int> - number of models to loop through
         save <bool> - save the filtered states automatically
         return_obj <bool> - return the object with all reprojections cached instead
+        stdout_flush <bool> - flush stdout and update line in verbose mode
         verbose <bool> - verbose mode; print command line statements
 
     Return:
@@ -1121,7 +1127,7 @@ def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=No
                     method=method, use_psf=use_psf,
                     from_cache=from_cache, cached=cached, save_to_cache=save_to_cache,
                     sigma2=sigma2, sigmaM2=sigmaM2,
-                    N_total=N_models, verbose=verbose)
+                    N_total=N_models, stdout_flush=stdout_flush, verbose=verbose)
         output = pool.map(f, range(N_models))
         chi2s = [o[1] for o in output]
         caches = [o[0] for o in output]
