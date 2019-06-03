@@ -9,8 +9,12 @@ Is the GLASS half full or half empty?
 ###############################################################################
 import sys
 import os
+# from ctypes import cdll
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
+# libglpk = os.path.join(root, 'include/glpk/libglpk.so.0')
+# if os.path.exists(libglpk):
+#     glpk = cdll.LoadLibrary(libglpk)
 libspath = os.path.join(root, 'lib')
 if os.path.exists(libspath):
     libs = os.listdir(libspath)[::-1]
