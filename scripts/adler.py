@@ -728,13 +728,14 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    rdir = "/Users/phdenzel/adler"
-    version = "v3/"
-    jsondir = rdir+"/json/"
-    statedir = rdir+"/states/" + version
-    lensdir = rdir+"/lenses/"
-    anlysdir = rdir+"/analysis/" + version
-    kappadir = rdir+"/kappa/"
+    version = "v3"
+    home = os.path.expanduser("~")
+    rdir = os.path.join(home, "adler")
+    jsondir = os.path.join(rdir, "json")
+    statedir = os.path.join(rdir, "states", version)
+    lensdir = os.path.join(rdir, "lenses")
+    anlysdir = os.path.join(rdir, "analysis", version)
+    kappadir = os.path.join(rdir, "kappa")
 
     keys = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
             "H3S0A0B90G0", "H3S1A0B90G0", "H4S3A0B0G90", "H10S0A0B90G0", "H13S0A0B90G0",
@@ -776,19 +777,19 @@ if __name__ == "__main__":
                                               or f.endswith('_synthf50.state'))]
     states = {k: [f for f in ls_states if k in f] for k in keys}
     kappa_files = {k: [f for f in ls_kappas if k in f] for k in keys}
-    psf_file = lensdir + "psf.fits"
+    psf_file = os.path.join(lensdir, "psf.fits")
 
     sfiles = states  # filtered_states  # synthf50  # prefiltered_synthf50
 
     # # create a directory structure
     if 0:
-        mkdir_structure(keys, root=anlysdir+"states/")
+        mkdir_structure(keys, root=os.path.join(anlysdir, "states"))
 
     # # reload cache into new reconsrc objects
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         # k = keys
-        kwargs = dict(path=anlysdir+"states/", variables=['inv_proj', 'N_nil'], save_obj=True,
+        kwargs = dict(path=os.path.join(anlysdir, "states"), variables=['inv_proj', 'N_nil'], save_obj=True,
                       verbose=1)
         sfiles = states  # filtered_states
         cache_loop(k, jsons, sfiles, **kwargs)
@@ -802,8 +803,8 @@ if __name__ == "__main__":
         #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         # k = keys
-        kwargs = dict(save_state=0, save_obj=1, load_obj=1, path=anlysdir+"states/",
-                      psf_file=psf_file, use_psf=1, optimized=1,
+        kwargs = dict(save_state=0, save_obj=1, load_obj=1, path=os.path.join(anlysdir, "states"),
+                      psf_file=psf_file, use_psf=1, optimized=0,
                       from_cache=1, cached=1, save_to_cache=1,
                       verbose=1)
         # kwargs = dict(save_state=1, save_obj=0, load_obj=1, path=anlysdir+"states/",
@@ -871,7 +872,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(method='e2g', verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         residuals = residual_loop(k, kappa_files, sfiles, **kwargs)
         for ki in k:
             print(ki)
@@ -899,7 +900,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(method='e2g', activation=0.25, verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         qpms = inertia_loop(k, kappa_files, sfiles, **kwargs)
         if 1:
             savename = 'qpms.pkl'
@@ -916,7 +917,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         loadname = 'qpms.pkl'
         if path is None:
             path = ""
@@ -964,7 +965,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         loadname = 'qpms.pkl'
         if path is None:
             path = ""
@@ -1009,7 +1010,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(N=85, verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         potentials = potential_loop(k, kappa_files, sfiles, **kwargs)
         if 1:
             savename = 'pots.pkl'
@@ -1026,7 +1027,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         loadname = 'pots.pkl'
         if path is None:
             path = ""
@@ -1081,7 +1082,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(N=85, calc_iprod=True, optimized=True, verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         degarrs, iprods = degarr_loop(k, kappa_files, sfiles, **kwargs)
         if 1:
             savenames = ['degarrs.pkl', 'iprods.pkl']
@@ -1219,7 +1220,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(optimized=True, psf_file=psf_file, verbose=1)
         sfiles = states  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         loadname = 'iprods.pkl'
         if path is None:
             path = ""
@@ -1273,7 +1274,7 @@ if __name__ == "__main__":
         k = keys
         kwargs = dict(verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         for ki in k:
             for sf in sfiles[ki]:
                 name = os.path.basename(sf).replace(".state", "")
@@ -1320,7 +1321,7 @@ if __name__ == "__main__":
         k = keys
         verbose = 1
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         for ki in k:
             for sf in sfiles[ki]:
                 name = os.path.basename(sf).replace(".state", "")
@@ -1381,7 +1382,7 @@ if __name__ == "__main__":
         k = keys
         verbose = 1
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         for ki in k:
             for sf in sfiles[ki]:
                 name = os.path.basename(sf).replace(".state", "")
@@ -1436,7 +1437,7 @@ if __name__ == "__main__":
         ki = "H3S0A0B90G0"
         verbose = False
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
         iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         name = os.path.basename(sf).replace(".state", "")
@@ -1529,7 +1530,7 @@ if __name__ == "__main__":
         ki = "H3S0A0B90G0"
         verbose = 1
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
         iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         name = os.path.basename(sf).replace(".state", "")
@@ -1608,7 +1609,7 @@ if __name__ == "__main__":
         ki = "H3S0A0B90G0"
         verbose = 1
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
         iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         name = os.path.basename(sf).replace(".state", "")
@@ -1698,7 +1699,7 @@ if __name__ == "__main__":
         ki = "H3S0A0B90G0"
         verbose = 1
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
         iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         # Load recon_src
@@ -1796,7 +1797,7 @@ if __name__ == "__main__":
         ki = "H3S0A0B90G0"
         verbose = 1
         sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
         iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         eagle_model = fits.getdata(kappa_files[ki][0], header=True)
