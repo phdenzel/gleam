@@ -8,7 +8,7 @@ Linear algebra utilities for 2D quantities
 # Imports
 ###############################################################################
 import numpy as np
-from gleam.utils.lensing import radial_mask
+from gleam.utils.rgb_map import radial_mask
 
 
 ###############################################################################

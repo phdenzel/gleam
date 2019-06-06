@@ -96,35 +96,6 @@ def upsample_model(gls_model, extent, shape, verbose=False):
     return kappa_resmap
 
 
-def radial_mask(data, center=None, radius=None):
-    """
-    Create a circular mask for the input data
-
-    Args:
-        data <np.ndarray> - image data for which the mask is created
-
-    Kwargs:
-        center <tuple/list(int)> - center indices of the mask on the data
-        radius <int> - radius of the circular mask
-
-    Return:
-        mask <np.ndarray(bool)> - circular boolean mask
-    """
-    if 2 > len(data.shape) > 3:
-        raise IndexError(
-            "Wrong input shape {}! " \
-            + "Input 2D data with shape of (N, M), (N, M, 3) or (N, M, 4)!".format(data.shape))
-    h, w = data.shape
-    if center is None:
-        center = [int(w//2), int(h//2)]
-    if radius is None:
-        radius = min(center[0], center[1], w-center[0], h-center[1])
-    Y, X = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((X-center[0])**2 + (Y-center[1])**2)
-    mask = dist_from_center <= radius
-    return mask
-
-
 def radial_profile(data, center=None, bins=None):
     """
     Calculate radial profiles of some data maps
@@ -143,7 +114,7 @@ def radial_profile(data, center=None, bins=None):
         bins = N//2
     if center is None:
         # center = np.unravel_index(data.argmax(), data.shape)
-        center = [c//2 for c in data.shape]
+        center = [c//2 for c in data.shape][::-1]
     x, y = np.indices((data.shape))
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
     r = r.reshape(r.size)
