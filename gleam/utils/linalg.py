@@ -8,6 +8,7 @@ Linear algebra utilities for 2D quantities
 # Imports
 ###############################################################################
 import numpy as np
+from gleam.utils.lensing import radial_mask
 
 
 ###############################################################################
@@ -117,7 +118,7 @@ def is_symm2D(data, center=None):
     return is_symm
 
 
-def inner_product(grid1, grid2):
+def inner_product(grid1, grid2, rmask=False):
     """
     The inner product of two grids in order to compare likeness
 
@@ -125,27 +126,36 @@ def inner_product(grid1, grid2):
         grid1, grid2 <np.ndarray> - the grid data, e.g. of two different models
 
     Kwargs:
-        None
+        rmask <bool> - apply a radial mask before calculating the inner product
 
     Return:
         None
     """
+    if rmask:
+        msk = radial_mask(grid1)
+        grid1 = grid1[msk]
+        grid2 = grid2[msk]
     return np.sum(grid1*grid2)/(np.linalg.norm(grid1)*np.linalg.norm(grid2))
 
 
-def sigma_product(grid1, grid2):
+def sigma_product(grid1, grid2, rmask=True):
     """
     The inner product of two grids in order to compare likeness as deviations from the mean
 
     Args:
         grid1, grid2 <np.ndarray> - the grid data, e.g. of two different models
 
+
     Kwargs:
-        None
+        rmask <bool> - apply a radial mask before calculating the inner product
 
     Return:
         None
     """
+    if rmask:
+        msk = radial_mask(grid1)
+        grid1 = grid1[msk]
+        grid2 = grid2[msk]
     grid1 = grid1 - np.mean(grid1)
     grid2 = grid2 - np.mean(grid2)
-    return inner_product(grid1, grid2)
+    return inner_product(grid1, grid2, rmask=False)
