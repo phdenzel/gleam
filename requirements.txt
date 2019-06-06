@@ -5,3 +5,4 @@ pathos==0.2.3
 astropy==2.0.9
 matplotlib==2.2.3
 Pillow==5.3.0
+weave==0.15.0

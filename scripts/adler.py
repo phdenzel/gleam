@@ -1,3 +1,5 @@
+# import matplotlib
+# matplotlib.use('Agg')
 import os
 import sys
 root = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
@@ -9,7 +11,6 @@ from functools import partial
 from pathos.multiprocessing import ProcessingPool as Pool
 from astropy.io import fits
 import matplotlib.pyplot as plt
-
 from gleam.reconsrc import ReconSrc, synth_filter, synth_filter_mp
 from gleam.multilens import MultiLens
 from gleam.glass_interface import glass_renv
@@ -19,7 +20,6 @@ from gleam.utils.lensing import downsample_model, upsample_model, radial_profile
 from gleam.utils.linalg import sigma_product
 from gleam.utils.makedir import mkdir_p
 glass = glass_renv()
-
 
 class KeyboardInterruptError(Exception):
     pass
@@ -516,7 +516,7 @@ def synth_loop(keys, jsons, states,
                 loadname = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
                 if path is None:
                     path = ""
-                if os.path.exists(path + k):
+                if os.path.exists(os.path.join(path, k)):
                     loadname = os.path.join(path, k, loadname)
                 elif os.path.exists(path):
                     loadname = os.path.join(path, loadname)
@@ -537,7 +537,7 @@ def synth_loop(keys, jsons, states,
                 savename = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
                 if path is None:
                     path = ""
-                if os.path.exists(path+k):
+                if os.path.exists(os.path.join(path, k)):
                     savename = os.path.join(path, k, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -580,7 +580,7 @@ def cache_loop(keys, jsons, states, path=None, variables=['inv_proj', 'N_nil', '
             loadname = "reconsrc_{}".format(os.path.basename(sf).replace(".state", ".pkl"))
             if path is None:
                 path = ""
-            if os.path.exists(path + k):
+            if os.path.exists(os.path.join(path, k)):
                 loadname = os.path.join(path, k, loadname)
             elif os.path.exists(path):
                 loadname = os.path.join(path, loadname)
@@ -728,7 +728,7 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    version = "v3"
+    version = "v4"
     home = os.path.expanduser("~")
     rdir = os.path.join(home, "adler")
     jsondir = os.path.join(rdir, "json")
@@ -781,6 +781,7 @@ if __name__ == "__main__":
 
     sfiles = states  # filtered_states  # synthf50  # prefiltered_synthf50
 
+    # # LOOP OPERATIONS
     # # create a directory structure
     if 0:
         mkdir_structure(keys, root=os.path.join(anlysdir, "states"))
@@ -795,7 +796,7 @@ if __name__ == "__main__":
         cache_loop(k, jsons, sfiles, **kwargs)
 
     # # reconsrc synth caching
-    if 1:
+    if 0:
         # k = ["H3S0A0B90G0"]
         # k = ["H10S0A0B90G0", "H36S0A0B90G0"]
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
@@ -804,9 +805,9 @@ if __name__ == "__main__":
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         # k = keys
         kwargs = dict(save_state=0, save_obj=1, load_obj=1, path=os.path.join(anlysdir, "states"),
-                      psf_file=psf_file, use_psf=1, optimized=0,
+                      psf_file=psf_file, use_psf=1, optimized=1, nproc=8,
                       from_cache=1, cached=1, save_to_cache=1,
-                      verbose=1)
+                      stdout_flush=0, verbose=1)
         # kwargs = dict(save_state=1, save_obj=0, load_obj=1, path=anlysdir+"states/",
         #               psf_file=psf_file, use_psf=1, optimized=0, verbose=1)
         sfiles = states  # filtered_states
@@ -820,14 +821,14 @@ if __name__ == "__main__":
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         kwargs = dict(optimized=False, verbose=1)
         sfiles = states  # filtered_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         for ki in k:
             for sf in sfiles[ki]:
                 name = os.path.basename(sf).replace(".state", "")
                 loadname = "reconsrc_{}.pkl".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     loadname = os.path.join(path, ki, loadname)
                 elif os.path.exists(path):
                     loadname = os.path.join(path, loadname)
@@ -846,7 +847,7 @@ if __name__ == "__main__":
                 textname = 'chi2_{}.txt'.format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                     textname = os.path.join(path, ki, textname)
                 elif os.path.exists(path):
@@ -882,7 +883,7 @@ if __name__ == "__main__":
                 savename = "kappa_diff_hist_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -943,7 +944,7 @@ if __name__ == "__main__":
                     savename = lbl[i]+"_hist_{}.png".format(name)
                     if path is None:
                         path = ""
-                    if os.path.exists(path + ki):
+                    if os.path.exists(os.path.join(path, ki)):
                         savename = os.path.join(path, ki, savename)
                     elif os.path.exists(path):
                         savename = os.path.join(path, savename)
@@ -989,7 +990,7 @@ if __name__ == "__main__":
                 savename = "ellipticity_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1067,7 +1068,7 @@ if __name__ == "__main__":
                 savename = "potential_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1100,7 +1101,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtererd_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         o = []
         for loadname in ['degarrs.pkl', 'iprods.pkl']:
             if path is None:
@@ -1124,7 +1125,7 @@ if __name__ == "__main__":
                 savename = "scalar_degarr_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1139,7 +1140,7 @@ if __name__ == "__main__":
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         kwargs = dict(verbose=1)
         sfiles = states  # synthf50  # prefiltered_synthf50  # filtererd_states
-        path = anlysdir+"states/"
+        path = os.path.join(anlysdir, "states")
         loadnames = ['degarrs.pkl', 'iprods.pkl']
         if path is None:
             path = ""
@@ -1200,7 +1201,7 @@ if __name__ == "__main__":
                 textname = "iprods_{}.txt".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                     textname = os.path.join(path, ki, textname)
                 elif os.path.exists(path):
@@ -1234,7 +1235,7 @@ if __name__ == "__main__":
                 loadname = "reconsrc_{}.pkl".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     loadname = os.path.join(path, ki, loadname)
                 elif os.path.exists(path):
                     loadname = os.path.join(path, loadname)
@@ -1255,7 +1256,7 @@ if __name__ == "__main__":
                 savename = "chi2_vs_scalar_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1281,7 +1282,7 @@ if __name__ == "__main__":
                 loadname = "reconsrc_{}.pkl".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     loadname = os.path.join(path, ki, loadname)
                 elif os.path.exists(path):
                     loadname = os.path.join(path, loadname)
@@ -1302,7 +1303,7 @@ if __name__ == "__main__":
                 savename = "data_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1328,7 +1329,7 @@ if __name__ == "__main__":
                 loadname = "reconsrc_{}.pkl".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     loadname = os.path.join(path, ki, loadname)
                 elif os.path.exists(path):
                     loadname = os.path.join(path, loadname)
@@ -1363,7 +1364,7 @@ if __name__ == "__main__":
                 savename = "rconsrc_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1389,7 +1390,7 @@ if __name__ == "__main__":
                 loadname = "reconsrc_{}.pkl".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     loadname = os.path.join(path, ki, loadname)
                 elif os.path.exists(path):
                     loadname = os.path.join(path, loadname)
@@ -1422,7 +1423,7 @@ if __name__ == "__main__":
                 savename = "synth_{}.png".format(name)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
+                if os.path.exists(os.path.join(path, ki)):
                     savename = os.path.join(path, ki, savename)
                 elif os.path.exists(path):
                     savename = os.path.join(path, savename)
@@ -1432,19 +1433,21 @@ if __name__ == "__main__":
                 # plt.show()
                 plt.close()
 
+    # SINGLE OBJECT OPERATIONS
     # # Best/worst chi2/iprods synths
     if 0:
         ki = "H3S0A0B90G0"
+        idx = 0
         verbose = False
-        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = os.path.join(anlysdir, "states")
-        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
-        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
+        sf = states[ki][idx]   # synthf50  # prefiltered_synthf50  # filtered_states
         name = os.path.basename(sf).replace(".state", "")
+        path = os.path.join(anlysdir, "states")
+        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+        iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
             path = ""
-        if os.path.exists(path + ki):
+        if os.path.exists(os.path.join(path, ki)):
             loadname = os.path.join(path, ki, loadname)
         elif os.path.exists(path):
             loadname = os.path.join(path, loadname)
@@ -1485,11 +1488,11 @@ if __name__ == "__main__":
                 savename = "{}_synth.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/synths")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'synths'))
                     savename = os.path.join(path, ki, "synths", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/synths")
+                    mkdir_p(os.path.join(path, "synths"))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1513,11 +1516,11 @@ if __name__ == "__main__":
                 savename = "{}_synth.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/synths")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'synths'))
                     savename = os.path.join(path, ki, "synths", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/synths")
+                    mkdir_p(os.path.join(path, 'synths'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1528,16 +1531,17 @@ if __name__ == "__main__":
     # # Best/worst chi2/iprods arrival time surfaces
     if 0:
         ki = "H3S0A0B90G0"
+        idx = 0
         verbose = 1
-        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
-        path = os.path.join(anlysdir, "states")
-        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
-        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
+        sf = states[ki][idx]   # synthf50  # prefiltered_synthf50  # filtered_states
         name = os.path.basename(sf).replace(".state", "")
+        path = os.path.join(anlysdir, "states")
+        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+        iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
             path = ""
-        if os.path.exists(path + ki):
+        if os.path.exists(os.path.join(path, ki)):
             loadname = os.path.join(path, ki, loadname)
         elif os.path.exists(path):
             loadname = os.path.join(path, loadname)
@@ -1563,11 +1567,11 @@ if __name__ == "__main__":
                 savename = "{}_arriv.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/arrivs")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'arrivs'))
                     savename = os.path.join(path, ki, "arrivs", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/arrivs")
+                    mkdir_p(os.path.join(path, 'arrivs'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1592,11 +1596,11 @@ if __name__ == "__main__":
                 savename = "{}_arriv.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/arrivs")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'arrivs'))
                     savename = os.path.join(path, ki, "arrivs", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/arrivs")
+                    mkdir_p(os.path.join(path, 'arrivs'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1607,16 +1611,17 @@ if __name__ == "__main__":
     # # Best/worst chi2/iprods kappa maps
     if 0:
         ki = "H3S0A0B90G0"
+        idx = 0
         verbose = 1
-        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        sf = states[ki][idx]   # synthf50  # prefiltered_synthf50  # filtered_states
         path = os.path.join(anlysdir, "states")
-        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
-        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
         name = os.path.basename(sf).replace(".state", "")
+        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+        iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
             path = ""
-        if os.path.exists(path + ki):
+        if os.path.exists(os.path.join(path, ki)):
             loadname = os.path.join(path, ki, loadname)
         elif os.path.exists(path):
             loadname = os.path.join(path, loadname)
@@ -1649,11 +1654,11 @@ if __name__ == "__main__":
                 savename = "{}_kappa.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/kappas")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'kappas'))
                     savename = os.path.join(path, ki, "kappas", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/kappas")
+                    mkdir_p(os.path.join(path, "kappas"))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1682,11 +1687,11 @@ if __name__ == "__main__":
                 savename = "{}_kappa.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/kappas")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'kappas'))
                     savename = os.path.join(path, ki, "kappas", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/kappas")
+                    mkdir_p(os.path.join(path, "kappas"))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1697,17 +1702,18 @@ if __name__ == "__main__":
     # # Best/worst chi2/iprods degarrs
     if 0:
         ki = "H3S0A0B90G0"
+        idx = 0
         verbose = 1
-        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        sf = states[ki][idx]   # synthf50  # prefiltered_synthf50  # filtered_states
         path = os.path.join(anlysdir, "states")
-        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
-        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
-        # Load recon_src
         name = os.path.basename(sf).replace(".state", "")
+        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+        iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
+        # Load recon_src
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
             path = ""
-        if os.path.exists(path + ki):
+        if os.path.exists(os.path.join(path, ki)):
             loadname = os.path.join(path, ki, loadname)
         elif os.path.exists(path):
             loadname = os.path.join(path, loadname)
@@ -1747,11 +1753,11 @@ if __name__ == "__main__":
                 savename = "{}_degarr.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/degarrs")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'degarrs'))
                     savename = os.path.join(path, ki, "degarrs", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/degarrs")
+                    mkdir_p(os.path.join(path, 'degarrs'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1780,11 +1786,11 @@ if __name__ == "__main__":
                 savename = "{}_degarr.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/degarrs")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'degarrs'))
                     savename = os.path.join(path, ki, "degarrs", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/degarrs")
+                    mkdir_p(os.path.join(path, 'degarrs'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1795,17 +1801,18 @@ if __name__ == "__main__":
     # # Best/worst chi2/iprods kappa profiles
     if 0:
         ki = "H3S0A0B90G0"
+        idx = 0
         verbose = 1
-        sf = states[ki][0]   # synthf50  # prefiltered_synthf50  # filtered_states
+        sf = states[ki][idx]   # synthf50  # prefiltered_synthf50  # filtered_states
         path = os.path.join(anlysdir, "states")
-        chi2_sorted = np.int32(np.loadtxt(path+ki+"/chi2_H3S0A0B90G0.pixrad8.txt").T[1])
-        iprods_sorted = np.int32(np.loadtxt(path+ki+"/iprods_H3S0A0B90G0.pixrad8.txt").T[1])
-        eagle_model = fits.getdata(kappa_files[ki][0], header=True)
         name = os.path.basename(sf).replace(".state", "")
+        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+        iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
+        eagle_model = fits.getdata(kappa_files[ki][0], header=True)
         loadname = "reconsrc_{}.pkl".format(name)
         if path is None:
             path = ""
-        if os.path.exists(path + ki):
+        if os.path.exists(os.path.join(path, ki)):
             loadname = os.path.join(path, ki, loadname)
         elif os.path.exists(path):
             loadname = os.path.join(path, loadname)
@@ -1828,11 +1835,11 @@ if __name__ == "__main__":
                 savename = "{}_kappaR.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/profiles")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'profiles'))
                     savename = os.path.join(path, ki, "profiles", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/profiles")
+                    mkdir_p(os.path.join(path, 'profiles'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
@@ -1854,11 +1861,11 @@ if __name__ == "__main__":
                 savename = "{}_kappaR.png".format(label)
                 if path is None:
                     path = ""
-                if os.path.exists(path + ki):
-                    mkdir_p(path + ki + "/profiles")
+                if os.path.exists(os.path.join(path, ki)):
+                    mkdir_p(os.path.join(path, ki, 'profiles'))
                     savename = os.path.join(path, ki, "profiles", savename)
                 elif os.path.exists(path):
-                    mkdir_p(path + "/profiles")
+                    mkdir_p(os.path.join(path, 'profiles'))
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)

@@ -114,7 +114,7 @@ def radial_profile(data, center=None, bins=None):
         bins = N//2
     if center is None:
         # center = np.unravel_index(data.argmax(), data.shape)
-        center = [c//2 for c in data.shape]
+        center = [c//2 for c in data.shape][::-1]
     x, y = np.indices((data.shape))
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
     r = r.reshape(r.size)
