@@ -23,6 +23,7 @@ import numpy as np
 from functools import partial
 from pathos.multiprocessing import ProcessingPool as Pool
 from scipy.sparse import lil_matrix as sparse_Lmatrix
+from scipy.sparse import csc_matrix as sparse_Cmatrix
 from scipy.sparse import diags as sparse_Dmatrix
 from scipy.sparse.linalg import lsqr, lsmr, cgs, lgmres, minres, qmr
 from sklearn.preprocessing import normalize as row_norm
@@ -32,8 +33,8 @@ from gleam.skyf import SkyF
 from gleam.lensobject import LensObject
 from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
-# from gleam.utils.sparse_funcs import (inplace_csr_row_normalize)
 from gleam.utils.linalg import is_symm2D
+# import gleam.utils.optimized as cython_optimized
 import gleam.utils.rgb_map as glmrgb
 from gleam.glass_interface import glass_renv, filter_env, export_state
 glass = glass_renv()
@@ -371,7 +372,7 @@ class ReconSrc(object):
             return psf_data[y, x]
         return 0
 
-    def calc_psf(self, psf_file, window_size=6, verbose=False):
+    def calc_psf(self, psf_file, window_size=6, cy_opt=False, verbose=False):
         """
         Calculate the PSF matrix attribute
 
@@ -380,27 +381,38 @@ class ReconSrc(object):
 
         Kwargs:
             window_size <int> - window size of the PSF which is applied
+            cy_opt <bool> - use optimized cython method to construct psf matrix
+            verbose <bool> - verbose mode; print command line statements
+
+        Return:
+            P_kl <scipy.sparse.csc.csc_matrix> - the PSF matrix as blurring operator
         """
+            
         psf = SkyF(psf_file, verbose=False)
         d_psf = psf.data
         Ny, Nx = self.lensobject.data.shape    # image plane dimensions
         Ypsf, Xpsf = d_psf.shape               # PSF window dimensions
         c_psf = [d//2 for d in d_psf.shape]    # center of the PSF
-        # is_symm = is_symm2D(d_psf)             # test for symmetry
+        # is_symm = is_symm2D(d_psf)           # test for symmetry
 
-        P_kl = sparse_Lmatrix((Ny*Ny, Nx*Nx))
-        idcs = {kl: self.lensobject.idx2yx(kl, cols=Ny) for kl in range(Nx*Ny)}
-        coords = {self.lensobject.idx2yx(kl, cols=Ny): kl for kl in range(Nx*Ny)}
+        if cy_opt:
+            P_kl = np.zeros((Ny*Ny, Nx*Nx))
+            P_kl = cython_optimized.calc_psf(P_kl, d_psf, c_psf[1], c_psf[0], Nx, Ny, window_size)
+            P_kl = sparse_Cmatrix(P_kl)
+        else:
+            P_kl = sparse_Lmatrix((Ny*Ny, Nx*Nx))
+            idcs = {kl: self.lensobject.idx2yx(kl, cols=Ny) for kl in range(Nx*Ny)}
+            coords = {self.lensobject.idx2yx(kl, cols=Ny): kl for kl in range(Nx*Ny)}
 
-        # # set up the PSF matrix
-        for k in range(Nx*Ny):
-            yk, xk = idcs[k]
-            for xl in range(max(xk-window_size, 0), min(xk+window_size+1, Nx)):
-                for yl in range(max(yk-window_size, 0), min(yk+window_size+1, Ny)):
-                    l = coords[(yl, xl)]
-                    dx, dy = xk-xl, yk-yl
-                    P_kl[k, l] = P_kl[l, k] = self._psf_f(psf.data, dx, dy, center=c_psf)
-        P_kl = P_kl.tocsc()
+            # # set up the PSF matrix
+            for k in range(Nx*Ny):
+                yk, xk = idcs[k]
+                for xl in range(max(xk-window_size, 0), min(xk+window_size+1, Nx)):
+                    for yl in range(max(yk-window_size, 0), min(yk+window_size+1, Ny)):
+                        l = coords[(yl, xl)]
+                        dx, dy = xk-xl, yk-yl
+                        P_kl[k, l] = P_kl[l, k] = self._psf_f(psf.data, dx, dy, center=c_psf)
+            P_kl = P_kl.tocsc()
         self.psf = P_kl
         if verbose:
             print("PSF: P_kl{}".format(P_kl.shape))
@@ -973,9 +985,11 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
         chi2s.append(chi2)
         if verbose:
             message = "{:4d} / {:4d}: {:4.8f}\r".format(i+1, N_models, chi2)
-            sys.stdout.write(message)
             if stdout_flush:
+                sys.stdout.write(message)
                 sys.stdout.flush()
+            else:
+                print(message)
 
     if verbose:
         print("Number of residual models: {}".format(len(chi2s)))
@@ -1039,9 +1053,11 @@ def eval_residuals(index, reconsrc, data=None,
                                      cached=cached, method=method, use_psf=use_psf)
         if verbose:
             message = "{:4d} / {:4d}: {:4.4f}\r".format(index+1, N_total, delta)
-            sys.stdout.write(message)
             if stdout_flush:
+                sys.stdout.write(message)
                 sys.stdout.flush()
+            else:
+                print(message)
         return reconsrc._cache, delta
     except KeyboardInterrupt:
         raise KeyboardInterruptError()
