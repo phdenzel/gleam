@@ -34,7 +34,7 @@ def mkdir_structure(keys, root=None):
         mkdir_p(d)
 
 
-def chi2_analysis(reconsrc, optimized=False, psf_file=None, verbose=False):
+def chi2_analysis(reconsrc, cy_opt=False, optimized=False, psf_file=None, verbose=False):
     """
     Args:
         reconsrc <ReconSrc object> - loaded object, preferentially with loaded cache
@@ -60,7 +60,7 @@ def chi2_analysis(reconsrc, optimized=False, psf_file=None, verbose=False):
     dta_noise = dta_noise * np.sqrt(sgma2)
     # recalculate the chi2s
     kwargs = dict(reconsrc=reconsrc, percentiles=[], use_psf=True, psf_file=psf_file,
-                  noise=dta_noise, sigma2=sgma2,
+                  cy_opt=cy_opt, noise=dta_noise, sigma2=sgma2,
                   reduced=False, return_obj=False, save=False, verbose=verbose)
     _, _, chi2 = synthf(**kwargs)
     return chi2
@@ -473,7 +473,7 @@ def kappa_profile(gls_model, eagle_model, obj_index=0, plot_imgs=True, **kwargs)
 
 def synth_loop(keys, jsons, states,
                cached=False, save_state=False, save_obj=False, load_obj=False, psf_file=None,
-               use_psf=True, path=None, optimized=False, verbose=False, **kwargs):
+               use_psf=True, cy_opt=False, path=None, optimized=False, verbose=False, **kwargs):
     """
     Args:
         keys <list(str)> - the keys which correspond to jsons' and states' keys
@@ -486,6 +486,7 @@ def synth_loop(keys, jsons, states,
         load_obj <bool> - load the ReconSrc object from a pickle file
         psf_file <str> - path to the psf .fits file
         use_psf <bool> - use the PSF in the reprojection
+        cy_opt <bool> - use optimized cython method to construct inverse projection matrix
         path <str> - path to the pickle files to load from
         optimized <bool> - run the multiprocessing synth filter
         verbose <bool> - verbose mode; print command line statements
@@ -790,8 +791,8 @@ if __name__ == "__main__":
     if 0:
         k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         # k = keys
-        kwargs = dict(path=os.path.join(anlysdir, "states"), variables=['inv_proj', 'N_nil'], save_obj=True,
-                      verbose=1)
+        kwargs = dict(path=os.path.join(anlysdir, "states"), variables=['inv_proj', 'N_nil'],
+                      save_obj=True, verbose=1)
         sfiles = states  # filtered_states
         cache_loop(k, jsons, sfiles, **kwargs)
 
@@ -805,7 +806,7 @@ if __name__ == "__main__":
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
         # k = keys
         kwargs = dict(save_state=0, save_obj=1, load_obj=1, path=os.path.join(anlysdir, "states"),
-                      psf_file=psf_file, use_psf=1, optimized=1, nproc=8,
+                      method='minres', psf_file=psf_file, use_psf=1, cy_opt=1, optimized=1, nproc=8,
                       from_cache=1, cached=1, save_to_cache=1,
                       stdout_flush=0, verbose=1)
         # kwargs = dict(save_state=1, save_obj=0, load_obj=1, path=anlysdir+"states/",
@@ -819,7 +820,7 @@ if __name__ == "__main__":
         # k = ["H1S0A0B90G0", "H1S1A0B90G0", "H2S1A0B90G0", "H2S2A0B90G0", "H2S7A0B90G0",
         #      "H3S1A0B90G0", "H4S3A0B0G90", "H13S0A0B90G0", "H23S0A0B90G0", "H30S0A0B90G0",
         #      "H160S0A90B0G0", "H234S0A0B90G0"]
-        kwargs = dict(optimized=False, verbose=1)
+        kwargs = dict(optimized=False, method='minres', psf_file=psf_file, verbose=1)
         sfiles = states  # filtered_states
         path = os.path.join(anlysdir, "states")
         for ki in k:
@@ -1001,8 +1002,9 @@ if __name__ == "__main__":
                 xlim = 1.1 * max([abs(eagle_epsilon[0]), np.abs(glass_epsilon[0]).max()])
                 ylim = 1.1 * max([abs(eagle_epsilon[1]), np.abs(glass_epsilon[1]).max()])
                 plt.xlim(left=-xlim, right=xlim)
-                plt.ylim(bottom=-ylim, top=ylim)
+                # plt.ylim(bottom=-ylim, top=ylim)
                 plt.title(name)
+                plt.gca().set_aspect('equal')
                 plt.savefig(savename)
                 plt.close()
 
