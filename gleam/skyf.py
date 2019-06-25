@@ -766,9 +766,9 @@ class SkyF(object):
            theta <float,float> - theta vector coordinates in arcsecs
         """
         # position
-        if isinstance(position, int):  # 1D pixel index position
+        if isinstance(position, int):  # 1D pixel index position to 2D
             position = self.idx2yx(position)
-        if isinstance(position, (tuple, list, np.ndarray)):  # 2D pixel index position
+        if isinstance(position, (tuple, list, np.ndarray)):  # 2D pixel index position to skycoords
             position = self.p2skycoords(position, unit='pixel')
         # origin
         if origin is None:
