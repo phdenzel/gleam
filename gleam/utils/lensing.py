@@ -109,18 +109,21 @@ def radial_profile(data, center=None, bins=None):
     Return:
         radial_profile <np.ndarray> - radially-binned 1D profile
     """
+    if data is None:
+        return None
     N = data.shape[0]
     if bins is None:
         bins = N//2
     if center is None:
         # center = np.unravel_index(data.argmax(), data.shape)
         center = [c//2 for c in data.shape][::-1]
+    dta_cent = data[center[0], center[1]]
     x, y = np.indices((data.shape))
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
     r = r.reshape(r.size)
     data = data.reshape(data.size)
     rbins = np.linspace(0, N//2, bins)
-    encavg = [np.sum(data[r < ri])/len(data[r < ri]) for ri in rbins]
+    encavg = [np.sum(data[r < ri])/len(data[r < ri]) if len(data[r < ri]) else dta_cent for ri in rbins]
     return encavg
 
 
