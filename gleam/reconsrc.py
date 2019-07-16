@@ -931,7 +931,7 @@ class ReconSrc(object):
 
 
 def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
-                 percentiles=[],
+                 percentiles=[], cy_opt=False,
                  reduced=False, nonzero_only=True, method='minres', use_psf=True,
                  from_cache=True, cached=True, save_to_cache=True,
                  noise=0, sigma=1, sigma2=None, sigmaM2=None,
@@ -951,6 +951,7 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
         percentiles <list(float)> - percentages the filter retains
         reduced <bool> - return the reduced chi^2 (i.e. chi2 divided by the number of pixels)
         nonzero_only <bool> - only sum over pixels which were actually reprojected
+        cy_opt <bool> - use optimized cython method to construct inverse projection matrix
         method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
         use_psf <bool> - use the PSF to smooth the projection matrix
         from_cache <bool> - use the cached reprojected map
@@ -982,11 +983,11 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
         else:
             return None
         if psf_file is not None and os.path.exists(psf_file):
-            recon_src.calc_psf(psf_file)
+            recon_src.calc_psf(psf_file, cy_opt=cy_opt)
     else:
         recon_src = reconsrc
         if psf_file is not None and os.path.exists(psf_file):
-            recon_src.calc_psf(psf_file, )
+            recon_src.calc_psf(psf_file, cy_opt=cy_opt)
 
     chi2s = []
     if N_models is None:
@@ -1005,6 +1006,7 @@ def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
         recon_src.chmdl(i)
         chi2 = recon_src.reproj_chi2(data=data, reduced=reduced, nonzero_only=nonzero_only,
                                      sigma2=sigma2, sigmaM2=sigmaM2,
+                                     cy_opt=cy_opt,
                                      save_to_cache=save_to_cache, from_cache=from_cache,
                                      cached=cached, method=method, use_psf=use_psf)
         chi2s.append(chi2)
@@ -1042,6 +1044,7 @@ def eval_residuals(index, reconsrc, data=None,
                    reduced=True, nonzero_only=True,
                    sigma=1, sigma2=None, sigmaM2=None,
                    save_to_cache=True, from_cache=True,
+                   cy_opt=False,
                    cached=True, method='minres', use_psf=True,
                    N_total=0, stdout_flush=True, verbose=False):
     """
@@ -1055,6 +1058,7 @@ def eval_residuals(index, reconsrc, data=None,
         data <np.ndarray> - data to be fitted
         reduced <bool> - return the reduced chi^2 (i.e. chi2 divided by the number of pixels)
         nonzero_only <bool> - only sum over pixels which were actually reprojected
+        cy_opt <bool> - use optimized cython method to construct inverse projection matrix
         method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
         use_psf <bool> - use the PSF to smooth the projection matrix
         from_cache <bool> - use the cached reprojected map
@@ -1075,6 +1079,7 @@ def eval_residuals(index, reconsrc, data=None,
         delta = reconsrc.reproj_chi2(data=data, reduced=reduced, nonzero_only=nonzero_only,
                                      from_cache=from_cache, save_to_cache=save_to_cache,
                                      sigma=sigma, sigma2=sigma2, sigmaM2=sigmaM2,
+                                     cy_opt=cy_opt,
                                      cached=cached, method=method, use_psf=use_psf)
         if verbose:
             message = "{:4d} / {:4d}: {:4.4f}\r".format(index+1, N_total, delta)
@@ -1091,6 +1096,7 @@ def eval_residuals(index, reconsrc, data=None,
 def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
                     percentiles=[],
                     nproc=2,
+                    cy_opt=False,
                     reduced=False, nonzero_only=True, method='minres', use_psf=True,
                     from_cache=True, cached=True, save_to_cache=True,
                     noise=0, sigma=1, sigma2=None, sigmaM2=None,
@@ -1109,6 +1115,7 @@ def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=No
         percentiles <list(float)> - percentages the filter retains
         reduced <bool> - return the reduced chi^2 (i.e. chi2 divided by the number of pixels)
         nonzero_only <bool> - only sum over pixels which were actually reprojected
+        cy_opt <bool> - use optimized cython method to construct inverse projection matrix
         method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
         use_psf <bool> - use the PSF to smooth the projection matrix
         from_cache <bool> - use the cached reprojected map
@@ -1141,11 +1148,11 @@ def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=No
         else:
             return None
         if psf_file is not None and os.path.exists(psf_file):
-            recon_src.calc_psf(psf_file)
+            recon_src.calc_psf(psf_file, cy_opt=cy_opt)
     else:
         recon_src = reconsrc
         if psf_file is not None and os.path.exists(psf_file):
-            recon_src.calc_psf(psf_file)
+            recon_src.calc_psf(psf_file, cy_opt=cy_opt)
 
     if N_models is None:
         N_models = len(recon_src.gls.models)
@@ -1165,6 +1172,7 @@ def synth_filter_mp(statefile=None, gleamobject=None, reconsrc=None, psf_file=No
     try:
         f = partial(eval_residuals, reconsrc=recon_src, data=data,
                     reduced=reduced, nonzero_only=nonzero_only,
+                    cy_opt=cy_opt,
                     method=method, use_psf=use_psf,
                     from_cache=from_cache, cached=cached, save_to_cache=save_to_cache,
                     sigma2=sigma2, sigmaM2=sigmaM2,
