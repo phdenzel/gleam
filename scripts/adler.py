@@ -1385,7 +1385,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # data maps
-    if 0:
+    if 1:
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         kwargs = dict(verbose=1)
@@ -1413,9 +1413,9 @@ if __name__ == "__main__":
                 plt.imshow(data, cmap='Spectral_r',
                            origin='Lower', extent=extent)
                 plt.colorbar()
-                plt.title(name)
+                # plt.title(name)
                 # save the figure
-                savename = "data_{}.png".format(name)
+                savename = "data_{}.png".format(ki)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1427,6 +1427,7 @@ if __name__ == "__main__":
                 plt.savefig(savename)
                 # plt.show()
                 plt.close()
+                break
 
     # source plane map
     if 0:
@@ -1553,23 +1554,15 @@ if __name__ == "__main__":
         for ki in k:
             for sf in sfiles[ki]:
                 name = os.path.basename(sf).replace(".state", "")
-                loadname = "reconsrc_{}.pkl".format(name)
-                if path is None:
-                    path = ""
-                if os.path.exists(os.path.join(path, ki)):
-                    loadname = os.path.join(path, ki, loadname)
-                elif os.path.exists(path):
-                    loadname = os.path.join(path, loadname)
-                if os.path.exists(loadname):
-                    with open(loadname, 'rb') as f:
-                        recon_src = pickle.load(f)
                 if verbose:
-                    print('Loading '+loadname)
-                recon_src.gls.make_ensemble_average()
-                m = recon_src.gls.ensemble_average
+                    print('Loading '+sf)
+                gls = glass.glcmds.loadstate(sf)
+                gls.make_ensemble_average()
+                m = gls.ensemble_average
                 cmap = GLEAMcmaps.agaveglitch
                 kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
                                oversample=True,
+                               scalebar=True, label=ki,
                                cmap=GLEAMcmaps.agaveglitch)
                 # save the figure
                 savename = "kappa_{}.png".format(name)
@@ -1586,7 +1579,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # kappa maps of the EAGLE models
-    if 0
+    if 0:
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         verbose = 1
@@ -1614,7 +1607,6 @@ if __name__ == "__main__":
             extent = [-maprad, maprad, -maprad, maprad]
             X, Y = np.meshgrid(np.linspace(-eagle_maprad, eagle_maprad, grid.shape[1]),
                                np.linspace(-eagle_maprad, eagle_maprad, grid.shape[0]))
-            # extent = [-eagle_maprad, eagle_maprad, -eagle_maprad, eagle_maprad]
             # masking if necessary
             msk = grid > 0
             if not np.any(msk):
@@ -1629,6 +1621,7 @@ if __name__ == "__main__":
             # contour levels
             clev2 = np.arange(delta, levels*delta, delta)
             clevels = np.concatenate((-clev2[::-1], (0,), clev2))
+            # plot in log
             kappa1 = 0
             grid = np.log10(grid)
             grid[grid < clevels[0]] = clevels[0]+1e-6
@@ -1636,12 +1629,39 @@ if __name__ == "__main__":
                          extent=extent, origin='lower', levels=clevels)
             plt.xlim(left=-maprad, right=maprad)
             plt.ylim(bottom=-maprad, top=maprad)
+            # colorbar
+            ax = plt.gca()
             cbar = plt.colorbar()
             lvllbls = ['{:2.1f}'.format(l) if i > 0 else '0'
                        for (i, l) in enumerate(10**cbar._tick_data_values)]
             cbar.ax.set_yticklabels(lvllbls)
             plt.contour(X, Y, grid, levels=(kappa1,), colors=['k'],
                         extent=extent, origin='lower')
+            # scale bar
+            from matplotlib import patches
+            if maprad > 1.2:
+                length = 1
+                label = r"1$^{\prime\prime}$"
+            else:
+                length = 0.1
+                label = r"0.1$^{\prime\prime}$"
+            barpos = ((0.08-1)*maprad, (0.06-1)*maprad)
+            w, h = length, 0.05*maprad
+            rect = patches.Rectangle(barpos, w, h,
+                                     facecolor='white', edgecolor=None, alpha=0.85)
+            ax.add_patch(rect)
+            ax.text(barpos[0]+w/6, barpos[1]+2*h, label,
+                    color='white', fontsize=16)
+            plt.gca().set_aspect('equal')
+            plt.axis('off')
+            # add label
+            ax.text(0.95, 0.95, ki, verticalalignment='top', horizontalalignment='right',
+                    transform=ax.transAxes, color='white', family='sans-serif', fontsize=14,
+                    bbox={
+                        'boxstyle': 'round,pad=0.3',
+                        'facecolor': 'white',
+                        'edgecolor': None,
+                        'alpha': 0.35})
             # save figure
             savename = "truekappa_{}.png".format(ki)
             if path is None:

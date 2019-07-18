@@ -428,6 +428,7 @@ def degarr_grid(*args, **kwargs):
 def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
                    contours=False, levels=3, delta=0.2, log=True,
                    oversample=True,
+                   scalebar=False, label=None,
                    cmap='magma', colorbar=False):
     """
     Plot the convergence map of a GLASS model with auto-adjusted contour levels
@@ -444,6 +445,7 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
         delta <float> - contour distances
         log <bool> - plot in log scale
         oversample <bool> - oversample the map to show characteristic pixel structure
+        scalebar <bool> - plot am arcsec scalebar instead of axis ticks
         cmap <str/mpl.cm.ColorMap object> - color map for plotting
         colorbar <bool> - plot colorbar next to convergence map
     """
@@ -484,15 +486,46 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
         kappa1 = 1
         clevels = np.concatenate(((0,), 10**clev2))
 
-    plt.contourf(grid, cmap=cmap, antialiased=True,
-                 extent=extent, origin='lower', levels=clevels)
-    if colorbar:
-        cbar = plt.colorbar()
-        if log:
-            lvllbls = ['{:1.1f}'.format(l) if i > 0 else '0'
-                       for (i, l) in enumerate(10**cbar._tick_data_values)]
-            cbar.ax.set_yticklabels(lvllbls)
-
     if contours:
         plt.contour(grid, levels=(kappa1,), colors=['k'],
                     extent=extent, origin='lower')
+
+    plt.contourf(grid, cmap=cmap, antialiased=True,
+                 extent=extent, origin='lower', levels=clevels)
+
+    ax = plt.gca()
+    if colorbar:
+        cbar = plt.colorbar()
+        if log:
+            lvllbls = ['{:2.1f}'.format(l) if i > 0 else '0'
+                       for (i, l) in enumerate(10**cbar._tick_data_values)]
+            cbar.ax.set_yticklabels(lvllbls)
+
+    if scalebar:
+        from matplotlib import patches
+
+        if R > 1.2:
+            length = 1.
+            lbl = r"1$^{\prime\prime}$"
+        else:
+            length = 0.1
+            lbl = r"0.1$^{\prime\prime}$"
+        barpos = ((0.08-1)*R, (0.06-1)*R)
+        w, h = length, 0.05*R
+        rect = patches.Rectangle(barpos, w, h,
+                                 facecolor='white', edgecolor=None, alpha=0.85)
+        ax.add_patch(rect)
+        ax.text(barpos[0]+w/6, barpos[1]+2*h, lbl,
+                color='white', fontsize=16)
+        plt.gca().set_aspect('equal')
+        plt.axis('off')
+
+    if label is not None:
+        ax.text(0.95, 0.95, label,
+                verticalalignment='top', horizontalalignment='right',
+                transform=ax.transAxes, color='white',
+                family='sans-serif', fontsize=14,
+                bbox={'boxstyle': 'round,pad=0.3',
+                      'facecolor': 'white',
+                      'edgecolor': None,
+                      'alpha': 0.35})
