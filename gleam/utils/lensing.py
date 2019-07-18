@@ -8,8 +8,10 @@ Lensing utility functions for calculating various analytics from lensing mass ma
 # Imports
 ###############################################################################
 import numpy as np
+import scipy
 from scipy import interpolate
 from scipy.integrate import odeint
+from matplotlib import pyplot as plt
 from gleam.utils.linalg import eigvals, eigvecs, angle
 
 
@@ -170,9 +172,55 @@ def Dcomov(r, a, cosmology=None):
     return 1./(a*a*H)
 
 
-def DSDL(zl, zs):
+def DL(zl, zs):
     """
-    Distance ratio D_S/D_L (for scaling kappa maps)
+    Distance D_L (for scaling kpc distances)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        Dl <float> - distance D_L
+    """
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(Dcomov, [0], a)[:, 0]
+    Dl = alens * (r[2] - r[1])
+    return Dl
+
+
+def DLDSDLS(zl, zs):
+    """
+    Distance D_L*D_S/D_LS (for scaling masses)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        DlDsDls <float> - distance D_L*D_S/D_LS
+    """
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(Dcomov, [0], a)[:, 0]
+    Dl = alens * (r[2] - r[1])
+    Ds = asrc * r[2]
+    Dls = asrc * r[1]
+    return Dl*Ds/Dls
+
+
+def DLSDS(zl, zs):
+    """
+    Distance ratio D_LS/D_S (for scaling kappa maps)
 
     Args:
         zl <float> - lens redshift
@@ -188,7 +236,9 @@ def DSDL(zl, zs):
     asrc = 1./(1+zs)
     a = [asrc, alens, 1]
     r = odeint(Dcomov, [0], a)[:, 0]
-    return r[1]/r[2]
+    Ds = asrc * r[2]
+    Dls = asrc * r[1]
+    return Dls/Ds
 
 
 def center_of_mass(kappa, pixel_scale=1, center=True):
@@ -373,3 +423,76 @@ def degarr_grid(*args, **kwargs):
     """
     gx, gy, psi = potential_grid(*args, **kwargs)
     return gx, gy, 0.5*(gx*gx + gy*gy) + psi
+
+
+def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
+                   contours=False, levels=3, delta=0.2, log=True,
+                   oversample=True,
+                   cmap='magma', colorbar=False):
+    """
+    Plot the convergence map of a GLASS model with auto-adjusted contour levels
+
+    Args:
+        model <glass.LensModel object> - GLASS ensemble model
+
+    Kwargs:
+        obj_index <int> - object index of the GLASS object within the model
+        subcells <int> - number of subcells
+        extent <tuple/list> - map extent
+        contours <bool> - plot contours onto map
+        levels <int> - half-number of contours; total number w/ log is 2*N+1
+        delta <float> - contour distances
+        log <bool> - plot in log scale
+        oversample <bool> - oversample the map to show characteristic pixel structure
+        cmap <str/mpl.cm.ColorMap object> - color map for plotting
+        colorbar <bool> - plot colorbar next to convergence map
+    """
+    obj, dta = model['obj,data'][obj_index]
+    dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
+    grid = dlsds * obj.basis._to_grid(dta['kappa'], subcells)
+
+    if extent is None:
+        # R = obj.basis.maprad
+        R = obj.basis.mapextent
+        extent = [-R, R, -R, R]
+    # pixrad = obj.basis.pixrad
+
+    # masking if necessary
+    msk = grid != 0
+    if not np.any(msk):
+        vmin = -15
+        grid += 10**vmin
+    else:
+        vmin = np.log10(np.amin(grid[msk]))
+
+    # interpolate
+    zoomlvl = 3
+    order = 0
+    if oversample:
+        grid = scipy.ndimage.zoom(grid, zoomlvl, order=order)
+    grid[grid <= 10**vmin] = 10**vmin
+
+    # contour levels
+    clev2 = np.arange(delta, levels*delta, delta)
+    clevels = np.concatenate((-clev2[::-1], (0,), clev2))
+
+    if log:
+        kappa1 = 0
+        grid = np.log10(grid)
+        grid[grid < clevels[0]] = clevels[0]
+    else:
+        kappa1 = 1
+        clevels = np.concatenate(((0,), 10**clev2))
+
+    plt.contourf(grid, cmap=cmap, antialiased=True,
+                 extent=extent, origin='lower', levels=clevels)
+    if colorbar:
+        cbar = plt.colorbar()
+        if log:
+            lvllbls = ['{:1.1f}'.format(l) if i > 0 else '0'
+                       for (i, l) in enumerate(10**cbar._tick_data_values)]
+            cbar.ax.set_yticklabels(lvllbls)
+
+    if contours:
+        plt.contour(grid, levels=(kappa1,), colors=['k'],
+                    extent=extent, origin='lower')
