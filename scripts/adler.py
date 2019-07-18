@@ -5,6 +5,7 @@ import sys
 root = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
 sys.path.append(root)
 import numpy as np
+import scipy
 import time
 import pickle
 from functools import partial
@@ -16,9 +17,12 @@ from gleam.multilens import MultiLens
 from gleam.glass_interface import glass_renv
 from gleam.utils.encode import an_sort
 from gleam.utils.lensing import downsample_model, upsample_model, radial_profile, \
-    DSDL, complex_ellipticity, inertia_tensor, qpm_props, potential_grid, degarr_grid
+    DLSDS, complex_ellipticity, inertia_tensor, qpm_props, \
+    potential_grid, degarr_grid, kappa_map_plot
+
 from gleam.utils.linalg import sigma_product
 from gleam.utils.makedir import mkdir_p
+from gleam.utils.colors import GLEAMcmaps
 glass = glass_renv()
 
 class KeyboardInterruptError(Exception):
@@ -90,6 +94,7 @@ def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
         glass_extent = (-glass_maprad, glass_maprad, -glass_maprad, glass_maprad)
         glass_shape = (2*obj.basis.pixrad+1,)*2
         eagle_kappa, eagle_hdr = eagle_model
+        eagle_kappa = np.flip(eagle_kappa, 0)
         eagle_kappa_map = downsample_model(eagle_kappa, glass_extent, glass_shape,
                                            pixel_scale=eagle_hdr['CDELT2']*3600)
         for m in glass_state.models:
@@ -102,6 +107,7 @@ def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
             kappa_resids.append(r)
     elif method == 'g2e':
         eagle_kappa_map, eagle_hdr = eagle_model
+        eagle_kappa_map = np.flip(eagle_kappa_map, 0)
         eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
         eagle_maprad = eagle_pixrad[1]*eagle_hdr['CDELT2']*3600
         extent = [-eagle_maprad, eagle_maprad, -eagle_maprad, eagle_maprad]
@@ -141,6 +147,7 @@ def inertia_analysis(eagle_model, glass_state, method='e2g', activation=None, ve
         print("{} models".format(len(glass_state.models)))
     inertias = []
     eagle_kappa_map, eagle_hdr = eagle_model
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     eagle_pixel = eagle_hdr['CDELT2']*3600
     if method == 'e2g':
         obj, _ = glass_state.models[0]['obj,data'][0]
@@ -155,8 +162,8 @@ def inertia_analysis(eagle_model, glass_state, method='e2g', activation=None, ve
         for m in glass_state.models:
             obj, data = m['obj,data'][0]
             glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
-            dsdl = DSDL(obj.z, obj.sources[0].z)
-            glass_kappa_map = dsdl * glass_kappa_map
+            dlsds = DLSDS(obj.z, obj.sources[0].z)
+            glass_kappa_map = dlsds * glass_kappa_map
             i = inertia_tensor(glass_kappa_map,
                                pixel_scale=glass_pixel, activation=activation)
             inertias.append(i)
@@ -203,6 +210,7 @@ def potential_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=Fal
         print("{} models".format(N_models))
     potentials = []
     eagle_kappa_map, eagle_hdr = eagle_model
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, data = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -215,8 +223,8 @@ def potential_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=Fal
         for i, m in enumerate(glass_state.models):
             obj, data = m['obj,data'][0]
             glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
-            dsdl = DSDL(obj.z, obj.sources[0].z)
-            glass_kappa_map = dsdl * glass_kappa_map
+            dlsds = DLSDS(obj.z, obj.sources[0].z)
+            glass_kappa_map = dlsds * glass_kappa_map
             gx, gy, pot = potential_grid(glass_kappa_map, N, 2*glass_maprad, verbose=0)
             potentials.append((gx[:], gy[:], pot[:]))
             if verbose:
@@ -264,6 +272,7 @@ def degarr_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=False)
         print("{} models".format(N_models))
     degarrs = []
     eagle_kappa_map, eagle_hdr = eagle_model
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, _ = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -276,8 +285,8 @@ def degarr_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=False)
         for i, m in enumerate(glass_state.models):
             obj, data = m['obj,data'][0]
             glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
-            dsdl = DSDL(obj.z, obj.sources[0].z)
-            glass_kappa_map = dsdl * glass_kappa_map
+            dlsds = DLSDS(obj.z, obj.sources[0].z)
+            glass_kappa_map = dlsds * glass_kappa_map
             gx, gy, degarr = degarr_grid(glass_kappa_map, N, 2*glass_maprad, verbose=0)
             degarrs.append(degarr[:])
             if verbose:
@@ -325,8 +334,8 @@ def degarr_single(index, gls, N=85, grid_size=1, N_total=0, verbose=False):
     obj, data = gls.models[index]['obj,data'][0]
     try:
         glass_kappa_map = obj.basis._to_grid(data['kappa'], 1)
-        dsdl = DSDL(obj.z, obj.sources[0].z)
-        glass_kappa_map = dsdl * glass_kappa_map
+        dlsds = DLSDS(obj.z, obj.sources[0].z)
+        glass_kappa_map = dlsds * glass_kappa_map
         _, _, degarr = degarr_grid(glass_kappa_map, N, grid_size, verbose=0)
         if verbose:
             message = "{:4d} / {:4d}\r".format(index+1, N_total)
@@ -359,6 +368,7 @@ def degarr_analysis_mp(eagle_model, glass_state, N=85, nproc=2, verbose=False):
     degarrs = []
     # resample EAGLE model
     eagle_kappa_map, eagle_hdr = eagle_model
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     obj, _ = glass_state.models[0]['obj,data'][0]
     eagle_pixel = eagle_hdr['CDELT2']*3600
     glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
@@ -423,6 +433,7 @@ def kappa_profileX(gls_model, eagle_model=None, obj_index=0, plot_imgs=True, **k
 
 def scaled_kappa_maps(gls_model, eagle_model, obj_index=0, method='e2g'):
     eagle_kappa_map, eagle_hdr = eagle_model
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, dta = gls_model['obj,data'][obj_index]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -445,14 +456,15 @@ def kappa_profile(gls_model, eagle_model, obj_index=0, verbose=False, **kwargs):
     Kappa profiles of the individual GLASS models
     """
     obj, data = gls_model['obj,data'][obj_index]
-    dsdl = DSDL(obj.z, obj.sources[obj_index].z)
-    glass_kappa_map = dsdl * obj.basis._to_grid(data['kappa'], 1)
+    dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
+    glass_kappa_map = dlsds * obj.basis._to_grid(data['kappa'], 1)
     glass_pixrad = obj.basis.pixrad
     glass_pixel = obj.basis.top_level_cell_size
     glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
 
     if eagle_model is not None:
         eagle_kappa_map = eagle_model[0]
+        eagle_kappa_map = np.flip(eagle_kappa_map, 0)
         eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
         eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
     else:
@@ -855,7 +867,7 @@ if __name__ == "__main__":
         synth_filtered_states = synth_loop(k, jsons, sfiles, **kwargs)
 
     # # chi2 histograms (takes long!!!)
-    if 1:
+    if 0:
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         kwargs = dict(optimized=False, psf_file=psf_file, verbose=1)
@@ -1225,7 +1237,7 @@ if __name__ == "__main__":
                 max_model = max_model/(-max_model.min())
                 print(max_model.min())
                 fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-                #, vmin=-lim, vmax=lim, levels=np.linspace(-lim, lim, 25))
+                #  , vmin=-lim, vmax=lim, levels=np.linspace(-lim, lim, 25))
                 levels = 50
                 lim = np.linspace(-1, 5, levels)
                 pltkw = dict(cmap='magma_r', levels=lim)
@@ -1322,7 +1334,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # chi2 vs iprods (takes long!!!)
-    if 1:
+    if 0:
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         kwargs = dict(optimized=True, psf_file=psf_file, verbose=1)
@@ -1417,7 +1429,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # source plane map
-    if 1:
+    if 0:
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         verbose = 1
@@ -1475,7 +1487,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # synth map of the ensemble averages
-    if 1:
+    if 0:
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         verbose = 1
@@ -1531,8 +1543,120 @@ if __name__ == "__main__":
                 # plt.show()
                 plt.close()
 
+    # kappa map of the ensemble averages
+    if 0:
+        # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        k = keys
+        verbose = 1
+        # sfiles = states
+        path = os.path.join(anlysdir, sfiles_str)
+        for ki in k:
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                loadname = "reconsrc_{}.pkl".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(os.path.join(path, ki)):
+                    loadname = os.path.join(path, ki, loadname)
+                elif os.path.exists(path):
+                    loadname = os.path.join(path, loadname)
+                if os.path.exists(loadname):
+                    with open(loadname, 'rb') as f:
+                        recon_src = pickle.load(f)
+                if verbose:
+                    print('Loading '+loadname)
+                recon_src.gls.make_ensemble_average()
+                m = recon_src.gls.ensemble_average
+                cmap = GLEAMcmaps.agaveglitch
+                kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
+                               oversample=True,
+                               cmap=GLEAMcmaps.agaveglitch)
+                # save the figure
+                savename = "kappa_{}.png".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(os.path.join(path, ki)):
+                    savename = os.path.join(path, ki, savename)
+                elif os.path.exists(path):
+                    savename = os.path.join(path, savename)
+                if verbose:
+                    print('Saving '+savename)
+                plt.savefig(savename)
+                # plt.show()
+                plt.close()
+
+    # kappa maps of the EAGLE models
+    if 0
+        # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        k = keys
+        verbose = 1
+        # sfiles = states
+        path = os.path.join(anlysdir, sfiles_str)
+        for ki in k:
+            if kappa_files[ki]:
+                fk = kappa_files[ki][0]
+            eagle_model = fits.getdata(fk, header=True)
+            eagle_kappa, eagle_hdr = eagle_model
+            eagle_kappa = np.flip(eagle_kappa, 0)
+            eagle_pixrad = tuple(r//2 for r in eagle_kappa.shape)
+            eagle_maprad = eagle_pixrad[1]*eagle_hdr['CDELT2']*3600
+            # plot in GLASS style
+            grid = eagle_kappa
+            levels, delta = 6, 0.2
+            gls_maprad = []
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                gls = glass.glcmds.loadstate(sf)
+                gls.make_ensemble_average()
+                mapextent = gls.ensemble_average['obj,data'][0][0].basis.mapextent
+                gls_maprad.append(mapextent)
+            maprad = max(gls_maprad)
+            extent = [-maprad, maprad, -maprad, maprad]
+            X, Y = np.meshgrid(np.linspace(-eagle_maprad, eagle_maprad, grid.shape[1]),
+                               np.linspace(-eagle_maprad, eagle_maprad, grid.shape[0]))
+            # extent = [-eagle_maprad, eagle_maprad, -eagle_maprad, eagle_maprad]
+            # masking if necessary
+            msk = grid > 0
+            if not np.any(msk):
+                vmin = -15
+                grid += 10**vmin
+            else:
+                vmin = np.log10(np.amin(grid[msk]))
+            # interpolate
+            if 0:
+                grid = scipy.ndimage.zoom(grid, 3, order=0)
+            grid[grid <= 10**vmin] = 10**vmin
+            # contour levels
+            clev2 = np.arange(delta, levels*delta, delta)
+            clevels = np.concatenate((-clev2[::-1], (0,), clev2))
+            kappa1 = 0
+            grid = np.log10(grid)
+            grid[grid < clevels[0]] = clevels[0]+1e-6
+            plt.contourf(X, Y, grid, cmap=GLEAMcmaps.agaveglitch, antialiased=True,
+                         extent=extent, origin='lower', levels=clevels)
+            plt.xlim(left=-maprad, right=maprad)
+            plt.ylim(bottom=-maprad, top=maprad)
+            cbar = plt.colorbar()
+            lvllbls = ['{:2.1f}'.format(l) if i > 0 else '0'
+                       for (i, l) in enumerate(10**cbar._tick_data_values)]
+            cbar.ax.set_yticklabels(lvllbls)
+            plt.contour(X, Y, grid, levels=(kappa1,), colors=['k'],
+                        extent=extent, origin='lower')
+            # save figure
+            savename = "truekappa_{}.png".format(ki)
+            if path is None:
+                path = ""
+            if os.path.exists(os.path.join(path, ki)):
+                savename = os.path.join(path, ki, savename)
+            elif os.path.exists(path):
+                savename = os.path.join(path, savename)
+            if verbose:
+                print('Saving '+savename)
+            plt.savefig(savename)
+            plt.close()
+
     # # Individual model plots
-    if 1:
+    if 0:
         verbose = True
         k = keys
         # sfiles = states
@@ -1572,7 +1696,8 @@ if __name__ == "__main__":
                                   from_cache=True, sigma2=sgma2)
                     # chi2 synths
                     if 1:
-                        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+                        chi2_sorted = np.int32(
+                            np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{}".format(i)
                             recon_src.chmdl(ichi2)
@@ -1621,7 +1746,8 @@ if __name__ == "__main__":
                         print('Loading '+loadname)
                     # chi2 arrival time surfaces
                     if 1:
-                        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+                        chi2_sorted = np.int32(
+                            np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{}".format(i)
                             m = recon_src.gls.models[ichi2]
@@ -1668,22 +1794,16 @@ if __name__ == "__main__":
                     if verbose:
                         print('Loading '+loadname)
 
-                    extent = recon_src.lensobject.extent
-                    extent = [extent[0], extent[2], extent[1], extent[3]]
                     # chi2 kappa maps
                     if 1:
-                        chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+                        chi2_sorted = np.int32(np.loadtxt(
+                            os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{}".format(i)
                             m = recon_src.gls.models[ichi2]
-                            obj, dta = m['obj,data'][0]
-                            grid = obj.basis._to_grid(dta['kappa'], 1)
-                            grid = np.log10(grid+1)
-                            plt.contourf(grid, 25, cmap='afmhot', origin='lower',
-                                         extent=extent)
-                            plt.colorbar()
-                            plt.contour(grid, levels=[np.log10(2)], colors=['k'],
-                                        extent=extent, origin='lower')
+                            kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
+                                           oversample=True,
+                                           cmap=GLEAMcmaps.agaveglitch)
                             plt.title("Model {}".format(ichi2))
                             # save the figure
                             savename = "{}_kappa.png".format(label)
@@ -1745,7 +1865,8 @@ if __name__ == "__main__":
                       from_cache=True, sigma2=sgma2)
         # chi2 synths
         if 1:
-            chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+            chi2_sorted = np.int32(
+                np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
             for i, ichi2 in enumerate(chi2_sorted):
                 # if 9 < i and i < 90:  # only the edges
                 #     continue
@@ -1774,7 +1895,8 @@ if __name__ == "__main__":
                 plt.close()
         # iprods synths
         if 0:
-            iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
+            iprods_sorted = np.int32(
+                np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
             for i, iiprods in enumerate(iprods_sorted[::-1]):
                 # if 9 < i and i < 90:  # only the edges
                 if 29 < i and i < 69:
@@ -1824,7 +1946,8 @@ if __name__ == "__main__":
             print('Loading '+loadname)
         # chi2 arrival time surfaces
         if 1:
-            chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+            chi2_sorted = np.int32(
+                np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
             for i, ichi2 in enumerate(chi2_sorted):
                 # if 9 < i and i < 90:  # only the edges
                 if 29 < i and i < 69:
@@ -1853,7 +1976,8 @@ if __name__ == "__main__":
                 plt.close()
         # iprods arrival time surfaces
         if 0:
-            iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
+            iprods_sorted = np.int32(
+                np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
             for i, iiprods in enumerate(iprods_sorted[::-1]):
                 # if 9 < i and i < 90:  # only the edges
                 if 29 < i and i < 69:
@@ -1907,7 +2031,8 @@ if __name__ == "__main__":
         extent = [extent[0], extent[2], extent[1], extent[3]]
         # chi2 kappa maps
         if 1:
-            chi2_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
+            chi2_sorted = np.int32(
+                np.loadtxt(os.path.join(path, ki, "chi2_{}.txt".format(name))).T[1])
             for i, ichi2 in enumerate(chi2_sorted):
                 # if 9 < i and i < 90:  # only the edges
                 if 29 < i and i < 69:
@@ -1940,7 +2065,8 @@ if __name__ == "__main__":
                 plt.close()
         # iprods kappa maps
         if 0:
-            iprods_sorted = np.int32(np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
+            iprods_sorted = np.int32(
+                np.loadtxt(os.path.join(path, ki, "iprods_{}.txt".format(name))).T[1])
             for i, iiprods in enumerate(iprods_sorted[::-1]):
                 # if 9 < i and i < 90:  # only the edges
                 if 29 < i and i < 69:
