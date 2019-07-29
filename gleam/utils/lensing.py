@@ -2,16 +2,15 @@
 """
 @author: phdenzel
 
-Lensing utility functions for calculating various analytics from lensing mass maps
+Lensing utility functions for calculating various analytics from lensing observables
 """
 ###############################################################################
 # Imports
 ###############################################################################
 import numpy as np
-import scipy
 from scipy import interpolate
+from scipy import optimize
 from scipy.integrate import odeint
-from matplotlib import pyplot as plt
 from gleam.utils.linalg import eigvals, eigvecs, angle
 
 
@@ -125,8 +124,96 @@ def radial_profile(data, center=None, bins=None):
     r = r.reshape(r.size)
     data = data.reshape(data.size)
     rbins = np.linspace(0, N//2, bins)
-    encavg = [np.sum(data[r < ri])/len(data[r < ri]) if len(data[r < ri]) else dta_cent for ri in rbins]
+    encavg = [np.sum(data[r < ri])/len(data[r < ri])
+              if len(data[r < ri]) else dta_cent for ri in rbins]
     return encavg
+
+
+def kappa_profile(model, obj_index=0, correct_distances=True, maprad=None):
+    """
+    Calculate radial kappa profiles for GLASS models or (for other models)
+    simply radially bin a generally kappa grid
+
+    Args:
+        model <GLASS model dict/np.ndarray> - GLASS model dictionary or some other kappa grid model
+
+    Kwargs:
+        obj_index <int> - object index of the GLASS object within the model
+        correct_distances <bool> - correct with distance ratios and redshifts
+        maprad <float> - map radius or physical scale of the profile
+
+    Return:
+        radii, profile <np.ndarrays> - radii and profiles ready to be plotted
+    """
+    if isinstance(model, dict) and 'obj,data' in model:  # a glass model
+        obj, dta = model['obj,data'][obj_index]
+        dlsds = DLSDS(obj.z, obj.sources[obj_index].z) if correct_distances else 1
+        pixrad = obj.basis.pixrad
+        maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+        kappa_grid = dlsds * obj.basis._to_grid(dta['kappa'], 1)
+    else:  # otherwise assume kappa grid was directly inputted
+        kappa_grid = model
+        maprad = 1 if maprad is None else maprad
+        pixrad = kappa_grid.shape[0]
+    profile = radial_profile(kappa_grid, bins=pixrad)
+    radii = np.linspace(0, maprad, len(profile))
+    return radii, profile
+
+
+def interpolate_profile(radii, profile, Nx=None):
+    """
+    Interpolate profile to increase resolution
+
+    Args:
+        radii <list/np.ndarray> - profile radii
+        profile <list/np.ndarray> - kappa profi
+
+    Kwargs:
+        Nx <int> - new number of points along x-axis
+
+    Return:
+        r_ref, prof_ref <np.ndarrays> - refined arrays
+    """
+    if Nx is None:
+        Nx = 5*len(radii)
+    x, y = np.asarray(radii), np.asarray(profile)
+    poly = interpolate.BPoly.from_derivatives(x, y[:, np.newaxis])
+    newr = np.linspace(x.min(), x.max(), Nx)
+    return newr, poly(newr)
+
+
+def find_einstein_radius(radii, profile):
+    """
+    Find the Einstein radius of a kappa profile using the kappa=1 line
+
+    Args:
+        radii <list/np.ndarray> - profile radii
+        profile <list/np.ndarray> - kappa profile
+
+    Kwargs:
+        None
+
+    Return:
+        einstein_radius <float> - Einstein radius of the lens profile
+    """
+    x, y = np.asarray(radii), np.asarray(profile)
+    poly = interpolate.BPoly.from_derivatives(x, y[:, np.newaxis])
+    x_min = np.min(x)
+    x_max = np.max(x)
+    midpoint = poly(x[len(x)//2])
+
+    def kappaone(x): return poly(x) - 1
+
+    rE, infodict, ierr, msg = optimize.fsolve(kappaone, midpoint, full_output=True)
+    if (ierr == 1 or ierr == 5) and len(rE) == 1 and x_min < rE < x_max:
+        einstein_radius = rE[0]
+    elif len(rE) > 1:
+        for r in rE:
+            if x_min < r < x_max:
+                einstein_radius = r
+    else:
+        einstein_radius = 0
+    return einstein_radius
 
 
 def complex_ellipticity(a, b, phi):
@@ -329,7 +416,10 @@ def qpm_props(qpm, verbose=False):
     sinphi = angle(evc[0], [0, 1])
     if verbose:
         print("Eigen vectors: {}".format(evc))
-    return a, b, np.arctan2(sinphi, cosphi)
+    phi = np.arctan2(sinphi, cosphi)
+    if phi < 0:
+        phi += np.pi
+    return a, b, phi
 
 
 def lnr_indef(x, y, x2=None, y2=None):
@@ -423,109 +513,3 @@ def degarr_grid(*args, **kwargs):
     """
     gx, gy, psi = potential_grid(*args, **kwargs)
     return gx, gy, 0.5*(gx*gx + gy*gy) + psi
-
-
-def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
-                   contours=False, levels=3, delta=0.2, log=True,
-                   oversample=True,
-                   scalebar=False, label=None,
-                   cmap='magma', colorbar=False):
-    """
-    Plot the convergence map of a GLASS model with auto-adjusted contour levels
-
-    Args:
-        model <glass.LensModel object> - GLASS ensemble model
-
-    Kwargs:
-        obj_index <int> - object index of the GLASS object within the model
-        subcells <int> - number of subcells
-        extent <tuple/list> - map extent
-        contours <bool> - plot contours onto map
-        levels <int> - half-number of contours; total number w/ log is 2*N+1
-        delta <float> - contour distances
-        log <bool> - plot in log scale
-        oversample <bool> - oversample the map to show characteristic pixel structure
-        scalebar <bool> - plot am arcsec scalebar instead of axis ticks
-        cmap <str/mpl.cm.ColorMap object> - color map for plotting
-        colorbar <bool> - plot colorbar next to convergence map
-    """
-    obj, dta = model['obj,data'][obj_index]
-    dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
-    grid = dlsds * obj.basis._to_grid(dta['kappa'], subcells)
-
-    if extent is None:
-        # R = obj.basis.maprad
-        R = obj.basis.mapextent
-        extent = [-R, R, -R, R]
-    # pixrad = obj.basis.pixrad
-
-    # masking if necessary
-    msk = grid != 0
-    if not np.any(msk):
-        vmin = -15
-        grid += 10**vmin
-    else:
-        vmin = np.log10(np.amin(grid[msk]))
-
-    # interpolate
-    zoomlvl = 3
-    order = 0
-    if oversample:
-        grid = scipy.ndimage.zoom(grid, zoomlvl, order=order)
-    grid[grid <= 10**vmin] = 10**vmin
-
-    # contour levels
-    clev2 = np.arange(delta, levels*delta, delta)
-    clevels = np.concatenate((-clev2[::-1], (0,), clev2))
-
-    if log:
-        kappa1 = 0
-        grid = np.log10(grid)
-        grid[grid < clevels[0]] = clevels[0]
-    else:
-        kappa1 = 1
-        clevels = np.concatenate(((0,), 10**clev2))
-
-    if contours:
-        plt.contour(grid, levels=(kappa1,), colors=['k'],
-                    extent=extent, origin='lower')
-
-    plt.contourf(grid, cmap=cmap, antialiased=True,
-                 extent=extent, origin='lower', levels=clevels)
-
-    ax = plt.gca()
-    if colorbar:
-        cbar = plt.colorbar()
-        if log:
-            lvllbls = ['{:2.1f}'.format(l) if i > 0 else '0'
-                       for (i, l) in enumerate(10**cbar._tick_data_values)]
-            cbar.ax.set_yticklabels(lvllbls)
-
-    if scalebar:
-        from matplotlib import patches
-
-        if R > 1.2:
-            length = 1.
-            lbl = r"1$^{\prime\prime}$"
-        else:
-            length = 0.1
-            lbl = r"0.1$^{\prime\prime}$"
-        barpos = ((0.08-1)*R, (0.06-1)*R)
-        w, h = length, 0.05*R
-        rect = patches.Rectangle(barpos, w, h,
-                                 facecolor='white', edgecolor=None, alpha=0.85)
-        ax.add_patch(rect)
-        ax.text(barpos[0]+w/6, barpos[1]+2*h, lbl,
-                color='white', fontsize=16)
-        plt.gca().set_aspect('equal')
-        plt.axis('off')
-
-    if label is not None:
-        ax.text(0.95, 0.95, label,
-                verticalalignment='top', horizontalalignment='right',
-                transform=ax.transAxes, color='white',
-                family='sans-serif', fontsize=14,
-                bbox={'boxstyle': 'round,pad=0.3',
-                      'facecolor': 'white',
-                      'edgecolor': None,
-                      'alpha': 0.35})
