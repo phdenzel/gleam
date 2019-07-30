@@ -15,6 +15,96 @@ from gleam.utils.linalg import eigvals, eigvecs, angle
 
 
 ###############################################################################
+def Dcomov(r, a, cosmology=None):
+    """
+    Calculate the comoving distance from scale factor, for odeint
+
+    Args:
+        r <float> - distance of
+    """
+    if cosmology is None:
+        Omega_l = 0.72
+        Omega_r = 4.8e-5
+        Omega_k = 0
+        Omega_m = 1. - Omega_r - Omega_l - Omega_k
+    else:
+        Omega_l = cosmology['Omega_l']
+        Omega_r = cosmology['Omega_r']
+        Omega_k = cosmology['Omega_k']
+        Omega_m = cosmology['Omega_m']
+    H = (Omega_m/a**3 + Omega_r/a**4 + Omega_l + Omega_k/a**2)**.5
+    return 1./(a*a*H)
+
+
+def DL(zl, zs):
+    """
+    Distance D_L (for scaling kpc distances)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        Dl <float> - distance D_L
+    """
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(Dcomov, [0], a)[:, 0]
+    Dl = alens * (r[2] - r[1])
+    return Dl
+
+
+def DLDSDLS(zl, zs):
+    """
+    Distance D_L*D_S/D_LS (for scaling masses)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        DlDsDls <float> - distance D_L*D_S/D_LS
+    """
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(Dcomov, [0], a)[:, 0]
+    Dl = alens * (r[2] - r[1])
+    Ds = asrc * r[2]
+    Dls = asrc * r[1]
+    return Dl*Ds/Dls
+
+
+def DLSDS(zl, zs):
+    """
+    Distance ratio D_LS/D_S (for scaling kappa maps)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        ratio <float> - distance ratio D_S/D_L
+    """
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(Dcomov, [0], a)[:, 0]
+    Ds = asrc * r[2]
+    Dls = asrc * r[1]
+    return Dls/Ds
+
+
 def downsample_model(kappa, extent, shape, pixel_scale=1., verbose=False):
     """
     Resample (usually downsample) a model's kappa grid to match the specified scale and size
@@ -238,95 +328,6 @@ def complex_ellipticity(a, b, phi):
     return np.array([Q*np.cos(2*phi), Q*np.sin(2*phi)])
 
 
-def Dcomov(r, a, cosmology=None):
-    """
-    Calculate the comoving distance from scale factor, for odeint
-
-    Args:
-        r <float> - distance of
-    """
-    if cosmology is None:
-        Omega_l = 0.72
-        Omega_r = 4.8e-5
-        Omega_k = 0
-        Omega_m = 1. - Omega_r - Omega_l - Omega_k
-    else:
-        Omega_l = cosmology['Omega_l']
-        Omega_r = cosmology['Omega_r']
-        Omega_k = cosmology['Omega_k']
-        Omega_m = cosmology['Omega_m']
-    H = (Omega_m/a**3 + Omega_r/a**4 + Omega_l + Omega_k/a**2)**.5
-    return 1./(a*a*H)
-
-
-def DL(zl, zs):
-    """
-    Distance D_L (for scaling kpc distances)
-
-    Args:
-        zl <float> - lens redshift
-        zs <float> - source redshift
-
-    Kwargs:
-        None
-
-    Return:
-        Dl <float> - distance D_L
-    """
-    alens = 1./(1+zl)
-    asrc = 1./(1+zs)
-    a = [asrc, alens, 1]
-    r = odeint(Dcomov, [0], a)[:, 0]
-    Dl = alens * (r[2] - r[1])
-    return Dl
-
-
-def DLDSDLS(zl, zs):
-    """
-    Distance D_L*D_S/D_LS (for scaling masses)
-
-    Args:
-        zl <float> - lens redshift
-        zs <float> - source redshift
-
-    Kwargs:
-        None
-
-    Return:
-        DlDsDls <float> - distance D_L*D_S/D_LS
-    """
-    alens = 1./(1+zl)
-    asrc = 1./(1+zs)
-    a = [asrc, alens, 1]
-    r = odeint(Dcomov, [0], a)[:, 0]
-    Dl = alens * (r[2] - r[1])
-    Ds = asrc * r[2]
-    Dls = asrc * r[1]
-    return Dl*Ds/Dls
-
-
-def DLSDS(zl, zs):
-    """
-    Distance ratio D_LS/D_S (for scaling kappa maps)
-
-    Args:
-        zl <float> - lens redshift
-        zs <float> - source redshift
-
-    Kwargs:
-        None
-
-    Return:
-        ratio <float> - distance ratio D_S/D_L
-    """
-    alens = 1./(1+zl)
-    asrc = 1./(1+zs)
-    a = [asrc, alens, 1]
-    r = odeint(Dcomov, [0], a)[:, 0]
-    Ds = asrc * r[2]
-    Dls = asrc * r[1]
-    return Dls/Ds
-
 
 def center_of_mass(kappa, pixel_scale=1, center=True):
     """
@@ -496,9 +497,10 @@ def potential_grid(kappa, N, grid_size, verbose=False):
     return gx, gy, psi
 
 
-def degarr_grid(*args, **kwargs):
+def roche_potential_grid(*args, **kwargs):
     """
-    The degenerate arrival time surface without source shift: 1/2 theta^2 - psi
+    The Roche potential (degenerate arrival time surface without source shift): 1/2 theta^2 - psi
+    from a kappa map
 
     Args:
         kappa <np.ndarray> - the kappa grid
@@ -513,3 +515,30 @@ def degarr_grid(*args, **kwargs):
     """
     gx, gy, psi = potential_grid(*args, **kwargs)
     return gx, gy, 0.5*(gx*gx + gy*gy) + psi
+
+
+def roche_potential(model, obj_index=0, N=85, correct_distances=True, verbose=False):
+    """
+    The Roche potential (degenerate arrival time surface without source shift): 1/2 theta^2 - psi
+    from a GLASS model
+
+    Args:
+        model <GLASS model dict/np.ndarray> - GLASS model dictionary
+
+    Kwargs:
+        obj_index <int> - object index of the GLASS object within the model
+        N <int> - number of grid points along the axes of the potential grid
+        correct_distances <bool> - correct with distance ratios and redshifts
+        verbose <bool> - verbose mode; print command line statements
+
+    Return:
+        gx, gy, psi <np.ndarray> - the x and y grid coordinates and the potential grid
+    """
+    obj, dta = model['obj,data'][obj_index]
+    dlsds = DLSDS(obj.z, obj.sources[obj_index].z) if correct_distances else 1
+    maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+    kappa = obj.basis._to_grid(dta['kappa'], 1)
+    kappa = dlsds * kappa
+    grid_size = 2 * maprad
+    gx, gy, degarr = roche_potential_grid(kappa, N, grid_size, verbose=verbose)
+    return gx, gy, degarr
