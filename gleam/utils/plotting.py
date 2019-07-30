@@ -11,7 +11,8 @@ import numpy as np
 import scipy.ndimage as ndimage
 from matplotlib import patches
 from matplotlib import pyplot as plt
-from gleam.utils.lensing import DLSDS, radial_profile, kappa_profile, \
+from matplotlib.colors import to_rgba
+from gleam.utils.lensing import DLSDS, kappa_profile, \
     interpolate_profile, find_einstein_radius
 from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
 from gleam.glass_interface import glass_renv
@@ -25,6 +26,9 @@ def plot_connection(graph, **kwargs):
 
     Args:
         graph <list(np.ndarray, list)> - list of roots and leaves
+
+    Kwargs:
+        TODO
     """
     # defaults
     kwargs.setdefault('marker', 'o')
@@ -115,7 +119,7 @@ def plot_scalebar(R, length=1., unit=r'$^{\prime\prime}$',
         color <str> - text and scalebar color
 
     Return:
-        None
+        TODO
     """
     alpha = 0.85
     if color in ['k', 'black', 'grey']:
@@ -144,7 +148,7 @@ def plot_scalebar(R, length=1., unit=r'$^{\prime\prime}$',
     textshift = np.asarray([wh[0]*(abs(position_xy[0]*8 - 1)/8), 1.5*wh[1]*updown])
     textpos = barpos + textshift
     ax.text(textpos[0], textpos[1], lbl,
-            color=color, fontsize=16, va=va, ha=ha)
+            color=color, fontsize=16, va=va, ha=ha, zorder=1000)
     plt.gca().set_aspect('equal')
 
 
@@ -163,7 +167,7 @@ def plot_labelbox(label, position='bottom left', padding=(0.05, 0.05), color='wh
         **kwargs <dict> - keyword parameters of matplotlib.text.Text
 
     Return:
-        None
+        TODO
     """
     facecolor = color
     facealpha = 0.35
@@ -173,6 +177,7 @@ def plot_labelbox(label, position='bottom left', padding=(0.05, 0.05), color='wh
     # defaults
     kwargs.setdefault('family', 'sans-serif')
     kwargs.setdefault('fontsize', 14)
+    kwargs.setdefault('zorder', 1000)
     kwargs.setdefault('bbox', {})
     kwargs['bbox'].setdefault('boxstyle', 'round,pad=0.3')
     kwargs['bbox'].setdefault('facecolor', facecolor)
@@ -216,7 +221,7 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
         colorbar <bool> - plot colorbar next to convergence map
 
     Return:
-        None
+        TODO
     """
     obj, dta = model['obj,data'][obj_index]
     dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
@@ -271,7 +276,9 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
 
 
 def kappa_profile_plot(model,
-                       obj_index=0, correct_distances=True, kappa1_line=True, maprad=None,
+                       obj_index=0, correct_distances=True,
+                       kappa1_line=True, einstein_radius_indicator=False,
+                       maprad=None,
                        annotation_color='black', label=None,
                        **kwargs):
     """
@@ -285,6 +292,9 @@ def kappa_profile_plot(model,
         obj_index <int> - object index of the GLASS object within the model
         correct_distances <bool> - correct with distance ratios and redshifts
         maprad <float> - map radius or physical scale of the profile
+
+    Return:
+        TODO
     """
     # defaults
     kwargs.setdefault('lw', 1)
@@ -303,6 +313,13 @@ def kappa_profile_plot(model,
     plot, = plt.plot(radii, profile, **kwargs)
     if kappa1_line:
         plt.axhline(1, lw=1, ls='-', color='black', alpha=0.5)
+    if einstein_radius_indicator:
+        einstein_radius = find_einstein_radius(radii, profile)
+        plt.axvline(einstein_radius, lw=1, ls='--', color=annotation_color, alpha=0.5)
+        if label is not None:
+            ax = plt.gca()
+            ax.text(1.025*einstein_radius/np.max(radii), 0.95, r'R$_{\mathsf{E}}$',
+                    transform=ax.transAxes, fontsize=14, color=annotation_color)
     if label is not None:
         plot_labelbox(label, position='top right', padding=(0.03, 0.03), color=annotation_color)
     return plot, radii, profile
@@ -319,7 +336,7 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
     Plot all kappa profiles of a GLASS ensemble model either as lines or 2D histogram contours
 
     Args:
-        
+        TODO
     """
     # defaults
     kwargs.setdefault('lw', 1)
@@ -386,8 +403,94 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
     return plots, profiles, radii
 
 
-def roche_potential_plot(R, ):
-    pass
+def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level='min',
+                         contours=True, contours_only=False,
+                         levels=50, cmin=np.min, cmax=np.max,
+                         cmap=GLEAMcmaps.reverse(GLEAMcmaps.phoenix),
+                         background=None,
+                         scalebar=False, label=None, colorbar=False, **kwargs):
+    """
+    Plot the Roche potential data in a standardized manner
+
+    Args:
+        x <np.ndarray> - x-coordinate grid
+        y <np.ndarray> - y-coordinate grid
+        grid <np.ndarray> - Roche potential grid
+
+    Kwargs:
+        zero_level <str> - zero level location, i.e. location to be  0 ['center', 'min', 'max']
+        norm_level <str> - norm level location, i.e. location to be -1 ['center', 'min', 'max']
+        levels <int> - number of contour levels
+        cmin <func> - function determining contour minimum (must accept a single argument)
+        cmax <func> - function determining contour maximum (must accept a single argument)
+        cmap <str/mpl.cm.ColorMap object> - color map for plotting
+        colorbar <bool> - add colorbar next to Roche potential map
+        scalebar <bool> - add an arcsec scalebar to bottom-left corner instead of axis ticks
+        label <str> - add a labelbox to top-left corner
+
+    Return:
+        TODO
+    """
+    if isinstance(data, (tuple, list)):
+        x, y, grid = data
+    if isinstance(data, dict):
+        pass
+    # get zero level and normalization coordinates
+    if zero_level == norm_level:
+        norm_level = [e for e in ['max', 'center', 'min'] if e != zero_level][-1]
+    if zero_level is None:
+        def identity(grid): return 1
+        level_shift = identity
+    elif zero_level == 'min':
+        def mival(grid): return grid.min()
+        level_shift = mival
+    elif zero_level == 'max':
+        def maval(grid): return grid.max()
+        level_shift = maval
+    else:  # == 'center'
+        def cval(grid): return grid[grid.shape[0]//2, grid.shape[1]//2]
+        level_shift = cval
+    if norm_level is None:
+        def identity(grid): return 1
+        norm = identity
+    elif norm_level == 'center':
+        def cval(grid): return grid[grid.shape[0]//2, grid.shape[1]//2]
+        norm = cval
+    elif norm_level == 'max':
+        def maval(grid): return grid.max()
+        norm = maval
+    else:  # == 'min'
+        def mival(grid): return -grid.min()
+        norm = mival
+    # adjust potential level and normalization
+    grid = grid - level_shift(grid)
+    grid = grid / norm(grid)
+    # contour levels
+    if log:
+        mi, ma = cmin(grid), cmax(grid)
+        clevels = np.logspace(np.log10(1), np.log10(1+ma-mi), levels)
+        clevels = clevels - 1 + mi
+    else:
+        clevels = np.linspace(cmin(grid), cmax(grid), levels)
+    if background is not None:
+        bg = np.ones(x.shape+(4,)) * to_rgba(background, alpha=0.75)
+        bg_extent = [x.min(), x.max(), y.min(), y.max()]
+        plt.imshow(bg, extent=bg_extent)
+    if contours or contours_only:
+        lw = kwargs.pop('linewidths', 0.5)
+        plt.contour(x, y, grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), linewidths=lw)
+    if not contours_only:
+        plt.contourf(x, y, grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), **kwargs)
+    # annotations and amendments
+    if colorbar:
+        cbar = plt.colorbar()
+        cbar.set_alpha(1)
+    if scalebar:
+        plot_scalebar(x.max(), length=1., position='bottom left', origin='center', color='white')
+        plt.axis('off')
+    if label is not None:
+        plot_labelbox(label, position='top right', padding=(0.03, 0.03), color='white')
+    plt.gca().set_aspect('equal')
 
 
 def arrival_time_surface_plot(model, obj_index=0, src_index=0,
@@ -416,7 +519,7 @@ def arrival_time_surface_plot(model, obj_index=0, src_index=0,
         colorbar <bool> - add colorbar next to convergence map
 
     Return:
-        None
+        TODO
     """
     obj, dta = model['obj,data'][obj_index]
     grid = obj.basis.arrival_grid(dta)
@@ -503,6 +606,9 @@ def arrival_time_hypersurface_plot(model, obj_index=0, src_index=0,
 
     Return:
         None
+
+    Note:
+        best used in an interactive session in order to find best viewing settings
     """
     ax = plt.axes(projection='3d')
 
@@ -520,15 +626,15 @@ def arrival_time_hypersurface_plot(model, obj_index=0, src_index=0,
     X, Y = np.meshgrid(x, y)
 
     # images
-    min_clr = cmap(.8)
-    sad_clr = cmap(.5)
-    max_clr = cmap(.2)
-    minima = np.array([img._pos for img in obj.sources[src_index].images
-                       if img.parity_name == 'min'])
-    saddles = np.array([img._pos for img in obj.sources[src_index].images
-                        if img.parity_name == 'sad'])
-    maxima = np.array([img._pos for img in obj.sources[src_index].images
-                       if img.parity_name == 'max'])
+    # min_clr = cmap(.8)
+    # sad_clr = cmap(.5)
+    # max_clr = cmap(.2)
+    # minima = np.array([img._pos for img in obj.sources[src_index].images
+    #                    if img.parity_name == 'min'])
+    # saddles = np.array([img._pos for img in obj.sources[src_index].images
+    #                     if img.parity_name == 'sad'])
+    # maxima = np.array([img._pos for img in obj.sources[src_index].images
+    #                    if img.parity_name == 'max'])
 
     # general contours
     mi = np.min(grid[src_index])
@@ -568,6 +674,9 @@ def complex_ellipticity_plot(epsilon,
         samples <int> - only plot a subsample from the ensemble models' epsilons
         color <str> - marker color for scatter plot
         colors <list(str)> - list of different colors for ensemble models
+
+    Return:
+        TODO
     """
     # set defaults
     epsilon = epsilon if isinstance(epsilon, (tuple, list)) else [epsilon]
