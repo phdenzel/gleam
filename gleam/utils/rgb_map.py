@@ -134,7 +134,7 @@ def radial_mask(data, center=None, radius=None):
         raise IndexError(
             "Wrong input shape {}! " \
             + "Input 2D data with shape of (N, M), (N, M, 3) or (N, M, 4)!".format(data.shape))
-    h, w = data.shape
+    h, w = data.shape[:2]
     if center is None:
         center = [int(w//2), int(h//2)]
     if radius is None:
