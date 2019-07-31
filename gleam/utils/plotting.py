@@ -15,6 +15,7 @@ from matplotlib.colors import to_rgba
 from gleam.utils.lensing import DLSDS, kappa_profile, \
     interpolate_profile, find_einstein_radius
 from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
+from gleam.utils.rgb_map import radial_mask
 from gleam.glass_interface import glass_renv
 glass = glass_renv()
 
@@ -193,6 +194,72 @@ def plot_labelbox(label, position='bottom left', padding=(0.05, 0.05), color='wh
     xy = position_xy + np.array([padding[0]*leftright, padding[1]*updown])
     ax.text(xy[0], xy[1], label, va=va, ha=ha, transform=ax.transAxes,
             color=color, **kwargs)
+
+
+def plot_annulus(center=(0.5, 0.5), radius=0.5, color='black', **kwargs):
+    """
+    Add an annotation circle for marking special radii, e.g. image distances
+
+    Args:
+        None
+
+    Kwargs:
+        center <tuple/list> - center of the annotation circle (transformed coordinates)
+        radius <float> - radius of the annotation circle (in transformed units)
+        color <str> - text and labelbox color
+        **kwargs <dict> - keyword parameters of matplotlib.patches.Circle
+
+    Return:
+        c <mpl.patches.Circle object> - the Circle object plotted
+    """
+    ax = plt.gca()
+    kwargs.setdefault('fill', False)
+    kwargs.setdefault('facecolor', color)
+    kwargs.setdefault('edgecolor', color)
+    kwargs.setdefault('alpha', 1)
+    kwargs.setdefault('lw', 1)
+    kwargs.setdefault('transform', ax.transAxes)
+    kwargs.setdefault('zorder', 1000)
+    c = plt.Circle(center, radius, **kwargs)
+    ax.add_patch(c)
+    return c
+
+
+def plot_annulus_region(center=(0.5, 0.5), radius=0.5, color='white', alpha=0.2, refine=10,
+                        **kwargs):
+    """
+    Add an annotation circle mask for marking special radial regions, e.g. critical densities
+
+    Args:
+        None
+
+    Kwargs:
+        center <tuple/list> - center of the annotation circle
+        radius <float> - radius of the annotation region in normalized units
+        alpha <float> - alpha of the region outside the radius
+        **kwargs <dict> - keyword parameters of matplotlib.text.Text
+
+    Return:
+        TODO
+    """
+    ax = plt.gca()
+    img = plt.gci()
+    shape = kwargs.pop('shape', None)
+    if shape is None:
+        shape = img._A.shape
+    if hasattr(img, '_extent'):
+        extent = img._extent
+    elif hasattr(img, 'extent'):
+        extent = img.extent
+    else:
+        return
+    overlay = np.ones((shape[0]*refine, shape[1]*refine))
+    msk = radial_mask(overlay, center=center, radius=int(radius*shape[0]*refine))
+    cval = to_rgba(color, alpha=alpha)
+    overlay = cval * np.ones((shape[0]*refine, shape[1]*refine)+(4,))
+    overlay[msk] = 0
+    ax.imshow(overlay, extent=extent)
+    return overlay
 
 
 def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
