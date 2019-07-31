@@ -97,7 +97,7 @@ def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
         glass_extent = (-glass_maprad, glass_maprad, -glass_maprad, glass_maprad)
         glass_shape = (2*obj.basis.pixrad+1,)*2
         eagle_kappa, eagle_hdr = eagle_model
-        eagle_kappa = np.flip(eagle_kappa, 0)
+        # eagle_kappa = np.flip(eagle_kappa, 0)
         eagle_kappa_map = downsample_model(eagle_kappa, glass_extent, glass_shape,
                                            pixel_scale=eagle_hdr['CDELT2']*3600)
         for m in glass_state.models:
@@ -110,7 +110,7 @@ def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
             kappa_resids.append(r)
     elif method == 'g2e':
         eagle_kappa_map, eagle_hdr = eagle_model
-        eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+        # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
         eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
         eagle_maprad = eagle_pixrad[1]*eagle_hdr['CDELT2']*3600
         extent = [-eagle_maprad, eagle_maprad, -eagle_maprad, eagle_maprad]
@@ -150,7 +150,7 @@ def inertia_analysis(eagle_model, glass_state, method='e2g', activation=None, ve
         print("{} models".format(len(glass_state.models)))
     inertias = []
     eagle_kappa_map, eagle_hdr = eagle_model
-    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     eagle_pixel = eagle_hdr['CDELT2']*3600
     if method == 'e2g':
         obj, _ = glass_state.models[0]['obj,data'][0]
@@ -213,7 +213,7 @@ def potential_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=Fal
         print("{} models".format(N_models))
     potentials = []
     eagle_kappa_map, eagle_hdr = eagle_model
-    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, data = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -275,7 +275,7 @@ def degarr_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=False)
         print("{} models".format(N_models))
     degarrs = []
     eagle_kappa_map, eagle_hdr = eagle_model
-    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, _ = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -371,7 +371,7 @@ def degarr_analysis_mp(eagle_model, glass_state, N=85, nproc=2, verbose=False):
     degarrs = []
     # resample EAGLE model
     eagle_kappa_map, eagle_hdr = eagle_model
-    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     obj, _ = glass_state.models[0]['obj,data'][0]
     eagle_pixel = eagle_hdr['CDELT2']*3600
     glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
@@ -1360,7 +1360,7 @@ if __name__ == "__main__":
                                     kappa1_line=True, einstein_radius_indicator=True,
                                     label=ki)
                 eagle_kappa_map = eagle_model[0]
-                eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+                # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
                 eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
                 eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
                 kappa_profile_plot(eagle_kappa_map, correct_distances=False, kappa1_line=False,
@@ -1689,7 +1689,7 @@ if __name__ == "__main__":
                 fk = kappa_files[ki][0]
             eagle_model = fits.getdata(fk, header=True)
             eagle_kappa, eagle_hdr = eagle_model
-            eagle_kappa = np.flip(eagle_kappa, 0)
+            # eagle_kappa = np.flip(eagle_kappa, 0)
             eagle_pixrad = tuple(r//2 for r in eagle_kappa.shape)
             eagle_maprad = eagle_pixrad[1]*eagle_hdr['CDELT2']*3600
             # plot in GLASS style
@@ -2063,7 +2063,7 @@ if __name__ == "__main__":
                     if verbose:
                         print('Loading '+kappa_files[ki][0])
                     eagle_kappa_map = eagle_model[0]
-                    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+                    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
                     eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
                     eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
                     # chi2 kappa maps
