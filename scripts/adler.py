@@ -2011,7 +2011,7 @@ if __name__ == "__main__":
                                                       scalebar=True, label=ki, color='black',
                                                       colorbar=0)
                             # save the figure
-                            savename = "{}_arriv_.png".format(label, ichi2)
+                            savename = "{}_arriv_{}.png".format(label, ichi2)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
