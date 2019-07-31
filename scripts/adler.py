@@ -22,8 +22,8 @@ from gleam.utils.lensing import downsample_model, upsample_model, radial_profile
 from gleam.utils.plotting import kappa_map_plot, kappa_profile_plot, kappa_profiles_plot, \
     roche_potential_plot, arrival_time_surface_plot, \
     complex_ellipticity_plot, \
-    plot_scalebar, plot_labelbox
-from gleam.utils.linalg import sigma_product
+    plot_scalebar, plot_labelbox, plot_annulus, plot_annulus_region
+from gleam.utils.linalg import sigma_product, sigma_product_map
 from gleam.utils.makedir import mkdir_p
 from gleam.utils.colors import GLEAMcmaps, GLEAMcolors, color_variant
 glass = glass_renv()
@@ -678,7 +678,7 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    version = "v5"
+    version = "tests"
     home = os.path.expanduser("~")
     rdir = os.path.join(home, "adler")
     jsondir = os.path.join(rdir, "json")
@@ -732,14 +732,43 @@ if __name__ == "__main__":
     sfiles = states  # states  # filtered_states  # prefiltered_synthf50
     sfiles_str = "states"
 
+    # loop booleans
+
+    RECONSRC_LOOP    = 0
+    CHI2_LOOP        = 0
+    K_DIFF_LOOP      = 1
+    QUADPM_LOOP      = 1
+    ABPHI_LOOP       = 1
+    ELLIPTICITY_LOOP = 1
+    ROCHE_LOOP       = 1
+    ROCHE_HIST_LOOP  = 1
+    ROCHE_MAP_LOOP   = 1
+    K_PROFILE_LOOP   = 1
+    CHI2VSROCHE_LOOP = 1
+    DATA_LOOP        = 0
+    SOURCE_LOOP      = 0
+    SYNTH_LOOP       = 0
+    ARRIV_LOOP       = 0
+    K_MAP_LOOP       = 1
+    K_TRUE_LOOP      = 1
+    INDIVIDUAL_LOOP  = 1
+
+    ROCHE_DEBUG_LOOP = 0
+
+    # not frequently used loops
+    DIR_LOOP       = 0
+    SFILTER_LOOP   = 0
+    RECACHE_LOOP   = 0
+    POTENTIAL_LOOP = 0
+
     # # LOOP OPERATIONS
     # # create a directory structure
-    if 0:
+    if DIR_LOOP:
         print("### Creating directory structure for analysis files")
         mkdir_structure(keys, root=os.path.join(anlysdir, sfiles_str))
 
     # # reconsrc synth caching
-    if 1:
+    if RECONSRC_LOOP:
         print("### Calculating ReconSrc objects and save as pickle files")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -755,7 +784,7 @@ if __name__ == "__main__":
         synth_filtered_states = synth_loop(k, jsons, sfiles, **kwargs)
 
     # # reload cache into new reconsrc objects
-    if 0:
+    if RECACHE_LOOP:
         print("### Reload cache and save as new pickle files")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -765,7 +794,7 @@ if __name__ == "__main__":
         cache_loop(k, jsons, sfiles, **kwargs)
 
     # # reconsrc synth filtering
-    if 0:
+    if SFILTER_LOOP:
         print("### Filter out bad chi2 and save filtered state files")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -781,7 +810,7 @@ if __name__ == "__main__":
         synth_filtered_states = synth_loop(k, jsons, sfiles, **kwargs)
 
     # # chi2 histograms (takes long!!!)
-    if 1:
+    if CHI2_LOOP:
         print("### Plotting chi2 histograms")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -835,7 +864,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # kappa diff histograms
-    if 1:
+    if K_DIFF_LOOP:
         print("### Plotting kappa residual histograms")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -870,7 +899,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # inertia tensor analysis
-    if 1:
+    if QUADPM_LOOP:
         print("### Calculating inertia tensors")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -889,7 +918,7 @@ if __name__ == "__main__":
                 pickle.dump(qpms, f)
 
     # # inertia histograms
-    if 1:
+    if ABPHI_LOOP:
         print("### Plotting inertia ellipse's parameter histograms")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -942,7 +971,7 @@ if __name__ == "__main__":
                     plt.close()
 
     # # complex ellipticity plots
-    if 1:
+    if ELLIPTICITY_LOOP:
         print("### Plotting complex ellipticity plots")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1003,7 +1032,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # complex ellipticity summary plot
-    if 1:
+    if ELLIPTICITY_LOOP:
         print("### Plotting complex ellipticity summary plot")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1078,7 +1107,7 @@ if __name__ == "__main__":
         plt.close()
 
     # # potential analysis
-    if 0:
+    if POTENTIAL_LOOP:
         print("### Calculating lensing potentials")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1097,7 +1126,7 @@ if __name__ == "__main__":
                 pickle.dump(potentials, f)
 
     # # potential maps
-    if 0:
+    if POTENTIAL_LOOP:
         print("### Plotting lensing potential maps")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1154,7 +1183,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # Roche potentials and scalar products
-    if 1:
+    if ROCHE_LOOP:
         print("### Calculating Roche potentials and scalar products")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1191,7 +1220,7 @@ if __name__ == "__main__":
                     pickle.dump(o, f)
 
     # # Roche potential scalar product histograms
-    if 1:
+    if ROCHE_HIST_LOOP:
         print("### Plotting Roche potential scalar product histograms")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1235,7 +1264,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # Roche potential maps
-    if 1:
+    if ROCHE_MAP_LOOP:
         print("### Plotting Roche potential maps")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1297,6 +1326,7 @@ if __name__ == "__main__":
                           colorbar=True, label=ki, scalebar=True)
                 # SEAGLE model
                 roche_potential_plot((gx, gy, eagle_degarr), **kw)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('true'))
                 plt.savefig(savename.format('true'), dpi=400, transparent=True)
@@ -1304,6 +1334,7 @@ if __name__ == "__main__":
                 plt.close()
                 # ensemble average model
                 roche_potential_plot((gx, gy, avg_model), **kw)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('ens_avg'))
                 plt.savefig(savename.format('ens_avg'), dpi=400, transparent=True)
@@ -1311,6 +1342,7 @@ if __name__ == "__main__":
                 plt.close()
                 # best model
                 roche_potential_plot((gx, gy, max_model), **kw)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('best'))
                 plt.savefig(savename.format('best'), dpi=400, transparent=True)
@@ -1318,14 +1350,90 @@ if __name__ == "__main__":
                 plt.close()
                 # worst model
                 roche_potential_plot((gx, gy, min_model), **kw)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('worst'))
                 plt.savefig(savename.format('worst'), dpi=400, transparent=True)
                 # plt.show()
                 plt.close()
 
+    # # DEBUG: Roche potential
+    if ROCHE_DEBUG_LOOP:
+        print("### DEBUGGING Roche potential maps")
+        # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        k = keys
+        kwargs = dict(verbose=1)
+        # sfiles = states
+        path = os.path.join(anlysdir, sfiles_str)
+        loadnames = ['degarrs.pkl', 'scalarRoche.pkl']
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadnames = [os.path.join(path, l) for l in loadnames]
+        # with open(loadnames[0], 'rb') as f1:
+        #     degarrs = pickle.load(f1)
+        with open(loadnames[1], 'rb') as f2:
+            scalarRoche = pickle.load(f2)
+        for ki in k:
+            print(ki)
+            files = sfiles[ki]
+            for sf in files:
+                gls = glass.glcmds.loadstate(sf)
+                gls.make_ensemble_average()
+                name = os.path.basename(sf).replace(".state", "")
+                print(name)
+                # # get ordered indices
+                textname = "scalarRoche_{}.txt".format(name)
+                if path is None:
+                    path = ""
+                if os.path.exists(os.path.join(path, ki)):
+                    textname = os.path.join(path, ki, textname)
+                elif os.path.exists(path):
+                    textname = os.path.join(path, textname)
+                if os.path.exists(textname):
+                    sortedidcs = np.int32(np.loadtxt(textname).T[1])
+                else:
+                    ip = scalarRoche[sf]
+                    sortedidcs = np.argsort(ip)
+                firstidx = sortedidcs[0]
+                lastidx = sortedidcs[-1]
+                # get EAGLE map
+                if kappa_files[ki]:
+                        eagle_model = fits.getdata(kappa_files[ki][0], header=True)
+                else:
+                    eagle_model = None
+                if kwargs.get('verbose', False):
+                    print('Loading '+kappa_files[ki][0])
+                eagle_kappa_map = eagle_model[0]
+                # resample SEAGLE kappa map
+                eagle_pixel = eagle_model[1]['CDELT2']*3600
+                obj, dta = gls.ensemble_average['obj,data'][0]
+                glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+                glass_extent = (-glass_maprad, glass_maprad, -glass_maprad, glass_maprad)
+                glass_shape = (2*obj.basis.pixrad+1,)*2
+                eagle_kappa_map = downsample_model(eagle_kappa_map, glass_extent, glass_shape,
+                                                   pixel_scale=eagle_pixel)
+                print("SEAGLE kappa map: {} @ {} arcsec".format(eagle_kappa_map.shape,
+                                                                glass_maprad))
+                # calculate Roche potentials
+                ex, ey, eagle_roche = roche_potential_grid(eagle_kappa_map, N=85,
+                                                           grid_size=2*glass_maprad)
+                gx, gy, avg_roche = roche_potential(gls.ensemble_average, N=85)
+                for i in [sortedidcs[-1]]:  # the 10 best Roche scalars
+                    x, y, roche = roche_potential(gls.models[i], N=85)
+                    roche_scalar_map = sigma_product_map(eagle_roche, roche, rmask=True, radius=.7)
+                    roche_scalar = np.sum(roche_scalar_map)
+                    print("Model {idx}: Roche scalar={scalar}".format(idx=i, scalar=roche_scalar))
+                    plt.imshow(roche_scalar_map, cmap='Spectral', origin='Lower',
+                               vmin=-np.max(roche_scalar_map),
+                               vmax=np.max(roche_scalar_map))
+                    # plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
+                    plot_annulus_region((0.5, 0.5), 0.7*0.5, color='white', alpha=0.1)
+                    plt.colorbar()
+                    plt.show()
+
     # # kappa profile ensembles
-    if 1:
+    if K_PROFILE_LOOP:
         print("### Plotting kappa radial profiles ensembles")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1380,7 +1488,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # chi2 vs scalarRoche
-    if 1:
+    if CHI2VSROCHE_LOOP:
         print("### Plotting chi2 vs scalar product scatter")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1433,7 +1541,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # # data maps
-    if 1:
+    if DATA_LOOP:
         print("### Plotting data maps")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1482,7 +1590,7 @@ if __name__ == "__main__":
                 break
 
     # source plane map
-    if 1:
+    if SOURCE_LOOP:
         print("### Plotting source maps")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1544,7 +1652,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # synth map of the ensemble averages
-    if 1:
+    if SYNTH_LOOP:
         print("### Plotting synthetics of ensemble averages")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1605,7 +1713,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # arrival-time surface of the ensemble averages
-    if 1:
+    if ARRIV_LOOP:
         print("### Plotting arrival-time surface maps of the ensemble averages")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1641,7 +1749,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # kappa map of the ensemble averages
-    if 1:
+    if K_MAP_LOOP:
         print("### Plotting kappa maps of the ensemble averages")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1675,7 +1783,7 @@ if __name__ == "__main__":
                 plt.close()
 
     # kappa maps of the EAGLE models
-    if 1:
+    if K_TRUE_LOOP:
         print("### Plotting true SEAGLE kappa maps")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1755,7 +1863,7 @@ if __name__ == "__main__":
             plt.close()
 
     # # Individual model plots
-    if 1:
+    if INDIVIDUAL_LOOP:
         print("### Plotting chi2 synthetics, arrival-time surfaces, kappa maps "
               + "of all individual models")
         verbose = True
