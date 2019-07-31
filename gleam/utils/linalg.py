@@ -118,7 +118,7 @@ def is_symm2D(data, center=None):
     return is_symm
 
 
-def inner_product(grid1, grid2, rmask=False):
+def inner_product(grid1, grid2, rmask=False, radius=1):
     """
     The inner product of two grids in order to compare likeness
 
@@ -132,13 +132,14 @@ def inner_product(grid1, grid2, rmask=False):
         None
     """
     if rmask:
-        msk = radial_mask(grid1)
-        grid1 = grid1[msk]
-        grid2 = grid2[msk]
+        radius = int(radius*0.5*grid1.shape[0])
+        msk = radial_mask(grid1, radius=radius)
+        grid1[~msk] = 0
+        grid2[~msk] = 0
     return np.sum(grid1*grid2)/(np.linalg.norm(grid1)*np.linalg.norm(grid2))
 
 
-def sigma_product(grid1, grid2, rmask=True):
+def sigma_product(grid1, grid2, rmask=True, radius=0.7):
     """
     The inner product of two grids in order to compare likeness as deviations from the mean
 
@@ -148,14 +149,42 @@ def sigma_product(grid1, grid2, rmask=True):
 
     Kwargs:
         rmask <bool> - apply a radial mask before calculating the inner product
+        radius <float> - fractional radius of the radial mask
 
     Return:
         None
     """
     if rmask:
-        msk = radial_mask(grid1)
-        grid1 = grid1[msk]
-        grid2 = grid2[msk]
+        radius = int(radius*0.5*grid1.shape[0])
+        msk = radial_mask(grid1, radius=radius)
+        grid1[~msk] = np.mean(grid1[msk])
+        grid2[~msk] = np.mean(grid2[msk])
     grid1 = grid1 - np.mean(grid1)
     grid2 = grid2 - np.mean(grid2)
     return inner_product(grid1, grid2, rmask=False)
+
+
+def sigma_product_map(grid1, grid2, rmask=True, radius=0.7):
+    """
+    The inner product map of two grids in order to locally compare likeness
+    as deviations from the mean
+
+    Args:
+        grid1, grid2 <np.ndarray> - the grid data, e.g. of two different models
+
+    Kwargs:
+        rmask <bool> - apply a radial mask before calculating the inner product
+        radius <float> - fractional radius of the radial mask
+
+    Return:
+        None
+    """
+    if rmask:
+        radius = radius*0.5*grid1.shape[0]
+        msk = radial_mask(grid1, radius=int(radius))
+        grid1[~msk] = np.mean(grid1[msk])
+        grid2[~msk] = np.mean(grid2[msk])
+    grid1 = grid1 - np.mean(grid1)
+    grid2 = grid2 - np.mean(grid2)
+    normalization = (np.linalg.norm(grid1)*np.linalg.norm(grid2))
+    return grid1*grid2/normalization
