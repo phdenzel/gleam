@@ -131,12 +131,14 @@ def inner_product(grid1, grid2, rmask=False, radius=1):
     Return:
         None
     """
+    g1 = grid1[:]
+    g2 = grid2[:]
     if rmask:
-        radius = int(radius*0.5*grid1.shape[0])
-        msk = radial_mask(grid1, radius=radius)
-        grid1[~msk] = 0
-        grid2[~msk] = 0
-    return np.sum(grid1*grid2)/(np.linalg.norm(grid1)*np.linalg.norm(grid2))
+        radius = int(radius*0.5*g1.shape[0])
+        msk = radial_mask(g1, radius=radius)
+        g1[~msk] = 0
+        g2[~msk] = 0
+    return np.sum(g1*g2)/(np.linalg.norm(g1)*np.linalg.norm(g2))
 
 
 def sigma_product(grid1, grid2, rmask=True, radius=0.7):
@@ -154,14 +156,16 @@ def sigma_product(grid1, grid2, rmask=True, radius=0.7):
     Return:
         None
     """
+    g1 = grid1[:]
+    g2 = grid2[:]
     if rmask:
-        radius = int(radius*0.5*grid1.shape[0])
-        msk = radial_mask(grid1, radius=radius)
-        grid1[~msk] = np.mean(grid1[msk])
-        grid2[~msk] = np.mean(grid2[msk])
-    grid1 = grid1 - np.mean(grid1)
-    grid2 = grid2 - np.mean(grid2)
-    return inner_product(grid1, grid2, rmask=False)
+        radius = int(radius*0.5*g1.shape[0])
+        msk = radial_mask(g1, radius=radius)
+        g1[~msk] = np.mean(g1[msk])
+        g2[~msk] = np.mean(g2[msk])
+    g1 = g1 - np.mean(g1)
+    g2 = g2 - np.mean(g2)
+    return inner_product(g1, g2, rmask=False)
 
 
 def sigma_product_map(grid1, grid2, rmask=True, radius=0.7):
@@ -179,12 +183,14 @@ def sigma_product_map(grid1, grid2, rmask=True, radius=0.7):
     Return:
         None
     """
+    g1 = grid1[:]
+    g2 = grid2[:]
     if rmask:
-        radius = radius*0.5*grid1.shape[0]
-        msk = radial_mask(grid1, radius=int(radius))
-        grid1[~msk] = np.mean(grid1[msk])
-        grid2[~msk] = np.mean(grid2[msk])
-    grid1 = grid1 - np.mean(grid1)
-    grid2 = grid2 - np.mean(grid2)
-    normalization = (np.linalg.norm(grid1)*np.linalg.norm(grid2))
-    return grid1*grid2/normalization
+        radius = radius*0.5*g1.shape[0]
+        msk = radial_mask(g1, radius=int(radius))
+        g1[~msk] = np.mean(g1[msk])
+        g2[~msk] = np.mean(g2[msk])
+    g1 = g1 - np.mean(g1)
+    g2 = g2 - np.mean(g2)
+    normalization = (np.linalg.norm(g1)*np.linalg.norm(g2))
+    return g1*g2/normalization
