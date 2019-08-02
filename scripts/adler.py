@@ -678,7 +678,7 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    version = "tests"
+    version = "v5"
     home = os.path.expanduser("~")
     rdir = os.path.join(home, "adler")
     jsondir = os.path.join(rdir, "json")
