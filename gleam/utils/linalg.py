@@ -131,8 +131,8 @@ def inner_product(grid1, grid2, rmask=False, radius=1):
     Return:
         None
     """
-    g1 = grid1[:]
-    g2 = grid2[:]
+    g1 = grid1.copy()
+    g2 = grid2.copy()
     if rmask:
         radius = int(radius*0.5*g1.shape[0])
         msk = radial_mask(g1, radius=radius)
@@ -156,8 +156,8 @@ def sigma_product(grid1, grid2, rmask=True, radius=0.7):
     Return:
         None
     """
-    g1 = grid1[:]
-    g2 = grid2[:]
+    g1 = grid1.copy()
+    g2 = grid2.copy()
     if rmask:
         radius = int(radius*0.5*g1.shape[0])
         msk = radial_mask(g1, radius=radius)
@@ -183,8 +183,8 @@ def sigma_product_map(grid1, grid2, rmask=True, radius=0.7):
     Return:
         None
     """
-    g1 = grid1[:]
-    g2 = grid2[:]
+    g1 = grid1.copy()
+    g2 = grid2.copy()
     if rmask:
         radius = radius*0.5*g1.shape[0]
         msk = radial_mask(g1, radius=int(radius))
