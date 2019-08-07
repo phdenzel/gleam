@@ -262,7 +262,7 @@ def plot_annulus_region(center=(0.5, 0.5), radius=0.5, color='white', alpha=0.2,
     return overlay
 
 
-def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
+def kappa_map_plot(model, obj_index=0, subcells=1, extent=None, origin='upper',
                    contours=False, levels=3, delta=0.2, log=True,
                    oversample=True,
                    scalebar=False, label=None, color='white',
@@ -324,9 +324,9 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None,
     # contours and surface plot
     if contours:
         plt.contour(grid, levels=(kappa1,), colors=['k'],
-                    extent=extent, origin='lower')
+                    extent=extent, origin=origin)
     plt.contourf(grid, cmap=cmap, antialiased=True,
-                 extent=extent, origin='lower', levels=clevels)
+                 extent=extent, origin=origin, levels=clevels)
     # ax = plt.gca()
     if colorbar:
         cbar = plt.colorbar()
@@ -544,10 +544,13 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
         bg_extent = [x.min(), x.max(), y.min(), y.max()]
         plt.imshow(bg, extent=bg_extent)
     if contours or contours_only:
+        kwargs.setdefault('origin', 'upper')
+        kwargs.setdefault('extent', [x.min(), x.max(), y.min(), y.max()])
         lw = kwargs.pop('linewidths', 0.5)
-        plt.contour(x, y, grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), linewidths=lw)
+        plt.contour(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap),
+                    extent=kwrags.get('extent'), origin=kwargs.get('origin'), linewidths=lw)
     if not contours_only:
-        plt.contourf(x, y, grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), **kwargs)
+        plt.contourf(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), **kwargs)
     # annotations and amendments
     if colorbar:
         cbar = plt.colorbar()
@@ -795,8 +798,9 @@ def complex_ellipticity_plot(epsilon,
     if contours:
         for i, e in enumerate(epsilon):
             H, xedges, yedges = np.histogram2d(e[0], e[1])
-            clevels = np.linspace(1, H.max(), levels, dtype=np.int)
             extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+            clevels = np.linspace(1, H.max(), levels, dtype=np.int)
+            clevels = list(set(clevels))
             plt.contour(H.T, levels=clevels, extent=extent, cmap=cmap)
             plt.contourf(H.T, levels=clevels, extent=extent, cmap=cmap, alpha=alpha)
     # plot settings
