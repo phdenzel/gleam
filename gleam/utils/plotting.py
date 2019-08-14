@@ -548,7 +548,7 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
         kwargs.setdefault('extent', [x.min(), x.max(), y.min(), y.max()])
         lw = kwargs.pop('linewidths', 0.5)
         plt.contour(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap),
-                    extent=kwrags.get('extent'), origin=kwargs.get('origin'), linewidths=lw)
+                    extent=kwargs.get('extent'), origin=kwargs.get('origin'), linewidths=lw)
     if not contours_only:
         plt.contourf(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), **kwargs)
     # annotations and amendments
@@ -800,7 +800,7 @@ def complex_ellipticity_plot(epsilon,
             H, xedges, yedges = np.histogram2d(e[0], e[1])
             extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
             clevels = np.linspace(1, H.max(), levels, dtype=np.int)
-            clevels = list(set(clevels))
+            clevels = sorted(list(set(clevels)))
             plt.contour(H.T, levels=clevels, extent=extent, cmap=cmap)
             plt.contourf(H.T, levels=clevels, extent=extent, cmap=cmap, alpha=alpha)
     # plot settings
