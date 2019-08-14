@@ -14,7 +14,7 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 from gleam.reconsrc import ReconSrc, synth_filter, synth_filter_mp
 from gleam.multilens import MultiLens
-from gleam.glass_interface import glass_renv
+from gleam.glass_interface import glass_renv, filter_env, export_state
 from gleam.utils.encode import an_sort
 from gleam.utils.lensing import downsample_model, upsample_model, radial_profile, \
     DLSDS, complex_ellipticity, inertia_tensor, qpm_props, \
@@ -97,7 +97,7 @@ def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
         glass_extent = (-glass_maprad, glass_maprad, -glass_maprad, glass_maprad)
         glass_shape = (2*obj.basis.pixrad+1,)*2
         eagle_kappa, eagle_hdr = eagle_model
-        # eagle_kappa = np.flip(eagle_kappa, 0)
+        eagle_kappa = np.flip(eagle_kappa, 0)
         eagle_kappa_map = downsample_model(eagle_kappa, glass_extent, glass_shape,
                                            pixel_scale=eagle_hdr['CDELT2']*3600)
         for m in glass_state.models:
@@ -110,7 +110,7 @@ def residual_analysis(eagle_model, glass_state, method='e2g', verbose=False):
             kappa_resids.append(r)
     elif method == 'g2e':
         eagle_kappa_map, eagle_hdr = eagle_model
-        # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+        eagle_kappa_map = np.flip(eagle_kappa_map, 0)
         eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
         eagle_maprad = eagle_pixrad[1]*eagle_hdr['CDELT2']*3600
         extent = [-eagle_maprad, eagle_maprad, -eagle_maprad, eagle_maprad]
@@ -150,7 +150,7 @@ def inertia_analysis(eagle_model, glass_state, method='e2g', activation=None, ve
         print("{} models".format(len(glass_state.models)))
     inertias = []
     eagle_kappa_map, eagle_hdr = eagle_model
-    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     eagle_pixel = eagle_hdr['CDELT2']*3600
     if method == 'e2g':
         obj, _ = glass_state.models[0]['obj,data'][0]
@@ -213,7 +213,7 @@ def potential_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=Fal
         print("{} models".format(N_models))
     potentials = []
     eagle_kappa_map, eagle_hdr = eagle_model
-    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, data = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -275,7 +275,7 @@ def degarr_analysis(eagle_model, glass_state, method='e2g', N=85, verbose=False)
         print("{} models".format(N_models))
     degarrs = []
     eagle_kappa_map, eagle_hdr = eagle_model
-    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     if method == 'e2g':
         obj, _ = glass_state.models[0]['obj,data'][0]
         eagle_pixel = eagle_hdr['CDELT2']*3600
@@ -371,7 +371,7 @@ def degarr_analysis_mp(eagle_model, glass_state, N=85, nproc=2, verbose=False):
     degarrs = []
     # resample EAGLE model
     eagle_kappa_map, eagle_hdr = eagle_model
-    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
     obj, _ = glass_state.models[0]['obj,data'][0]
     eagle_pixel = eagle_hdr['CDELT2']*3600
     glass_maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
@@ -497,7 +497,7 @@ def synth_loop(keys, jsons, states,
                                    noise=dta_noise, sigma2=sgma2,
                                    return_obj=save_obj, save=False, verbose=verbose, **kwargs)
             if save_state:
-                synthf(statefile=sf, reconsrc=recon_src, percentiles=[10, 25, 50],
+                synthf(statefile=sf, reconsrc=recon_src, percentiles=[10, 50],
                        psf_file=psf_file, use_psf=use_psf,
                        noise=dta_noise, sigma2=sgma2,
                        save=save_state, verbose=verbose, **kwargs)
@@ -678,7 +678,7 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    version = "v5"
+    version = "v6"
     home = os.path.expanduser("~")
     rdir = os.path.join(home, "adler")
     jsondir = os.path.join(rdir, "json")
@@ -725,30 +725,56 @@ if __name__ == "__main__":
     ls_states = [f for f in ls_states if not (f.endswith('_synthf10.state')
                                               or f.endswith('_synthf25.state')
                                               or f.endswith('_synthf50.state'))]
+    rochef10 = {k: [f for f in ls_states
+                    if k in f and f.endswith('_rochef10.state')] for k in keys}
+    rochef25 = {k: [f for f in ls_states
+                    if k in f and f.endswith('_rochef25.state')] for k in keys}
+    rochef50 = {k: [f for f in ls_states
+                    if k in f and f.endswith('_rochef50.state')] for k in keys}
+    ls_states = [f for f in ls_states if not (f.endswith('_rochef10.state')
+                                              or f.endswith('_rochef25.state')
+                                              or f.endswith('_rochef50.state'))]
+    rsf10 = {k: [f for f in ls_states
+                 if k in f and 'rochef10Xsynthf10_' in f] for k in keys}
+    rsf25 = {k: [f for f in ls_states
+                 if k in f and 'rochef25Xsynthf25_' in f] for k in keys}
+    rsf50 = {k: [f for f in ls_states
+                 if k in f and 'rochef50Xsynthf50_' in f] for k in keys}
+    ls_states = [f for f in ls_states if not ('rochef10Xsynthf10_' in f
+                                              or 'rochef25Xsynthf25_' in f
+                                              or 'rochef50Xsynthf50_' in f)]
     states = {k: [f for f in ls_states if k in f] for k in keys}
+    # print(states)
     kappa_files = {k: [f for f in ls_kappas if k in f] for k in keys}
     psf_file = os.path.join(lensdir, "psf.fits")
-
-    sfiles = states  # states  # filtered_states  # prefiltered_synthf50
+    
+    sfiles = states  
     sfiles_str = "states"
+    # sfiles = synthf10
+    # sfiles_str = "synthf10"
+    # sfiles = rochef10
+    # sfiles_str = "rochef10"
+    # sfiles = rsf25
+    # sfiles_str = "rsf25"
+
+    extension = "eps"
 
     # loop booleans
-
     RECONSRC_LOOP    = 0
-    CHI2_LOOP        = 0
+    CHI2_LOOP        = 1
     K_DIFF_LOOP      = 1
-    QUADPM_LOOP      = 1
+    QUADPM_LOOP      = 0
     ABPHI_LOOP       = 1
     ELLIPTICITY_LOOP = 1
-    ROCHE_LOOP       = 1
+    ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 1
     ROCHE_MAP_LOOP   = 1
     K_PROFILE_LOOP   = 1
     CHI2VSROCHE_LOOP = 1
-    DATA_LOOP        = 0
-    SOURCE_LOOP      = 0
-    SYNTH_LOOP       = 0
-    ARRIV_LOOP       = 0
+    DATA_LOOP        = 1
+    SOURCE_LOOP      = 1
+    SYNTH_LOOP       = 1
+    ARRIV_LOOP       = 1
     K_MAP_LOOP       = 1
     K_TRUE_LOOP      = 1
     INDIVIDUAL_LOOP  = 1
@@ -758,6 +784,8 @@ if __name__ == "__main__":
     # not frequently used loops
     DIR_LOOP       = 0
     SFILTER_LOOP   = 0
+    RFILTER_LOOP   = 0
+    RSFILTR_LOOP   = 0
     RECACHE_LOOP   = 0
     POTENTIAL_LOOP = 0
 
@@ -809,6 +837,83 @@ if __name__ == "__main__":
         # sfiles = states
         synth_filtered_states = synth_loop(k, jsons, sfiles, **kwargs)
 
+    if RFILTER_LOOP:
+        print("### Filter out bad Roche scalars and save filtered state files")
+        k = keys
+        kwargs = dict(verbose=1, percentiles=[10, 50], save=True)
+        path = os.path.join(anlysdir, sfiles_str)
+        for ki in k:
+            files = sfiles[ki]
+            for sf in files:
+                gls = glass.glcmds.loadstate(sf)
+                name = os.path.basename(sf).replace(".state", "")
+                print(name)
+                textname = "scalarRoche_{}.txt".format(name)
+                if os.path.exists(os.path.join(path, ki)):
+                    textname = os.path.join(path, ki, textname)
+                elif os.path.exists(path):
+                    textname = os.path.join(path, textname)
+                # since loading text files is faster it has priority
+                if os.path.exists(textname):
+                    sortedidcs = np.int32(np.loadtxt(textname).T[1])
+                else:
+                    exit(1)
+                N = len(sortedidcs)
+                percentiles = kwargs.get('percentiles', [10, 50])
+                selected = [sortedidcs[-int(p/100.*N):] for p in percentiles]
+                filtered = [filter_env(gls, s) for s in selected]
+                if kwargs.get('save', False):
+                    dirname = os.path.dirname(sf)
+                    basename = ".".join(os.path.basename(sf).split('.')[:-1])
+                    saves = [os.path.join(dirname, basename)+'_rochef{}.state'.format(p) for p in percentiles]
+                    for f, s in zip(filtered, saves):
+                        export_state(f, name=s)
+
+    if RSFILTR_LOOP:
+        print("### Filter out bad Roche scalars + bad chi2 and save filtered state files")
+        k = keys
+        kwargs = dict(verbose=1, percentiles=[10, 25, 50], save=True)
+        path = os.path.join(anlysdir, sfiles_str)
+        for ki in k:
+            files = sfiles[ki]
+            for sf in files:
+                gls = glass.glcmds.loadstate(sf)
+                name = os.path.basename(sf).replace(".state", "")
+                print(name)
+                textname = "scalarRoche_{}.txt".format(name)
+                if os.path.exists(os.path.join(path, ki)):
+                    textname = os.path.join(path, ki, textname)
+                elif os.path.exists(path):
+                    textname = os.path.join(path, textname)
+                # since loading text files is faster it has priority
+                if os.path.exists(textname):
+                    r_sortedidcs = np.int32(np.loadtxt(textname).T[1])
+                else:
+                    exit(1)
+                textname = "chi2_{}.txt".format(name)
+                if os.path.exists(os.path.join(path, ki)):
+                    textname = os.path.join(path, ki, textname)
+                elif os.path.exists(path):
+                    textname = os.path.join(path, textname)
+                if os.path.exists(textname):
+                    s_sortedidcs = np.int32(np.loadtxt(textname).T[1])
+                else:
+                    exit(1)
+                N = len(s_sortedidcs)
+                percentiles = kwargs.get('percentiles', [10, 50])
+                s_selected = [s_sortedidcs[:int(p/100.*N)] for p in percentiles]
+                r_selected = [r_sortedidcs[-int(p/100.*N):] for p in percentiles]
+                selected = [sorted(list(set(s).intersection(r))) for s, r in zip(r_selected, s_selected)]
+                filtered = [filter_env(gls, s) for s in selected]
+                if kwargs.get('save', False):
+                    dirname = os.path.dirname(sf)
+                    basename = ".".join(os.path.basename(sf).split('.')[:-1])
+                    exts = ['_rochef{percent}Xsynthf{percent}_{N}.state'.format(percent=p, N=len(s))
+                            for p, s in zip(percentiles, selected)]
+                    saves = [os.path.join(dirname, basename)+ext for ext in exts]
+                    for f, s in zip(filtered, saves):
+                        export_state(f, name=s)
+
     # # chi2 histograms (takes long!!!)
     if CHI2_LOOP:
         print("### Plotting chi2 histograms")
@@ -836,6 +941,7 @@ if __name__ == "__main__":
                 # gather chi2 values
                 chi2 = chi2_analysis(recon_src, **kwargs)
                 sortedidcs = np.argsort(chi2)
+                plt.figure(figsize=(5.68, 5.392))
                 plt.hist(chi2, bins=20, color=GLEAMcolors.cyan_light, alpha=0.7, rwidth=0.85)
                 plt.grid(axis='y', alpha=0.5)
                 plt.xlabel(r'$\chi^{2}$')
@@ -844,7 +950,7 @@ if __name__ == "__main__":
                 plot_labelbox(name, position='top right', color='black')
                 plt.tight_layout()
                 # save the figure
-                savename = "chi2_hist_{}.png".format(name)
+                savename = "chi2_hist_{}.{}".format(name, extension)
                 textname = 'chi2_{}.txt'.format(name)
                 if path is None:
                     path = ""
@@ -859,7 +965,7 @@ if __name__ == "__main__":
                     print('Saving '+textname)
                 np.savetxt(textname, np.c_[chi2, sortedidcs], fmt='%12d', delimiter=' ',
                            newline=os.linesep)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.savefig(savename, dpi=200, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -877,7 +983,7 @@ if __name__ == "__main__":
             for idx in range(len(states[ki])):
                 sf = sfiles[ki][idx]
                 name = os.path.basename(sf).replace(".state", "")
-                savename = "kappa_diff_hist_{}.png".format(name)
+                savename = "kappa_diff_hist_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -886,6 +992,7 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print(savename)
+                plt.figure(figsize=(5.68, 5.392))
                 plt.hist(residuals[sf], color='#386BF1', alpha=0.7, rwidth=0.85)
                 # plt.xlim(left=0, right=200)
                 plt.ylim(bottom=0, top=int(0.3*len(residuals[sf])))
@@ -895,7 +1002,7 @@ if __name__ == "__main__":
                 # plt.title(name)
                 plot_labelbox(name, position='top right', color='black')
                 plt.tight_layout()
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.savefig(savename, dpi=200, transparent=True)
                 plt.close()
 
     # # inertia tensor analysis
@@ -947,7 +1054,7 @@ if __name__ == "__main__":
                                # [abs(p[2]) for p in gprops]
                 name = os.path.basename(f).replace(".state", "")
                 for i, (eprop, gprop) in enumerate(zip([ea, eb, ephi], [ga, gb, gphi])):
-                    savename = lbl[i]+"_hist_{}.png".format(name)
+                    savename = lbl[i]+"_hist_{}.{}".format(name, extension)
                     if path is None:
                         path = ""
                     if os.path.exists(os.path.join(path, ki)):
@@ -956,6 +1063,7 @@ if __name__ == "__main__":
                         savename = os.path.join(path, savename)
                     if kwargs.get('verbose', False):
                         print(savename)
+                    plt.figure(figsize=(5.68, 5.392))
                     plt.hist(gprop, bins=14, color=GLEAMcolors.red, alpha=0.7, rwidth=0.85)
                     plt.axvline(eprop, color=color_variant(GLEAMcolors.red, shift=-50))
                     if lbl[i] == 'phi':
@@ -967,7 +1075,7 @@ if __name__ == "__main__":
                     plot_labelbox(name, position='top left', color='black')
                     plt.tight_layout()
                     # plt.title(name)
-                    plt.savefig(savename, dpi=400, transparent=True)
+                    plt.savefig(savename, dpi=200, transparent=True)
                     plt.close()
 
     # # complex ellipticity plots
@@ -998,7 +1106,7 @@ if __name__ == "__main__":
                 eagle_epsilon = complex_ellipticity(ea, eb, ephi)
                 glass_epsilon = complex_ellipticity(ga, gb, gphi)
                 name = os.path.basename(f).replace(".state", "")
-                savename = "ellipticity_{}.png".format(name)
+                savename = "ellipticity_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1007,6 +1115,7 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print(savename)
+                plt.figure(figsize=(5, 5))
                 complex_ellipticity_plot([glass_epsilon],
                                          scatter=False, samples=[-1, -1], ensemble_averages=True,
                                          colors=[GLEAMcolors.blue, GLEAMcolors.red],
@@ -1028,7 +1137,7 @@ if __name__ == "__main__":
                                          label=ki, annotation_color='black')
                 plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True)
                 plt.close()
 
     # # complex ellipticity summary plot
@@ -1064,6 +1173,7 @@ if __name__ == "__main__":
                 eagle_epsilon = complex_ellipticity(ea, eb, ephi)
                 glass_epsilon = complex_ellipticity(ga, gb, gphi)
                 name = os.path.basename(f).replace(".state", "")
+                plt.figure(figsize=(5, 5))
                 eagle_plot = complex_ellipticity_plot(
                     [glass_epsilon, eagle_epsilon],
                     scatter=True, samples=[0, -1],
@@ -1096,14 +1206,15 @@ if __name__ == "__main__":
                              columnspacing=0.5,
                              fancybox=True)
             plt.setp(leg.get_lines(), linewidth=0)
-        savename = "ellipticity_all.png".format(name)
+        plt.tight_layout()
+        savename = "ellipticity_all.{}".format(extension)
         if path is None:
             path = ""
         if os.path.exists(path):
             savename = os.path.join(path, savename)
         if kwargs.get('verbose', False):
             print(savename)
-        plt.savefig(savename, dpi=400, transparent=True)
+        plt.savefig(savename, dpi=500, transparent=True)
         plt.close()
 
     # # potential analysis
@@ -1169,7 +1280,7 @@ if __name__ == "__main__":
                 axes[1].set_aspect('equal')
                 plt.suptitle(name)
                 # save the figure
-                savename = "potential_{}.png".format(name)
+                savename = "potential_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1243,6 +1354,7 @@ if __name__ == "__main__":
                 # ip = [sigma_product(eagle_degarr, gdegarr) for gdegarr in glass_degarrs]
                 ip = scalarRoche[sf]
                 name = os.path.basename(sf).replace(".state", "")
+                plt.figure(figsize=(5.68, 5.392))
                 plt.hist(ip, bins=14, color=GLEAMcolors.cyan_dark, alpha=0.7, rwidth=0.85)
                 plt.xlim(left=-1, right=1)
                 plot_labelbox(name, position='top left', color='black')
@@ -1250,7 +1362,7 @@ if __name__ == "__main__":
                 plt.ylabel(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
                 # save the figure
-                savename = "scalarRoche_hist{}.png".format(name)
+                savename = "scalarRoche_hist{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1259,7 +1371,8 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print(savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                
+                plt.savefig(savename, dpi=200, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1302,7 +1415,7 @@ if __name__ == "__main__":
                 minidx = sortedidcs[0]
                 maxidx = sortedidcs[-1]
                 # save target string template
-                savename = "Roche_potential_{{}}_{n}.png".format("", n=name)
+                savename = "Roche_potential_{{}}_{}.{}".format("", name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1325,35 +1438,43 @@ if __name__ == "__main__":
                           levels=25, contours=True, linewidths=0.5,
                           colorbar=True, label=ki, scalebar=True)
                 # SEAGLE model
+                plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, eagle_degarr), **kw)
                 plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('true'))
-                plt.savefig(savename.format('true'), dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename.format('true'), dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
                 # ensemble average model
+                plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, avg_model), **kw)
                 plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('ens_avg'))
-                plt.savefig(savename.format('ens_avg'), dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename.format('ens_avg'), dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
                 # best model
+                plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, max_model), **kw)
                 plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('best'))
-                plt.savefig(savename.format('best'), dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename.format('best'), dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
                 # worst model
+                plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, min_model), **kw)
                 plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
                 if kwargs.get('verbose', False):
                     print(savename.format('worst'))
-                plt.savefig(savename.format('worst'), dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename.format('worst'), dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1462,19 +1583,20 @@ if __name__ == "__main__":
                         recon_src = pickle.load(f)
                 if kwargs.get('verbose', False):
                     print('Loading '+loadname)
+                plt.figure(figsize=(5.68, 5.392))
                 kappa_profiles_plot(recon_src.gls, as_range=True, cmap=GLEAMcmaps.agaveglitch,
                                     interpolate=100, levels=50,
                                     ensemble_average=False, correct_distances=True,
                                     kappa1_line=True, einstein_radius_indicator=True,
                                     label=ki)
                 eagle_kappa_map = eagle_model[0]
-                # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+                eagle_kappa_map = np.flip(eagle_kappa_map, 0)
                 eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
                 eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
                 kappa_profile_plot(eagle_kappa_map, correct_distances=False, kappa1_line=False,
                                    maprad=eagle_maprad, color=GLEAMcolors.red, ls='-')
                 plt.tight_layout()
-                savename = "kappa_profiles_{}.png".format(name)
+                savename = "kappa_profiles_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1484,7 +1606,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print('Saving '+savename)
                 print(savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True)
                 plt.close()
 
     # # chi2 vs scalarRoche
@@ -1521,13 +1643,14 @@ if __name__ == "__main__":
                 chi2 = chi2_analysis(recon_src, **kwargs)
                 ip = scalarRoche[sf]
                 # Plot chi2 vs scalar product
+                plt.figure(figsize=(5.68, 5.392))
                 plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite)
                 plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black')
                 plt.xlabel(r'$\chi^{2}$')
                 plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>')
                 plt.tight_layout()
                 # save the figure
-                savename = "chi2_VS_scalarRoche_{}.png".format(name)
+                savename = "chi2_VS_scalarRoche_{}.{}".format(name, extensions)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1536,7 +1659,7 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1568,6 +1691,7 @@ if __name__ == "__main__":
                 extent = recon_src.lensobject.extent
                 extent = [extent[0], extent[2], extent[1], extent[3]]
                 cmap = GLEAMcmaps.vilux  # Spectral_r
+                plt.figure(figsize=(5, 5))
                 plt.imshow(data, cmap=cmap, interpolation='bicubic',
                            origin='Lower', extent=extent)
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
@@ -1575,7 +1699,7 @@ if __name__ == "__main__":
                 plt.axis('off')
                 plt.colorbar()
                 # save the figure
-                savename = "data_{}.png".format(ki)
+                savename = "data_{}.{}".format(ki, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1584,7 +1708,8 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename, dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
                 break
@@ -1631,6 +1756,7 @@ if __name__ == "__main__":
                 else:
                     extent = None
                 cmap = GLEAMcmaps.vilux  # 'Spectral_r'
+                plt.figure(figsize=(5, 5))
                 plt.imshow(src, cmap=cmap,
                            origin='Lower', extent=extent, vmin=0)
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
@@ -1638,7 +1764,7 @@ if __name__ == "__main__":
                 plt.axis('off')
                 plt.colorbar()
                 # save the figure
-                savename = "rconsrc_{}.png".format(name)
+                savename = "rconsrc_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1647,7 +1773,8 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename, dpi=200, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1691,6 +1818,7 @@ if __name__ == "__main__":
                 extent = recon_src.lensobject.extent
                 extent = [extent[0], extent[2], extent[1], extent[3]]
                 cmap = GLEAMcmaps.vilux  # 'Spectral_r'
+                plt.figure(figsize=(5, 5))
                 plt.imshow(synth, cmap=cmap, interpolation='bicubic',
                            origin='Lower', extent=extent,
                            vmin=0, vmax=recon_src.lensobject.data.max())
@@ -1699,7 +1827,7 @@ if __name__ == "__main__":
                 plt.axis('off')
                 plt.colorbar()
                 # save the figure
-                savename = "synth_{}.png".format(name)
+                savename = "synth_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1708,7 +1836,8 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename, dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1729,13 +1858,14 @@ if __name__ == "__main__":
                 gls.make_ensemble_average()
                 m = gls.ensemble_average
                 cmap = GLEAMcmaps.reverse(GLEAMcmaps.aquaria, set_under='white', set_over='white')
+                plt.figure(figsize=(5, 5))
                 arrival_time_surface_plot(m, cmap=cmap, images_off=0,
                                           contours_only=0, contours=1, levels=25,
                                           min_contour_shift=0.1,
                                           scalebar=True, label=ki, color='black',
                                           colorbar=0)
                 # save the figure
-                savename = "arriv_{}.png".format(name)
+                savename = "arriv_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1744,7 +1874,8 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename, dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1764,12 +1895,13 @@ if __name__ == "__main__":
                 gls = glass.glcmds.loadstate(sf)
                 gls.make_ensemble_average()
                 m = gls.ensemble_average
+                plt.figure(figsize=(5, 5))
                 kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
                                oversample=True,
                                scalebar=True, label=ki,
                                cmap=GLEAMcmaps.agaveglitch)
                 # save the figure
-                savename = "kappa_{}.png".format(name)
+                savename = "kappa_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1778,7 +1910,8 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if verbose:
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.tight_layout()
+                plt.savefig(savename, dpi=500, transparent=True)
                 # plt.show()
                 plt.close()
 
@@ -1832,10 +1965,9 @@ if __name__ == "__main__":
             kappa1 = 0
             grid = np.log10(grid)
             grid[grid < clevels[0]] = clevels[0]+1e-6
+            plt.figure(figsize=(5, 5))
             plt.contourf(X, Y, grid, cmap=GLEAMcmaps.agaveglitch, antialiased=True,
-                         extent=extent, origin='lower', levels=clevels)
-            plt.xlim(left=-maprad, right=maprad)
-            plt.ylim(bottom=-maprad, top=maprad)
+                         extent=extent, origin='upper', levels=clevels)
             ax = plt.gca()
             # colorbar
             cbar = plt.colorbar()
@@ -1844,13 +1976,15 @@ if __name__ == "__main__":
             cbar.ax.set_yticklabels(lvllbls)
             # single contour around kappa = 1
             plt.contour(X, Y, grid, levels=(kappa1,), colors=['k'],
-                        extent=extent, origin='lower')
+                        extent=extent, origin='upper')
+            plt.xlim(left=-maprad, right=maprad)
+            plt.ylim(bottom=-maprad, top=maprad)
             # scale bar and label
             plot_scalebar(maprad, length=1, position='bottom left', origin='center')
             plt.axis('off')
             plot_labelbox(ki, position='top left', padding=(0.03, 0.03))
             # save figure
-            savename = "kappa_true_{}.png".format(ki)
+            savename = "kappa_true_{}.{}".format(ki, extension)
             if path is None:
                 path = ""
             if os.path.exists(os.path.join(path, ki)):
@@ -1859,7 +1993,8 @@ if __name__ == "__main__":
                 savename = os.path.join(path, savename)
             if verbose:
                 print('Saving '+savename)
-            plt.savefig(savename, dpi=400, transparent=True)
+            plt.tight_layout()
+            plt.savefig(savename, dpi=500, transparent=True)
             plt.close()
 
     # # Individual model plots
@@ -1911,6 +2046,7 @@ if __name__ == "__main__":
                             label = "chi2_{:04d}".format(i)
                             recon_src.chmdl(ichi2)
                             synth = recon_src.reproj_map(**kwargs)
+                            plt.figure(figsize=(5, 5))
                             plt.imshow(synth, cmap=GLEAMcmaps.vilux,
                                        interpolation='bicubic',
                                        origin='Lower', extent=extent,
@@ -1921,7 +2057,7 @@ if __name__ == "__main__":
                             plot_labelbox(ki, position='top left', padding=(0.04, 0.04))
                             plt.colorbar()
                             # save the figure
-                            savename = "{}_synth_{}.png".format(label, ichi2)
+                            savename = "{}_synth_{}.{}".format(label, ichi2, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -1938,7 +2074,8 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.tight_layout()
+                            plt.savefig(savename, dpi=500, transparent=True)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered synths
@@ -1949,6 +2086,7 @@ if __name__ == "__main__":
                             label = "scalarRoche_{:04d}".format(i)
                             recon_src.chmdl(idegarr)
                             synth = recon_src.reproj_map(**kwargs)
+                            plt.figure(figsize=(5, 5))
                             plt.imshow(synth, cmap=GLEAMcmaps.vilux,
                                        interpolation='bicubic',
                                        origin='Lower', extent=extent,
@@ -1959,7 +2097,7 @@ if __name__ == "__main__":
                             plot_labelbox(ki, position='top left', padding=(0.04, 0.04))
                             plt.colorbar()
                             # save the figure
-                            savename = "{}_synth_{}.png".format(label, idegarr)
+                            savename = "{}_synth_{}.{}".format(label, idegarr, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -1976,7 +2114,8 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.tight_layout()
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
 
@@ -2005,13 +2144,14 @@ if __name__ == "__main__":
                             m = recon_src.gls.models[ichi2]
                             cmap = GLEAMcmaps.reverse(GLEAMcmaps.aquaria,
                                                       set_under='white', set_over='white')
+                            plt.figure(figsize=(5, 5))
                             arrival_time_surface_plot(m, cmap=cmap, images_off=0,
                                                       contours_only=0, contours=1, levels=25,
                                                       min_contour_shift=0.1,
                                                       scalebar=True, label=ki, color='black',
                                                       colorbar=0)
                             # save the figure
-                            savename = "{}_arriv_{}.png".format(label, ichi2)
+                            savename = "{}_arriv_{}.{}".format(label, ichi2, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -2028,7 +2168,8 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.tight_layout()
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered arrival time surface
@@ -2040,13 +2181,14 @@ if __name__ == "__main__":
                             m = recon_src.gls.models[idegarr]
                             cmap = GLEAMcmaps.reverse(GLEAMcmaps.aquaria,
                                                       set_under='white', set_over='white')
+                            plt.figure(figsize=(5, 5))
                             arrival_time_surface_plot(m, cmap=cmap, images_off=0,
                                                       contours_only=0, contours=1, levels=25,
                                                       min_contour_shift=0.1,
                                                       scalebar=True, label=ki, color='black',
                                                       colorbar=0)
                             # save the figure
-                            savename = "{}_arriv_{}.png".format(label, idegarr)
+                            savename = "{}_arriv_{}.{}".format(label, idegarr, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -2063,7 +2205,8 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.tight_layout()
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
 
@@ -2090,12 +2233,13 @@ if __name__ == "__main__":
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{:04d}".format(i)
                             m = recon_src.gls.models[ichi2]
+                            plt.figure(figsize=(5, 5))
                             kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
                                            oversample=True,
                                            scalebar=True, label=ki,
                                            cmap=GLEAMcmaps.agaveglitch)
                             # save the figure
-                            savename = "{}_kappa_{}.png".format(label, ichi2)
+                            savename = "{}_kappa_{}.{}".format(label, ichi2, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -2112,7 +2256,8 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.tight_layout()
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered arrival time surface
@@ -2122,12 +2267,13 @@ if __name__ == "__main__":
                         for i, idegarr in enumerate(scalarRoche_sorted[::-1]):
                             label = "scalarRoche_{:04d}".format(i)
                             m = recon_src.gls.models[idegarr]
+                            plt.figure(figsize=(5, 5))
                             kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
                                            oversample=True,
                                            scalebar=True, label=ki,
                                            cmap=GLEAMcmaps.agaveglitch)
                             # save the figure
-                            savename = "{}_kappa_{}.png".format(label, idegarr)
+                            savename = "{}_kappa_{}.{}".format(label, idegarr, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -2144,7 +2290,8 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.tight_layout()
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
 
@@ -2171,7 +2318,7 @@ if __name__ == "__main__":
                     if verbose:
                         print('Loading '+kappa_files[ki][0])
                     eagle_kappa_map = eagle_model[0]
-                    # eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+                    eagle_kappa_map = np.flip(eagle_kappa_map, 0)
                     eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
                     eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
                     # chi2 kappa maps
@@ -2181,6 +2328,7 @@ if __name__ == "__main__":
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{:04d}".format(i)
                             m = recon_src.gls.models[ichi2]
+                            plt.figure(figsize=(5, 5))
                             kappa_profile_plot(m, correct_distances=True,
                                                kappa1_line=True, einstein_radius_indicator=True,
                                                label=ki, color=GLEAMcolors.blue, ls='-')
@@ -2189,7 +2337,7 @@ if __name__ == "__main__":
                                                maprad=eagle_maprad, color=GLEAMcolors.red, ls='-')
                             plt.tight_layout()
                             # save the figure
-                            savename = "{}_kappa_profile_{}.png".format(label, ichi2)
+                            savename = "{}_kappa_profile_{}.{}".format(label, ichi2, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -2206,7 +2354,7 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered arrival time surface
@@ -2216,6 +2364,7 @@ if __name__ == "__main__":
                         for i, idegarr in enumerate(scalarRoche_sorted[::-1]):
                             label = "scalarRoche_{:04d}".format(i)
                             m = recon_src.gls.models[idegarr]
+                            plt.figure(figsize=(5, 5))
                             kappa_profile_plot(m, correct_distances=True,
                                                kappa1_line=True, einstein_radius_indicator=True,
                                                label=ki, color=GLEAMcolors.blue, ls='-')
@@ -2224,7 +2373,7 @@ if __name__ == "__main__":
                                                maprad=eagle_maprad, color=GLEAMcolors.red, ls='-')
                             plt.tight_layout()
                             # save the figure
-                            savename = "{}_kappa_profile_{}.png".format(label, idegarr)
+                            savename = "{}_kappa_profile_{}.{}".format(label, idegarr, extension)
                             if path is None:
                                 path = ""
                             if os.path.exists(os.path.join(path, ki)):
@@ -2241,6 +2390,6 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True)
                             # plt.show()
                             plt.close()
