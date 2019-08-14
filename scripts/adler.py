@@ -6,6 +6,7 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__
 sys.path.append(root)
 import numpy as np
 import scipy
+import pandas as pd
 import time
 import pickle
 from functools import partial
@@ -17,7 +18,8 @@ from gleam.multilens import MultiLens
 from gleam.glass_interface import glass_renv, filter_env, export_state
 from gleam.utils.encode import an_sort
 from gleam.utils.lensing import downsample_model, upsample_model, radial_profile, \
-    DLSDS, complex_ellipticity, inertia_tensor, qpm_props, \
+    find_einstein_radius, kappa_profile, DLSDS, \
+    complex_ellipticity, inertia_tensor, qpm_props, \
     potential_grid, roche_potential_grid, roche_potential
 from gleam.utils.plotting import kappa_map_plot, kappa_profile_plot, kappa_profiles_plot, \
     roche_potential_plot, arrival_time_surface_plot, \
@@ -761,25 +763,26 @@ if __name__ == "__main__":
 
     # loop booleans
     RECONSRC_LOOP    = 0
-    CHI2_LOOP        = 1
-    K_DIFF_LOOP      = 1
+    CHI2_LOOP        = 0
+    K_DIFF_LOOP      = 0
     QUADPM_LOOP      = 0
-    ABPHI_LOOP       = 1
-    ELLIPTICITY_LOOP = 1
+    ABPHI_LOOP       = 0
+    ELLIPTICITY_LOOP = 0
     ROCHE_LOOP       = 0
-    ROCHE_HIST_LOOP  = 1
-    ROCHE_MAP_LOOP   = 1
-    K_PROFILE_LOOP   = 1
-    CHI2VSROCHE_LOOP = 1
-    DATA_LOOP        = 1
-    SOURCE_LOOP      = 1
-    SYNTH_LOOP       = 1
-    ARRIV_LOOP       = 1
-    K_MAP_LOOP       = 1
-    K_TRUE_LOOP      = 1
-    INDIVIDUAL_LOOP  = 1
+    ROCHE_HIST_LOOP  = 0
+    ROCHE_MAP_LOOP   = 0
+    K_PROFILE_LOOP   = 0
+    CHI2VSROCHE_LOOP = 0
+    DATA_LOOP        = 0
+    SOURCE_LOOP      = 0
+    SYNTH_LOOP       = 0
+    ARRIV_LOOP       = 0
+    K_MAP_LOOP       = 0
+    K_TRUE_LOOP      = 0
+    INDIVIDUAL_LOOP  = 0
 
     ROCHE_DEBUG_LOOP = 0
+    TABLE_LOOP       = 1
 
     # not frequently used loops
     DIR_LOOP       = 0
@@ -1077,6 +1080,161 @@ if __name__ == "__main__":
                     # plt.title(name)
                     plt.savefig(savename, dpi=200, transparent=True)
                     plt.close()
+
+    # # create dataframes with various info for true kappa maps
+    if TABLE_LOOP:
+        print("### Creating pd.DataFrames for csv/tex exports")
+        k = keys
+        kwargs = dict(verbose=0)
+        path = os.path.join(anlysdir, sfiles_str)
+        obj_index = 0
+        head = ['Image system', 'Visible maxima', 'Tangential arcs', r'R$_{E}$ [arcsec]', 'a [arcsec]', 'b [arcsec]', r'$\phi$ [radians]']
+        data = {ki: [None]*len(head) for ki in k}
+        # Image number info
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                gls = glass.glcmds.loadstate(f)
+                gls.make_ensemble_average()
+                obj, dta = gls.ensemble_average['obj,data'][obj_index]
+                imgs = obj.sources[obj_index].images
+                N_min = sum([1 for i in imgs if i.parity == 0])
+                N_sad = sum([1 for i in imgs if i.parity == 1])
+                N_max = sum([1 for i in imgs if i.parity == 2])
+                maxidx = [i for i, img in enumerate(obj.sources[obj_index].images) if img.parity == 2]
+                maximum = obj.sources[obj_index].images[maxidx[0]] if maxidx else None
+                img_sys = '{}'.format(N_min+N_sad)
+                if N_min+N_sad == 4:
+                    img_sys = 'quad'
+                elif N_min+N_sad == 2:
+                    img_sys = 'double'
+                is_tangential = 1 if ki in ["H2S7A0B90G0", "H3S1A0B90G0", "H30S0A0B90G0", "H36S0A0B90G0"] else 0
+                data[ki][0] = img_sys
+                data[ki][1] = N_max
+                data[ki][2] = is_tangential
+                if kwargs.get('verbose', False):
+                    print(img_sys, N_max, is_tangential)
+        # R_E
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                eagle_model = fits.getdata(kappa_files[ki][0], header=True)
+                eagle_kappa_map = eagle_model[0]
+                eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+                eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
+                eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
+                eagle_mapextent = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
+                radii, profile = kappa_profile(eagle_kappa_map, correct_distances=False,
+                                               maprad=eagle_maprad)
+                r_E = find_einstein_radius(radii, profile)
+                data[ki][3] = "{:.2f}".format(r_E)
+                if kwargs.get('verbose', False):
+                    print(r_E)
+        # a, b, phi
+        loadname = 'qpms.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            qpms = pickle.load(f)
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                name = os.path.basename(f).replace(".state", "")
+                eq, gq = qpms[f]
+                ea, eb, ephi = qpm_props(eq, verbose=False)
+                data[ki][4] = r'{:.2f}'.format(ea)
+                data[ki][5] = r'{:.2f}'.format(eb)
+                data[ki][6] = r'{:.2f}'.format(ephi)
+                if kwargs.get('verbose', False):
+                    print(ea, eb, ephi)
+        df = pd.DataFrame.from_dict(data, orient='index', columns=head)
+        print(df.to_latex(bold_rows=1, encoding='utf-8', escape=False))
+
+                
+    # # create dataframes with various info for ensemble-averaged kappa maps
+    if TABLE_LOOP:
+        print("### Creating pd.DataFrames for csv/tex exports")
+        k = keys
+        kwargs = dict(verbose=0)
+        path = os.path.join(anlysdir, sfiles_str)
+        obj_index = 0
+        head = ['Image system', 'Visible maxima', 'Tangential arcs', r'R$_{E}$ [arcsec]', 'a [arcsec]', 'b [arcsec]', r'$\phi$ [radians]']
+        data = {ki: [None]*len(head) for ki in k}
+        # Image number info
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                gls = glass.glcmds.loadstate(f)
+                gls.make_ensemble_average()
+                obj, dta = gls.ensemble_average['obj,data'][obj_index]
+                imgs = obj.sources[obj_index].images
+                N_min = sum([1 for i in imgs if i.parity == 0])
+                N_sad = sum([1 for i in imgs if i.parity == 1])
+                N_max = sum([1 for i in imgs if i.parity == 2])
+                maxidx = [i for i, img in enumerate(obj.sources[obj_index].images) if img.parity == 2]
+                maximum = obj.sources[obj_index].images[maxidx[0]] if maxidx else None
+                img_sys = '{}'.format(N_min+N_sad)
+                if N_min+N_sad == 4:
+                    img_sys = 'quad'
+                elif N_min+N_sad == 2:
+                    img_sys = 'double'
+                is_tangential = 1 if ki in ["H2S7A0B90G0", "H3S1A0B90G0", "H30S0A0B90G0", "H36S0A0B90G0"] else 0
+                data[ki][0] = img_sys
+                data[ki][1] = N_max
+                data[ki][2] = is_tangential
+                if kwargs.get('verbose', False):
+                    print(img_sys, N_max, is_tangential)
+        # R_E
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                gls = glass.glcmds.loadstate(f)
+                gls.make_ensemble_average()
+                radii, profile = kappa_profile(gls.ensemble_average, obj_index=obj_index,
+                                               correct_distances=True)
+                r_E = find_einstein_radius(radii, profile)
+                data[ki][3] = "{:.2f}".format(r_E)
+                if kwargs.get('verbose', False):
+                    print(r_E)
+        # a, b, phi
+        loadname = 'qpms.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            qpms = pickle.load(f)
+        for ki in k:
+            files = sfiles[ki]
+            for f in files:
+                gls = glass.glcmds.loadstate(f)
+                gls.make_ensemble_average()
+                obj, dta = gls.ensemble_average['obj,data'][obj_index]
+                dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
+                maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+                mapextent = obj.basis.top_level_cell_size * (2*obj.basis.pixrad+1)
+                kappa = obj.basis._to_grid(dta['kappa'], 1)
+                kappa_grid = dlsds * kappa
+                ensqpm = inertia_tensor(kappa_grid, pixel_scale=obj.basis.top_level_cell_size, activation=0.25)
+                a, b, phi = qpm_props(ensqpm, verbose=False)
+                _, gq = qpms[f]
+                gprops = [qpm_props(q) for q in gq]
+                ga, gb, gphi = [p[0] for p in gprops], \
+                               [p[1] for p in gprops], \
+                               [p[2] for p in gprops]
+                a_ma, a_mi = max(ga), min(ga)
+                b_ma, b_mi = max(gb), min(gb)
+                phi_ma, phi_mi = max(gphi), min(gphi)
+                data[ki][4] = r"{:.2f} $\pm$ {:.2f}".format(a, max(abs(a-a_mi), abs(a-a_ma)))
+                data[ki][5] = r'{:.2f} $\pm$ {:.2f}'.format(b, max(abs(b-b_mi), abs(b-b_ma)))
+                data[ki][6] = r'{:1.2f} $\pm$ {:1.2f}'.format(phi, max(abs(phi-phi_mi), abs(phi-phi_ma)))
+                if kwargs.get('verbose', False):
+                    print(a, b, phi)
+        df = pd.DataFrame.from_dict(data, orient='index', columns=head)
+        print(df.to_latex(bold_rows=1, encoding='utf-8', escape=False))
+        
 
     # # complex ellipticity plots
     if ELLIPTICITY_LOOP:
@@ -1415,7 +1573,7 @@ if __name__ == "__main__":
                 minidx = sortedidcs[0]
                 maxidx = sortedidcs[-1]
                 # save target string template
-                savename = "Roche_potential_{{}}_{}.{}".format("", name, extension)
+                savename = "Roche_potential_{{}}_{n}.{e}".format("", n=name, e=extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):
@@ -1650,7 +1808,7 @@ if __name__ == "__main__":
                 plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>')
                 plt.tight_layout()
                 # save the figure
-                savename = "chi2_VS_scalarRoche_{}.{}".format(name, extensions)
+                savename = "chi2_VS_scalarRoche_{}.{}".format(name, extension)
                 if path is None:
                     path = ""
                 if os.path.exists(os.path.join(path, ki)):

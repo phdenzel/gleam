@@ -368,6 +368,9 @@ def inertia_tensor(kappa, pixel_scale=1, activation=None, com_correct=True):
         activation <float> - a threshold value below which pixel values are ignored
         com_correct <bool> - if True, the coordinates shift to the com
 
+    Return:
+        qpm <np.matrix object> - the quadrupole moment tensor
+
     Note:
         The diag. matrix will have a^2/4, b^2/4 (semi-major/semi-minor axes) as entries
     """
