@@ -759,7 +759,7 @@ if __name__ == "__main__":
     # sfiles = rsf25
     # sfiles_str = "rsf25"
 
-    extension = "eps"
+    extension = "pdf"
 
     # loop booleans
     RECONSRC_LOOP    = 0
@@ -767,22 +767,22 @@ if __name__ == "__main__":
     K_DIFF_LOOP      = 0
     QUADPM_LOOP      = 0
     ABPHI_LOOP       = 0
-    ELLIPTICITY_LOOP = 0
+    ELLIPTICITY_LOOP = 1
     ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 0
-    ROCHE_MAP_LOOP   = 0
-    K_PROFILE_LOOP   = 0
-    CHI2VSROCHE_LOOP = 0
-    DATA_LOOP        = 0
-    SOURCE_LOOP      = 0
-    SYNTH_LOOP       = 0
-    ARRIV_LOOP       = 0
-    K_MAP_LOOP       = 0
-    K_TRUE_LOOP      = 0
+    ROCHE_MAP_LOOP   = 1
+    K_PROFILE_LOOP   = 1
+    CHI2VSROCHE_LOOP = 1
+    DATA_LOOP        = 1
+    SOURCE_LOOP      = 1
+    SYNTH_LOOP       = 1
+    ARRIV_LOOP       = 1
+    K_MAP_LOOP       = 1
+    K_TRUE_LOOP      = 1
     INDIVIDUAL_LOOP  = 0
 
     ROCHE_DEBUG_LOOP = 0
-    TABLE_LOOP       = 1
+    TABLE_LOOP       = 0
 
     # not frequently used loops
     DIR_LOOP       = 0
@@ -944,7 +944,7 @@ if __name__ == "__main__":
                 # gather chi2 values
                 chi2 = chi2_analysis(recon_src, **kwargs)
                 sortedidcs = np.argsort(chi2)
-                plt.figure(figsize=(5.68, 5.392))
+                # plt.figure(figsize=(5.68, 5.392))
                 plt.hist(chi2, bins=20, color=GLEAMcolors.cyan_light, alpha=0.7, rwidth=0.85)
                 plt.grid(axis='y', alpha=0.5)
                 plt.xlabel(r'$\chi^{2}$')
@@ -995,7 +995,7 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print(savename)
-                plt.figure(figsize=(5.68, 5.392))
+                # plt.figure(figsize=(5.68, 5.392))
                 plt.hist(residuals[sf], color='#386BF1', alpha=0.7, rwidth=0.85)
                 # plt.xlim(left=0, right=200)
                 plt.ylim(bottom=0, top=int(0.3*len(residuals[sf])))
@@ -1066,7 +1066,7 @@ if __name__ == "__main__":
                         savename = os.path.join(path, savename)
                     if kwargs.get('verbose', False):
                         print(savename)
-                    plt.figure(figsize=(5.68, 5.392))
+                    # plt.figure(figsize=(5.68, 5.392))
                     plt.hist(gprop, bins=14, color=GLEAMcolors.red, alpha=0.7, rwidth=0.85)
                     plt.axvline(eprop, color=color_variant(GLEAMcolors.red, shift=-50))
                     if lbl[i] == 'phi':
@@ -1151,7 +1151,6 @@ if __name__ == "__main__":
                     print(ea, eb, ephi)
         df = pd.DataFrame.from_dict(data, orient='index', columns=head)
         print(df.to_latex(bold_rows=1, encoding='utf-8', escape=False))
-
                 
     # # create dataframes with various info for ensemble-averaged kappa maps
     if TABLE_LOOP:
@@ -1234,7 +1233,6 @@ if __name__ == "__main__":
                     print(a, b, phi)
         df = pd.DataFrame.from_dict(data, orient='index', columns=head)
         print(df.to_latex(bold_rows=1, encoding='utf-8', escape=False))
-        
 
     # # complex ellipticity plots
     if ELLIPTICITY_LOOP:
@@ -1291,9 +1289,9 @@ if __name__ == "__main__":
                                          contours=False, levels=6,
                                          cmap=GLEAMcolors.cmap_from_color(GLEAMcolors.blue),
                                          origin_marker=True, adjust_limits=True,
-                                         colorbar=True,
+                                         colorbar=False,
                                          label=ki, annotation_color='black')
-                plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
+                # plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
                 plt.savefig(savename, dpi=500, transparent=True)
                 plt.close()
@@ -1429,10 +1427,10 @@ if __name__ == "__main__":
                 levels = 25
                 eimg = axes[0].contourf(egx, egy, eagle_map, levels, **pltkw)
                 axes[0].set_title('EAGLE model', fontsize=12)
-                plt.colorbar(eimg, ax=axes[0])
+                # plt.colorbar(eimg, ax=axes[0])
                 gimg = axes[1].contourf(gx[0], gy[0], ens_avg[::-1, :], levels, **pltkw)
                 axes[1].set_title('Ensemble average', fontsize=12)
-                plt.colorbar(gimg, ax=axes[1])
+                # plt.colorbar(gimg, ax=axes[1])
                 # plt.colorbar(eimg, ax=axes.ravel().tolist(), shrink=0.9)
                 axes[0].set_aspect('equal')
                 axes[1].set_aspect('equal')
@@ -1512,7 +1510,7 @@ if __name__ == "__main__":
                 # ip = [sigma_product(eagle_degarr, gdegarr) for gdegarr in glass_degarrs]
                 ip = scalarRoche[sf]
                 name = os.path.basename(sf).replace(".state", "")
-                plt.figure(figsize=(5.68, 5.392))
+                # plt.figure(figsize=(5.68, 5.392))
                 plt.hist(ip, bins=14, color=GLEAMcolors.cyan_dark, alpha=0.7, rwidth=0.85)
                 plt.xlim(left=-1, right=1)
                 plot_labelbox(name, position='top left', color='black')
@@ -1594,7 +1592,7 @@ if __name__ == "__main__":
                           cmap=GLEAMcmaps.phoenix, alpha=0.75,
                           background='black',
                           levels=25, contours=True, linewidths=0.5,
-                          colorbar=True, label=ki, scalebar=True)
+                          colorbar=False, label=ki, scalebar=True)
                 # SEAGLE model
                 plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, eagle_degarr), **kw)
@@ -1741,7 +1739,7 @@ if __name__ == "__main__":
                         recon_src = pickle.load(f)
                 if kwargs.get('verbose', False):
                     print('Loading '+loadname)
-                plt.figure(figsize=(5.68, 5.392))
+                # plt.figure(figsize=(5.68, 5.392))
                 kappa_profiles_plot(recon_src.gls, as_range=True, cmap=GLEAMcmaps.agaveglitch,
                                     interpolate=100, levels=50,
                                     ensemble_average=False, correct_distances=True,
@@ -1801,11 +1799,11 @@ if __name__ == "__main__":
                 chi2 = chi2_analysis(recon_src, **kwargs)
                 ip = scalarRoche[sf]
                 # Plot chi2 vs scalar product
-                plt.figure(figsize=(5.68, 5.392))
+                # plt.figure(figsize=(5.68, 5.392))
                 plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite)
                 plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black')
-                plt.xlabel(r'$\chi^{2}$')
-                plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>')
+                plt.xlabel(r'$\chi^{2}$', fontsize=20)
+                plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>', fontsize=20)
                 plt.tight_layout()
                 # save the figure
                 savename = "chi2_VS_scalarRoche_{}.{}".format(name, extension)
@@ -1855,7 +1853,7 @@ if __name__ == "__main__":
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
                 plot_scalebar(extent[-1], length=1, position='bottom left', origin='center')
                 plt.axis('off')
-                plt.colorbar()
+                # plt.colorbar()
                 # save the figure
                 savename = "data_{}.{}".format(ki, extension)
                 if path is None:
@@ -1920,7 +1918,7 @@ if __name__ == "__main__":
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
                 plot_scalebar(r, length=0.1, position='bottom left', origin='center')
                 plt.axis('off')
-                plt.colorbar()
+                # plt.colorbar()
                 # save the figure
                 savename = "rconsrc_{}.{}".format(name, extension)
                 if path is None:
@@ -1983,7 +1981,7 @@ if __name__ == "__main__":
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
                 plot_scalebar(extent[-1], length=1, position='bottom left', origin='center')
                 plt.axis('off')
-                plt.colorbar()
+                # plt.colorbar()
                 # save the figure
                 savename = "synth_{}.{}".format(name, extension)
                 if path is None:
@@ -2054,7 +2052,7 @@ if __name__ == "__main__":
                 gls.make_ensemble_average()
                 m = gls.ensemble_average
                 plt.figure(figsize=(5, 5))
-                kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
+                kappa_map_plot(m, subcells=1, contours=1, colorbar=0, log=1,
                                oversample=True,
                                scalebar=True, label=ki,
                                cmap=GLEAMcmaps.agaveglitch)
@@ -2123,15 +2121,15 @@ if __name__ == "__main__":
             kappa1 = 0
             grid = np.log10(grid)
             grid[grid < clevels[0]] = clevels[0]+1e-6
-            plt.figure(figsize=(5, 5))
+            # plt.figure(figsize=(5, 5))
             plt.contourf(X, Y, grid, cmap=GLEAMcmaps.agaveglitch, antialiased=True,
                          extent=extent, origin='upper', levels=clevels)
-            ax = plt.gca()
             # colorbar
-            cbar = plt.colorbar()
-            lvllbls = ['{:2.1f}'.format(l) if i > 0 else '0'
-                       for (i, l) in enumerate(10**cbar._tick_data_values)]
-            cbar.ax.set_yticklabels(lvllbls)
+            # ax = plt.gca()
+            # cbar = plt.colorbar()
+            # lvllbls = ['{:2.1f}'.format(l) if i > 0 else '0'
+            #            for (i, l) in enumerate(10**cbar._tick_data_values)]
+            # cbar.ax.set_yticklabels(lvllbls)
             # single contour around kappa = 1
             plt.contour(X, Y, grid, levels=(kappa1,), colors=['k'],
                         extent=extent, origin='upper')
@@ -2204,7 +2202,7 @@ if __name__ == "__main__":
                             label = "chi2_{:04d}".format(i)
                             recon_src.chmdl(ichi2)
                             synth = recon_src.reproj_map(**kwargs)
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             plt.imshow(synth, cmap=GLEAMcmaps.vilux,
                                        interpolation='bicubic',
                                        origin='Lower', extent=extent,
@@ -2244,7 +2242,7 @@ if __name__ == "__main__":
                             label = "scalarRoche_{:04d}".format(i)
                             recon_src.chmdl(idegarr)
                             synth = recon_src.reproj_map(**kwargs)
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             plt.imshow(synth, cmap=GLEAMcmaps.vilux,
                                        interpolation='bicubic',
                                        origin='Lower', extent=extent,
@@ -2302,7 +2300,7 @@ if __name__ == "__main__":
                             m = recon_src.gls.models[ichi2]
                             cmap = GLEAMcmaps.reverse(GLEAMcmaps.aquaria,
                                                       set_under='white', set_over='white')
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             arrival_time_surface_plot(m, cmap=cmap, images_off=0,
                                                       contours_only=0, contours=1, levels=25,
                                                       min_contour_shift=0.1,
@@ -2339,7 +2337,7 @@ if __name__ == "__main__":
                             m = recon_src.gls.models[idegarr]
                             cmap = GLEAMcmaps.reverse(GLEAMcmaps.aquaria,
                                                       set_under='white', set_over='white')
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             arrival_time_surface_plot(m, cmap=cmap, images_off=0,
                                                       contours_only=0, contours=1, levels=25,
                                                       min_contour_shift=0.1,
@@ -2391,7 +2389,7 @@ if __name__ == "__main__":
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{:04d}".format(i)
                             m = recon_src.gls.models[ichi2]
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
                                            oversample=True,
                                            scalebar=True, label=ki,
@@ -2425,7 +2423,7 @@ if __name__ == "__main__":
                         for i, idegarr in enumerate(scalarRoche_sorted[::-1]):
                             label = "scalarRoche_{:04d}".format(i)
                             m = recon_src.gls.models[idegarr]
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
                                            oversample=True,
                                            scalebar=True, label=ki,
@@ -2486,7 +2484,7 @@ if __name__ == "__main__":
                         for i, ichi2 in enumerate(chi2_sorted):
                             label = "chi2_{:04d}".format(i)
                             m = recon_src.gls.models[ichi2]
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             kappa_profile_plot(m, correct_distances=True,
                                                kappa1_line=True, einstein_radius_indicator=True,
                                                label=ki, color=GLEAMcolors.blue, ls='-')
@@ -2522,7 +2520,7 @@ if __name__ == "__main__":
                         for i, idegarr in enumerate(scalarRoche_sorted[::-1]):
                             label = "scalarRoche_{:04d}".format(i)
                             m = recon_src.gls.models[idegarr]
-                            plt.figure(figsize=(5, 5))
+                            # plt.figure(figsize=(5, 5))
                             kappa_profile_plot(m, correct_distances=True,
                                                kappa1_line=True, einstein_radius_indicator=True,
                                                label=ki, color=GLEAMcolors.blue, ls='-')
