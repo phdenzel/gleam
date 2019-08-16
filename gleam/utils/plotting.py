@@ -338,6 +338,8 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None, origin='upper',
     if scalebar:
         plot_scalebar(R, length=1., position='bottom left', origin='center', color=color)
         plt.axis('off')
+        plt.gcf().axes[0].get_xaxis().set_visible(False)
+        plt.gcf().axes[0].get_yaxis().set_visible(False)
     if label is not None:
         plot_labelbox(label, position='top left', padding=(0.03, 0.03), color=color)
 
@@ -558,6 +560,8 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
     if scalebar:
         plot_scalebar(x.max(), length=1., position='bottom left', origin='center', color='white')
         plt.axis('off')
+        plt.gcf().axes[0].get_xaxis().set_visible(False)
+        plt.gcf().axes[0].get_yaxis().set_visible(False)
     if label is not None:
         plot_labelbox(label, position='top right', padding=(0.03, 0.03), color='white')
     plt.gca().set_aspect('equal')
@@ -645,6 +649,8 @@ def arrival_time_surface_plot(model, obj_index=0, src_index=0,
     if scalebar:
         plot_scalebar(R, length=1., position='bottom left', origin='center', color=color)
         plt.axis('off')
+        plt.gcf().axes[0].get_xaxis().set_visible(False)
+        plt.gcf().axes[0].get_yaxis().set_visible(False)
     if label is not None:
         plot_labelbox(label, position='top left', padding=(0.03, 0.03), color=color)
     plt.gca().set_aspect('equal')

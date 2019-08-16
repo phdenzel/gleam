@@ -680,7 +680,7 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    version = "v6"
+    version = "tests"
     home = os.path.expanduser("~")
     rdir = os.path.join(home, "adler")
     jsondir = os.path.join(rdir, "json")
@@ -968,7 +968,7 @@ if __name__ == "__main__":
                     print('Saving '+textname)
                 np.savetxt(textname, np.c_[chi2, sortedidcs], fmt='%12d', delimiter=' ',
                            newline=os.linesep)
-                plt.savefig(savename, dpi=200, transparent=True)
+                plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -1005,7 +1005,7 @@ if __name__ == "__main__":
                 # plt.title(name)
                 plot_labelbox(name, position='top right', color='black')
                 plt.tight_layout()
-                plt.savefig(savename, dpi=200, transparent=True)
+                plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                 plt.close()
 
     # # inertia tensor analysis
@@ -1078,7 +1078,7 @@ if __name__ == "__main__":
                     plot_labelbox(name, position='top left', color='black')
                     plt.tight_layout()
                     # plt.title(name)
-                    plt.savefig(savename, dpi=200, transparent=True)
+                    plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                     plt.close()
 
     # # create dataframes with various info for true kappa maps
@@ -1293,7 +1293,7 @@ if __name__ == "__main__":
                                          label=ki, annotation_color='black')
                 # plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 plt.close()
 
     # # complex ellipticity summary plot
@@ -1370,7 +1370,7 @@ if __name__ == "__main__":
             savename = os.path.join(path, savename)
         if kwargs.get('verbose', False):
             print(savename)
-        plt.savefig(savename, dpi=500, transparent=True)
+        plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
         plt.close()
 
     # # potential analysis
@@ -1445,7 +1445,7 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print(savename)
-                plt.savefig(savename, dpi=400, transparent=True)
+                plt.savefig(savename, dpi=400, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -1528,7 +1528,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print(savename)
                 
-                plt.savefig(savename, dpi=200, transparent=True)
+                plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -1600,7 +1600,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print(savename.format('true'))
                 plt.tight_layout()
-                plt.savefig(savename.format('true'), dpi=500, transparent=True)
+                plt.savefig(savename.format('true'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 # ensemble average model
@@ -1610,7 +1610,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print(savename.format('ens_avg'))
                 plt.tight_layout()
-                plt.savefig(savename.format('ens_avg'), dpi=500, transparent=True)
+                plt.savefig(savename.format('ens_avg'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 # best model
@@ -1620,7 +1620,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print(savename.format('best'))
                 plt.tight_layout()
-                plt.savefig(savename.format('best'), dpi=500, transparent=True)
+                plt.savefig(savename.format('best'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 # worst model
@@ -1630,7 +1630,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print(savename.format('worst'))
                 plt.tight_layout()
-                plt.savefig(savename.format('worst'), dpi=500, transparent=True)
+                plt.savefig(savename.format('worst'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -1762,7 +1762,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print('Saving '+savename)
                 print(savename)
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 plt.close()
 
     # # chi2 vs scalarRoche
@@ -1815,7 +1815,7 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print('Saving '+savename)
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -1853,6 +1853,8 @@ if __name__ == "__main__":
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
                 plot_scalebar(extent[-1], length=1, position='bottom left', origin='center')
                 plt.axis('off')
+                plt.gcf().axes[0].get_xaxis().set_visible(False)
+                plt.gcf().axes[0].get_yaxis().set_visible(False)
                 # plt.colorbar()
                 # save the figure
                 savename = "data_{}.{}".format(ki, extension)
@@ -1865,7 +1867,7 @@ if __name__ == "__main__":
                 if kwargs.get('verbose', False):
                     print('Saving '+savename)
                 plt.tight_layout()
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 break
@@ -1918,6 +1920,8 @@ if __name__ == "__main__":
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
                 plot_scalebar(r, length=0.1, position='bottom left', origin='center')
                 plt.axis('off')
+                plt.gcf().axes[0].get_xaxis().set_visible(False)
+                plt.gcf().axes[0].get_yaxis().set_visible(False)
                 # plt.colorbar()
                 # save the figure
                 savename = "rconsrc_{}.{}".format(name, extension)
@@ -1930,7 +1934,7 @@ if __name__ == "__main__":
                 if verbose:
                     print('Saving '+savename)
                 plt.tight_layout()
-                plt.savefig(savename, dpi=200, transparent=True)
+                plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -1981,6 +1985,8 @@ if __name__ == "__main__":
                 plot_labelbox(ki, position='top right', padding=(0.04, 0.04))
                 plot_scalebar(extent[-1], length=1, position='bottom left', origin='center')
                 plt.axis('off')
+                plt.gcf().axes[0].get_xaxis().set_visible(False)
+                plt.gcf().axes[0].get_yaxis().set_visible(False)
                 # plt.colorbar()
                 # save the figure
                 savename = "synth_{}.{}".format(name, extension)
@@ -1993,7 +1999,7 @@ if __name__ == "__main__":
                 if verbose:
                     print('Saving '+savename)
                 plt.tight_layout()
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -2031,7 +2037,7 @@ if __name__ == "__main__":
                 if verbose:
                     print('Saving '+savename)
                 plt.tight_layout()
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -2067,7 +2073,7 @@ if __name__ == "__main__":
                 if verbose:
                     print('Saving '+savename)
                 plt.tight_layout()
-                plt.savefig(savename, dpi=500, transparent=True)
+                plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -2138,6 +2144,8 @@ if __name__ == "__main__":
             # scale bar and label
             plot_scalebar(maprad, length=1, position='bottom left', origin='center')
             plt.axis('off')
+            plt.gcf().axes[0].get_xaxis().set_visible(False)
+            plt.gcf().axes[0].get_yaxis().set_visible(False)
             plot_labelbox(ki, position='top left', padding=(0.03, 0.03))
             # save figure
             savename = "kappa_true_{}.{}".format(ki, extension)
@@ -2150,7 +2158,7 @@ if __name__ == "__main__":
             if verbose:
                 print('Saving '+savename)
             plt.tight_layout()
-            plt.savefig(savename, dpi=500, transparent=True)
+            plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
             plt.close()
 
     # # Individual model plots
@@ -2210,6 +2218,8 @@ if __name__ == "__main__":
                             plot_scalebar(extent[-1], length=1,
                                           position='bottom left', origin='center')
                             plt.axis('off')
+                            plt.gcf().axes[0].get_xaxis().set_visible(False)
+                            plt.gcf().axes[0].get_yaxis().set_visible(False)
                             plot_labelbox(ki, position='top left', padding=(0.04, 0.04))
                             plt.colorbar()
                             # save the figure
@@ -2231,7 +2241,7 @@ if __name__ == "__main__":
                             if verbose:
                                 print('Saving '+savename)
                             plt.tight_layout()
-                            plt.savefig(savename, dpi=500, transparent=True)
+                            plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered synths
@@ -2250,6 +2260,8 @@ if __name__ == "__main__":
                             plot_scalebar(extent[-1], length=1,
                                           position='bottom left', origin='center')
                             plt.axis('off')
+                            plt.gcf().axes[0].get_xaxis().set_visible(False)
+                            plt.gcf().axes[0].get_yaxis().set_visible(False)
                             plot_labelbox(ki, position='top left', padding=(0.04, 0.04))
                             plt.colorbar()
                             # save the figure
@@ -2271,7 +2283,7 @@ if __name__ == "__main__":
                             if verbose:
                                 print('Saving '+savename)
                             plt.tight_layout()
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
 
@@ -2325,7 +2337,7 @@ if __name__ == "__main__":
                             if verbose:
                                 print('Saving '+savename)
                             plt.tight_layout()
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered arrival time surface
@@ -2362,7 +2374,7 @@ if __name__ == "__main__":
                             if verbose:
                                 print('Saving '+savename)
                             plt.tight_layout()
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
 
@@ -2413,7 +2425,7 @@ if __name__ == "__main__":
                             if verbose:
                                 print('Saving '+savename)
                             plt.tight_layout()
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered arrival time surface
@@ -2447,7 +2459,7 @@ if __name__ == "__main__":
                             if verbose:
                                 print('Saving '+savename)
                             plt.tight_layout()
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
 
@@ -2510,7 +2522,7 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
                     # Roche scalar ordered arrival time surface
@@ -2546,6 +2558,6 @@ if __name__ == "__main__":
                                 savename = os.path.join(path, sig, savename)
                             if verbose:
                                 print('Saving '+savename)
-                            plt.savefig(savename, dpi=200, transparent=True)
+                            plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                             # plt.show()
                             plt.close()
