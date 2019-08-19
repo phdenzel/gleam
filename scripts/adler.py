@@ -680,7 +680,7 @@ def degarr_loop(keys, kappa_files, states, method='e2g', N=85,
 
 if __name__ == "__main__":
     # root directories
-    version = "tests"
+    version = "v6"
     home = os.path.expanduser("~")
     rdir = os.path.join(home, "adler")
     jsondir = os.path.join(rdir, "json")
@@ -768,18 +768,19 @@ if __name__ == "__main__":
     QUADPM_LOOP      = 0
     ABPHI_LOOP       = 0
     ELLIPTICITY_LOOP = 1
+    ELLIPTC_ALL_LOOP = 0
     ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 0
-    ROCHE_MAP_LOOP   = 1
+    ROCHE_MAP_LOOP   = 0
     K_PROFILE_LOOP   = 1
     CHI2VSROCHE_LOOP = 1
-    DATA_LOOP        = 1
-    SOURCE_LOOP      = 1
-    SYNTH_LOOP       = 1
-    ARRIV_LOOP       = 1
-    K_MAP_LOOP       = 1
-    K_TRUE_LOOP      = 1
-    INDIVIDUAL_LOOP  = 0
+    DATA_LOOP        = 0
+    SOURCE_LOOP      = 0
+    SYNTH_LOOP       = 0
+    ARRIV_LOOP       = 0
+    K_MAP_LOOP       = 0
+    K_TRUE_LOOP      = 0
+    INDIVIDUAL_LOOP  = 1
 
     ROCHE_DEBUG_LOOP = 0
     TABLE_LOOP       = 0
@@ -1290,14 +1291,14 @@ if __name__ == "__main__":
                                          cmap=GLEAMcolors.cmap_from_color(GLEAMcolors.blue),
                                          origin_marker=True, adjust_limits=True,
                                          colorbar=False,
-                                         label=ki, annotation_color='black')
+                                         label=ki, fontsize=14, annotation_color='black')
                 # plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
                 plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 plt.close()
 
     # # complex ellipticity summary plot
-    if ELLIPTICITY_LOOP:
+    if ELLIPTC_ALL_LOOP:
         print("### Plotting complex ellipticity summary plot")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1354,6 +1355,7 @@ if __name__ == "__main__":
             lim = 1.1 * max(np.abs(ax.get_ylim()+ax.get_xlim()))
             plt.xlim(left=-lim, right=lim)
             plt.ylim(bottom=-lim, top=lim)
+        leg = None
         if kwargs['legend']:
             leg = plt.legend([p[-1] for p in plots], labels,
                              loc='upper left',
@@ -1371,6 +1373,8 @@ if __name__ == "__main__":
         if kwargs.get('verbose', False):
             print(savename)
         plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+        if leg is not None:
+            leg.remove()
         plt.close()
 
     # # potential analysis
@@ -1744,7 +1748,7 @@ if __name__ == "__main__":
                                     interpolate=100, levels=50,
                                     ensemble_average=False, correct_distances=True,
                                     kappa1_line=True, einstein_radius_indicator=True,
-                                    label=ki)
+                                    label=ki, fontsize=14)
                 eagle_kappa_map = eagle_model[0]
                 eagle_kappa_map = np.flip(eagle_kappa_map, 0)
                 eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
@@ -1802,8 +1806,8 @@ if __name__ == "__main__":
                 # plt.figure(figsize=(5.68, 5.392))
                 plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite)
                 plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black')
-                plt.xlabel(r'$\chi^{2}$', fontsize=20)
-                plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>', fontsize=20)
+                plt.xlabel(r'$\chi^{2}$', fontsize=14)
+                plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>', fontsize=14)
                 plt.tight_layout()
                 # save the figure
                 savename = "chi2_VS_scalarRoche_{}.{}".format(name, extension)
@@ -2288,7 +2292,7 @@ if __name__ == "__main__":
                             plt.close()
 
                 # # Best/worst arrival time surfaces
-                if 1:
+                if 0:
                     name = os.path.basename(sf).replace(".state", "")
                     path = os.path.join(anlysdir, sfiles_str)
                     loadname = "reconsrc_{}.pkl".format(name)
@@ -2379,7 +2383,7 @@ if __name__ == "__main__":
                             plt.close()
 
                 # # Best/worst kappa maps
-                if 1:
+                if 0:
                     path = os.path.join(anlysdir, sfiles_str)
                     name = os.path.basename(sf).replace(".state", "")
                     loadname = "reconsrc_{}.pkl".format(name)
@@ -2464,7 +2468,7 @@ if __name__ == "__main__":
                             plt.close()
 
                 # # Best/worst kappa profiles
-                if 1:
+                if 0:
                     path = os.path.join(anlysdir, sfiles_str)
                     name = os.path.basename(sf).replace(".state", "")
                     loadname = "reconsrc_{}.pkl".format(name)

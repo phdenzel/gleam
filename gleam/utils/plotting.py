@@ -399,7 +399,7 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
                         kappa1_line=True, einstein_radius_indicator=True, maprad=None,
                         hilite_color=GLEAMcolors.red, annotation_color='black',
                         levels=20, cmap=GLEAMcmaps.agaveglitch,
-                        adjust_limits=True, label=None,
+                        adjust_limits=True, label=None, fontsize=None,
                         **kwargs):
     """
     Plot all kappa profiles of a GLASS ensemble model either as lines or 2D histogram contours
@@ -467,8 +467,8 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
                     transform=ax.transAxes, fontsize=14, color=annotation_color)
     if label is not None:
         plot_labelbox(label, position='top right', padding=(0.03, 0.03), color=annotation_color)
-    plt.xlabel('R [arcsec]')
-    plt.ylabel(r'$\kappa_{<\mathsf{R}}$', fontsize=18)
+    plt.xlabel('R [arcsec]', fontsize=fontsize)
+    plt.ylabel(r'$\kappa_{<\mathsf{R}}$', fontsize=fontsize)
     return plots, profiles, radii
 
 
@@ -738,8 +738,8 @@ def complex_ellipticity_plot(epsilon,
                              ls=None, lss=['-'],
                              contours=False, levels=10, cmap=None,
                              origin_marker=True, adjust_limits=True,
-                             label=None, annotation_color='black', legend=None,
-                             colorbar=False):
+                             label=None, fontsize=None, annotation_color='black',
+                             legend=None, colorbar=False):
     """
     Plot the complex ellipticity scatter plot of a number of ensemble models
 
@@ -827,6 +827,6 @@ def complex_ellipticity_plot(epsilon,
         plt.xlim(left=-lim, right=lim)
         plt.ylim(bottom=-lim, top=lim)
         plt.gca().set_aspect('equal')
-    plt.xlabel(r'$\mathrm{\mathsf{Re\,\epsilon}}$')
-    plt.ylabel(r'$\mathrm{\mathsf{Im\,\epsilon}}$')
+    plt.xlabel(r'$\mathrm{\mathsf{Re\,\epsilon}}$', fontsize=fontsize)
+    plt.ylabel(r'$\mathrm{\mathsf{Im\,\epsilon}}$', fontsize=fontsize)
     return plots
