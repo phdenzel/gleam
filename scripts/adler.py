@@ -26,6 +26,7 @@ from gleam.utils.plotting import kappa_map_plot, kappa_profile_plot, kappa_profi
     complex_ellipticity_plot, \
     plot_scalebar, plot_labelbox, plot_annulus, plot_annulus_region
 from gleam.utils.linalg import sigma_product, sigma_product_map
+from gleam.utils.rgb_map import radial_mask
 from gleam.utils.makedir import mkdir_p
 from gleam.utils.colors import GLEAMcmaps, GLEAMcolors, color_variant
 glass = glass_renv()
@@ -749,8 +750,8 @@ if __name__ == "__main__":
     # print(states)
     kappa_files = {k: [f for f in ls_kappas if k in f] for k in keys}
     psf_file = os.path.join(lensdir, "psf.fits")
-    
-    sfiles = states  
+
+    sfiles = states
     sfiles_str = "states"
     # sfiles = synthf10
     # sfiles_str = "synthf10"
@@ -771,7 +772,7 @@ if __name__ == "__main__":
     ELLIPTC_ALL_LOOP = 0
     ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 0
-    ROCHE_MAP_LOOP   = 0
+    ROCHE_MAP_LOOP   = 1
     K_PROFILE_LOOP   = 0
     CHI2VSROCHE_LOOP = 0
     DATA_LOOP        = 0
@@ -780,7 +781,8 @@ if __name__ == "__main__":
     ARRIV_LOOP       = 0
     K_MAP_LOOP       = 0
     K_TRUE_LOOP      = 0
-    INDIVIDUAL_LOOP  = 1
+    INDIVIDUAL_LOOP  = 0
+    SYNTHS_ONLY      = 0
 
     ROCHE_DEBUG_LOOP = 0
     TABLE_LOOP       = 0
@@ -1531,7 +1533,6 @@ if __name__ == "__main__":
                     savename = os.path.join(path, savename)
                 if kwargs.get('verbose', False):
                     print(savename)
-                
                 plt.savefig(savename, dpi=200, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
@@ -1591,50 +1592,57 @@ if __name__ == "__main__":
                 min_model = glass_degarrs[minidx]  # worst model
                 _, _, avg_model = roche_potential(gls.ensemble_average, N=85)
                 # some defaults
-                def five(grid): return 5
-                kw = dict(log=True, zero_level='center', cmax=five,
-                          cmap=GLEAMcmaps.phoenix, alpha=0.75,
-                          background='black',
-                          levels=25, contours=True, linewidths=0.5,
-                          colorbar=False, label=ki, scalebar=True)
+                def five(grid):
+                    msk = radial_mask(grid, radius=int(0.8*grid.shape[0]*0.5))
+                    return np.max(grid[msk])
+                kw = dict(log=1, zero_level='center', cmax=five,
+                          cmap=GLEAMcmaps.phoenix, alpha=0.2,
+                          background=None, color='black',
+                          levels=25, contours=1, linewidths=1.5,
+                          contours_only=0,
+                          clabels=1, colorbar=0, label=ki, scalebar=1)
                 # SEAGLE model
                 plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, eagle_degarr), **kw)
-                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.8, lw=2)
                 if kwargs.get('verbose', False):
                     print(savename.format('true'))
                 plt.tight_layout()
-                plt.savefig(savename.format('true'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+                plt.savefig(savename.format('true'), dpi=500, transparent=True,
+                            bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 # ensemble average model
                 plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, avg_model), **kw)
-                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.8, lw=2)
                 if kwargs.get('verbose', False):
                     print(savename.format('ens_avg'))
                 plt.tight_layout()
-                plt.savefig(savename.format('ens_avg'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+                plt.savefig(savename.format('ens_avg'), dpi=500, transparent=True,
+                            bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 # best model
                 plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, max_model), **kw)
-                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.8, lw=2)
                 if kwargs.get('verbose', False):
                     print(savename.format('best'))
                 plt.tight_layout()
-                plt.savefig(savename.format('best'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+                plt.savefig(savename.format('best'), dpi=500, transparent=True,
+                            bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
                 # worst model
                 plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, min_model), **kw)
-                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.2, lw=1)
+                plot_annulus((0.5, 0.5), 0.7*0.5, color='black', alpha=0.8, lw=2)
                 if kwargs.get('verbose', False):
                     print(savename.format('worst'))
                 plt.tight_layout()
-                plt.savefig(savename.format('worst'), dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+                plt.savefig(savename.format('worst'), dpi=500, transparent=True,
+                            bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
 
@@ -2166,7 +2174,6 @@ if __name__ == "__main__":
             plt.close()
 
     # # Individual model plots
-    SYNTHS_ONLY = 1
     if INDIVIDUAL_LOOP:
         print("### Plotting chi2 synthetics, arrival-time surfaces, kappa maps "
               + "of all individual models")

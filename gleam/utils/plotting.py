@@ -474,10 +474,11 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
 
 def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level='min',
                          contours=True, contours_only=False,
-                         levels=50, cmin=np.min, cmax=np.max,
+                         levels=50, cmin=np.nanmin, cmax=np.nanmax,
                          cmap=GLEAMcmaps.reverse(GLEAMcmaps.phoenix),
-                         background=None,
-                         scalebar=False, label=None, colorbar=False, **kwargs):
+                         background=None, color='white',
+                         clabels=False, scalebar=False, label=None, colorbar=False,
+                         **kwargs):
     """
     Plot the Roche potential data in a standardized manner
 
@@ -511,10 +512,10 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
         def identity(grid): return 1
         level_shift = identity
     elif zero_level == 'min':
-        def mival(grid): return grid.min()
+        def mival(grid): return np.nanmin(grid)
         level_shift = mival
     elif zero_level == 'max':
-        def maval(grid): return grid.max()
+        def maval(grid): return np.nanmax(grid)
         level_shift = maval
     else:  # == 'center'
         def cval(grid): return grid[grid.shape[0]//2, grid.shape[1]//2]
@@ -526,10 +527,10 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
         def cval(grid): return grid[grid.shape[0]//2, grid.shape[1]//2]
         norm = cval
     elif norm_level == 'max':
-        def maval(grid): return grid.max()
+        def maval(grid): return np.nanmax(grid)
         norm = maval
     else:  # == 'min'
-        def mival(grid): return -grid.min()
+        def mival(grid): return -np.nanmin(grid)
         norm = mival
     # adjust potential level and normalization
     grid = grid - level_shift(grid)
@@ -537,7 +538,7 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
     # contour levels
     if log:
         mi, ma = cmin(grid), cmax(grid)
-        clevels = np.logspace(np.log10(1), np.log10(1+ma-mi), levels)
+        clevels = np.logspace(np.log10(1), np.log10(1+abs(ma-mi)), levels)
         clevels = clevels - 1 + mi
     else:
         clevels = np.linspace(cmin(grid), cmax(grid), levels)
@@ -549,21 +550,26 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
         kwargs.setdefault('origin', 'upper')
         kwargs.setdefault('extent', [x.min(), x.max(), y.min(), y.max()])
         lw = kwargs.pop('linewidths', 0.5)
-        plt.contour(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap),
-                    extent=kwargs.get('extent'), origin=kwargs.get('origin'), linewidths=lw)
+        cs = plt.contour(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap),
+                         extent=kwargs.get('extent'), origin=kwargs.get('origin'), linewidths=lw)
     if not contours_only:
         plt.contourf(grid, levels=clevels, cmap=GLEAMcmaps.reverse(cmap), **kwargs)
     # annotations and amendments
     if colorbar:
         cbar = plt.colorbar()
         cbar.set_alpha(1)
+    if clabels and (contours or contours_only):
+        plt.clabel(cs, cs.levels[-1:], fmt='%2.1f', inline=True,
+                   alpha=0.75, fontsize=10)
+        plt.clabel(cs, cs.levels[:1], fmt='%2.1f', inline=True,
+                   alpha=0.75, fontsize=10)
     if scalebar:
-        plot_scalebar(x.max(), length=1., position='bottom left', origin='center', color='white')
+        plot_scalebar(x.max(), length=1., position='bottom left', origin='center', color=color)
         plt.axis('off')
         plt.gcf().axes[0].get_xaxis().set_visible(False)
         plt.gcf().axes[0].get_yaxis().set_visible(False)
     if label is not None:
-        plot_labelbox(label, position='top right', padding=(0.03, 0.03), color='white')
+        plot_labelbox(label, position='top right', padding=(0.03, 0.03), color=color)
     plt.gca().set_aspect('equal')
 
 
