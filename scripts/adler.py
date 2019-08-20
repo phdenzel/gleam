@@ -767,13 +767,13 @@ if __name__ == "__main__":
     K_DIFF_LOOP      = 0
     QUADPM_LOOP      = 0
     ABPHI_LOOP       = 0
-    ELLIPTICITY_LOOP = 1
+    ELLIPTICITY_LOOP = 0
     ELLIPTC_ALL_LOOP = 0
     ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 0
     ROCHE_MAP_LOOP   = 0
-    K_PROFILE_LOOP   = 1
-    CHI2VSROCHE_LOOP = 1
+    K_PROFILE_LOOP   = 0
+    CHI2VSROCHE_LOOP = 0
     DATA_LOOP        = 0
     SOURCE_LOOP      = 0
     SYNTH_LOOP       = 0
@@ -2166,6 +2166,7 @@ if __name__ == "__main__":
             plt.close()
 
     # # Individual model plots
+    SYNTHS_ONLY = 1
     if INDIVIDUAL_LOOP:
         print("### Plotting chi2 synthetics, arrival-time surfaces, kappa maps "
               + "of all individual models")
@@ -2178,7 +2179,7 @@ if __name__ == "__main__":
                     print(sf)
 
                 # # Best/worst synths
-                if 1:
+                if 1 or SYNTHS_ONLY:
                     name = os.path.basename(sf).replace(".state", "")
                     path = os.path.join(anlysdir, sfiles_str)
                     loadname = "reconsrc_{}.pkl".format(name)
@@ -2225,7 +2226,7 @@ if __name__ == "__main__":
                             plt.gcf().axes[0].get_xaxis().set_visible(False)
                             plt.gcf().axes[0].get_yaxis().set_visible(False)
                             plot_labelbox(ki, position='top left', padding=(0.04, 0.04))
-                            plt.colorbar()
+                            # plt.colorbar()
                             # save the figure
                             savename = "{}_synth_{}.{}".format(label, ichi2, extension)
                             if path is None:
@@ -2267,7 +2268,7 @@ if __name__ == "__main__":
                             plt.gcf().axes[0].get_xaxis().set_visible(False)
                             plt.gcf().axes[0].get_yaxis().set_visible(False)
                             plot_labelbox(ki, position='top left', padding=(0.04, 0.04))
-                            plt.colorbar()
+                            # plt.colorbar()
                             # save the figure
                             savename = "{}_synth_{}.{}".format(label, idegarr, extension)
                             if path is None:
@@ -2292,7 +2293,7 @@ if __name__ == "__main__":
                             plt.close()
 
                 # # Best/worst arrival time surfaces
-                if 0:
+                if 1 and not SYNTHS_ONLY:
                     name = os.path.basename(sf).replace(".state", "")
                     path = os.path.join(anlysdir, sfiles_str)
                     loadname = "reconsrc_{}.pkl".format(name)
@@ -2383,7 +2384,7 @@ if __name__ == "__main__":
                             plt.close()
 
                 # # Best/worst kappa maps
-                if 0:
+                if 1 and not SYNTHS_ONLY:
                     path = os.path.join(anlysdir, sfiles_str)
                     name = os.path.basename(sf).replace(".state", "")
                     loadname = "reconsrc_{}.pkl".format(name)
@@ -2406,7 +2407,7 @@ if __name__ == "__main__":
                             label = "chi2_{:04d}".format(i)
                             m = recon_src.gls.models[ichi2]
                             # plt.figure(figsize=(5, 5))
-                            kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
+                            kappa_map_plot(m, subcells=1, contours=1, colorbar=0, log=1,
                                            oversample=True,
                                            scalebar=True, label=ki,
                                            cmap=GLEAMcmaps.agaveglitch)
@@ -2440,7 +2441,7 @@ if __name__ == "__main__":
                             label = "scalarRoche_{:04d}".format(i)
                             m = recon_src.gls.models[idegarr]
                             # plt.figure(figsize=(5, 5))
-                            kappa_map_plot(m, subcells=1, contours=1, colorbar=1, log=1,
+                            kappa_map_plot(m, subcells=1, contours=1, colorbar=0, log=1,
                                            oversample=True,
                                            scalebar=True, label=ki,
                                            cmap=GLEAMcmaps.agaveglitch)
@@ -2468,7 +2469,7 @@ if __name__ == "__main__":
                             plt.close()
 
                 # # Best/worst kappa profiles
-                if 0:
+                if 1 and not SYNTHS_ONLY:
                     path = os.path.join(anlysdir, sfiles_str)
                     name = os.path.basename(sf).replace(".state", "")
                     loadname = "reconsrc_{}.pkl".format(name)
