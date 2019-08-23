@@ -780,10 +780,18 @@ class ReconSrc(object):
         dij = None
         if from_cache:
             dij = self._cache['reproj_d_ij'][self.obj_index][self.model_index]
+            self.r_max = self._cache['r_max'][self.obj_index][self.model_index]
+            self.M_fullres = self._cache['M_fullres'][self.obj_index][self.model_index]
+            self.r_fullres = self._cache['r_fullres'][self.obj_index][self.model_index]
+            self.N_nil = self._cache['N_nil'][self.obj_index][self.model_index]
         if dij is None:
             dp = self.d_p(flat=True, **kwargs)
             if cached:
                 Mij_p = self._cache['inv_proj'][self.obj_index][self.model_index]
+                self.r_max = self._cache['r_max'][self.obj_index][self.model_index]
+                self.M_fullres = self._cache['M_fullres'][self.obj_index][self.model_index]
+                self.r_fullres = self._cache['r_fullres'][self.obj_index][self.model_index]
+                self.N_nil = self._cache['N_nil'][self.obj_index][self.model_index]
             else:
                 Mij_p = self.inv_proj_matrix(cy_opt=kwargs.get('cy_opt', False))
                 self._cache['inv_proj'][self.obj_index][self.model_index] = Mij_p.copy()

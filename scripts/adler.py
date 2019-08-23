@@ -44,7 +44,7 @@ def mkdir_structure(keys, root=None):
         mkdir_p(d)
 
 
-def chi2_analysis(reconsrc, cy_opt=False, optimized=False, psf_file=None, verbose=False):
+def chi2_analysis(reconsrc, cy_opt=False, optimized=False, psf_file=None, reduced=False, verbose=False):
     """
     Args:
         reconsrc <ReconSrc object> - loaded object, preferentially with loaded cache
@@ -71,7 +71,7 @@ def chi2_analysis(reconsrc, cy_opt=False, optimized=False, psf_file=None, verbos
     # recalculate the chi2s
     kwargs = dict(reconsrc=reconsrc, percentiles=[], use_psf=True, psf_file=psf_file,
                   cy_opt=cy_opt, noise=dta_noise, sigma2=sgma2,
-                  reduced=False, return_obj=False, save=False, verbose=verbose)
+                  reduced=reduced, return_obj=False, save=False, verbose=verbose)
     _, _, chi2 = synthf(**kwargs)
     return chi2
 
@@ -507,7 +507,8 @@ def synth_loop(keys, jsons, states,
     return filtered_states
 
 
-def cache_loop(keys, jsons, states, path=None, variables=['inv_proj', 'N_nil', 'reproj_d_ij'],
+def cache_loop(keys, jsons, states, path=None, variables=[
+        'inv_proj', 'N_nil', 'r_max', 'M_fullres', 'r_fullres', 'reproj_d_ij'],
                save_obj=False, verbose=False):
     """
     Args:
@@ -772,9 +773,9 @@ if __name__ == "__main__":
     ELLIPTC_ALL_LOOP = 0
     ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 0
-    ROCHE_MAP_LOOP   = 1
+    ROCHE_MAP_LOOP   = 0
     K_PROFILE_LOOP   = 0
-    CHI2VSROCHE_LOOP = 0
+    CHI2VSROCHE_LOOP = 1
     DATA_LOOP        = 0
     SOURCE_LOOP      = 0
     SYNTH_LOOP       = 0
@@ -822,7 +823,8 @@ if __name__ == "__main__":
         print("### Reload cache and save as new pickle files")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
-        kwargs = dict(path=os.path.join(anlysdir, sfiles_str), variables=['inv_proj', 'N_nil'],
+        kwargs = dict(path=os.path.join(anlysdir, sfiles_str),
+                      variables=['inv_proj', 'N_nil', 'r_max', 'M_fullres', 'r_fullres', 'reproj_d_ij'],
                       save_obj=True, verbose=1)
         # sfiles = states
         cache_loop(k, jsons, sfiles, **kwargs)
@@ -1782,7 +1784,7 @@ if __name__ == "__main__":
         print("### Plotting chi2 vs scalar product scatter")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
-        kwargs = dict(optimized=True, psf_file=psf_file, verbose=1)
+        kwargs = dict(optimized=True, psf_file=psf_file, reduced=True, verbose=1)
         # sfiles = states
         path = os.path.join(anlysdir, sfiles_str)
         loadname = 'scalarRoche.pkl'
@@ -1812,7 +1814,7 @@ if __name__ == "__main__":
                 ip = scalarRoche[sf]
                 # Plot chi2 vs scalar product
                 # plt.figure(figsize=(5.68, 5.392))
-                plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite)
+                plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite, alpha=0.2)
                 plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black')
                 plt.xlabel(r'$\chi^{2}$', fontsize=14)
                 plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>', fontsize=14)
