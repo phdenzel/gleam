@@ -1522,7 +1522,8 @@ if __name__ == "__main__":
                 plt.hist(ip, bins=14, color=GLEAMcolors.cyan_dark, alpha=0.7, rwidth=0.85)
                 plt.xlim(left=-1, right=1)
                 plot_labelbox(name, position='top left', color='black')
-                plt.xlabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>')
+                plt.xlabel(r'$\langle\mathcal{P}, \mathcal{P}_{\mathsf{model}}\rangle$',
+                           fontsize=14)
                 plt.ylabel(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
                 # save the figure
@@ -1817,7 +1818,8 @@ if __name__ == "__main__":
                 plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite, alpha=0.2)
                 plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black')
                 plt.xlabel(r'$\chi^{2}$', fontsize=14)
-                plt.ylabel(r'<$\mathcal{P}, \mathcal{P}_{\mathsf{model}}$>', fontsize=14)
+                plt.ylabel(r'$\langle\mathcal{P}, \mathcal{P}_{\mathsf{model}}\rangle$',
+                           fontsize=14)
                 plt.tight_layout()
                 # save the figure
                 savename = "chi2_VS_scalarRoche_{}.{}".format(name, extension)
