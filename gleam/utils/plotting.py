@@ -12,12 +12,13 @@ import scipy.ndimage as ndimage
 from matplotlib import patches
 from matplotlib import pyplot as plt
 from matplotlib.colors import to_rgba
+from gleam.utils.lensing import LensModel
 from gleam.utils.lensing import DLSDS, kappa_profile, \
     interpolate_profile, find_einstein_radius
 from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
 from gleam.utils.rgb_map import radial_mask
-from gleam.glass_interface import glass_renv
-glass = glass_renv()
+# from gleam.glass_interface import glass_renv
+# glass = glass_renv()
 
 
 ###############################################################################
@@ -262,7 +263,68 @@ def plot_annulus_region(center=(0.5, 0.5), radius=0.5, color='white', alpha=0.2,
     return overlay
 
 
-def kappa_map_plot(model, obj_index=0, subcells=1, extent=None, origin='upper',
+def kappa_map_transf(model, obj_index=0, src_index=0, subcells=1, extent=None,
+                     levels=3, delta=0.2, log=True, oversample=True):
+    """
+    Transform data in preparation for plotting
+
+    Args:
+        model <glass.LensModel object> - GLASS ensemble model
+
+    Kwargs:
+        obj_index <int> - object index of the GLASS object within the model
+        subcells <int> - number of subcells
+        extent <tuple/list> - map extent
+        levels <int> - half-number of contours; total number w/ log is 2*N+1
+        delta <float> - contour distances
+        log <bool> - plot in log scale
+        oversample <bool> - oversample the map to show characteristic pixel structure
+
+    Return:
+        TODO
+    """
+    # if not isinstance(model, np.ndarray) or isinstance()
+    if isinstance(model, dict) and 'obj,data' in model:
+        obj, dta = model['obj,data'][obj_index]
+        dlsds = DLSDS(obj.z, obj.sources[src_index].z)
+        grid = dlsds * obj.basis._to_grid(dta['kappa'], subcells)
+        if extent is None:
+            # R = obj.basis.maprad
+            R = obj.basis.mapextent
+            extent = [-R, R, -R, R]
+            # pixrad = obj.basis.pixrad
+    else:
+        grid = 1*model
+        if extent is None:
+            extent = [-1, 1, -1, 1]
+    # masking if necessary
+    msk = grid != 0
+    if not np.any(msk):
+        vmin = -15
+        grid += 10**vmin
+    else:
+        vmin = np.log10(np.amin(grid[msk]))
+    # interpolate
+    zoomlvl = 3
+    order = 0
+    if oversample:
+        grid = ndimage.zoom(grid, zoomlvl, order=order)
+    grid[grid <= 10**vmin] = 10**vmin
+    # contour levels
+    clev2 = np.arange(delta, levels*delta, delta)
+    clevels = np.concatenate((-clev2[::-1], (0,), clev2))
+    if log:
+        kappa1 = 0
+        grid = np.log10(grid)
+        grid[grid < clevels[0]] = clevels[0]
+    else:
+        kappa1 = 1
+        clevels = np.concatenate(((0,), 10**clev2))
+    return grid, kappa1, clevels, extent
+
+
+def kappa_map_plot(model, obj_index=0, src_index=0, subcells=1,
+                   extent=None, origin='upper',
                    contours=False, levels=3, delta=0.2, log=True,
                    oversample=True,
                    scalebar=False, label=None, color='white',
@@ -290,37 +352,10 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None, origin='upper',
     Return:
         TODO
     """
-    obj, dta = model['obj,data'][obj_index]
-    dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
-    grid = dlsds * obj.basis._to_grid(dta['kappa'], subcells)
-    if extent is None:
-        # R = obj.basis.maprad
-        R = obj.basis.mapextent
-        extent = [-R, R, -R, R]
-    # pixrad = obj.basis.pixrad
-    # masking if necessary
-    msk = grid != 0
-    if not np.any(msk):
-        vmin = -15
-        grid += 10**vmin
-    else:
-        vmin = np.log10(np.amin(grid[msk]))
-    # interpolate
-    zoomlvl = 3
-    order = 0
-    if oversample:
-        grid = ndimage.zoom(grid, zoomlvl, order=order)
-    grid[grid <= 10**vmin] = 10**vmin
-    # contour levels
-    clev2 = np.arange(delta, levels*delta, delta)
-    clevels = np.concatenate((-clev2[::-1], (0,), clev2))
-    if log:
-        kappa1 = 0
-        grid = np.log10(grid)
-        grid[grid < clevels[0]] = clevels[0]
-    else:
-        kappa1 = 1
-        clevels = np.concatenate(((0,), 10**clev2))
+    grid, kappa1, clevels, extent = kappa_map_transf(
+        model, obj_index=obj_index, src_index=src_index, subcells=subcells,
+        extent=extent, levels=levels, delta=delta, log=log, oversample=oversample)
+    R = extent[1]  # wrong if grid is non-square
     # contours and surface plot
     if contours:
         plt.contour(grid, levels=(kappa1,), colors=['k'],
@@ -344,10 +379,117 @@ def kappa_map_plot(model, obj_index=0, subcells=1, extent=None, origin='upper',
         plot_labelbox(label, position='top left', padding=(0.03, 0.03), color=color)
 
 
+def kappa_ensemble_interactive(gls, obj_index=0, src_index=0, subcells=1,
+                               extent=None, levels=3, delta=0.2, log=True,
+                               oversample=True,
+                               cmap=None, add_slider=True, slider_index=0,
+                               savename="kappa_model.html"):
+    """
+    Create an interactive ensemble image plot with bokeh
+
+    Args:
+        gls <np.ndarray/glass state> - the convergence map data to be visualized
+
+    Kwargs:
+        obj_index <int> - object index of the GLASS object within the model
+        subcells <int> - number of subcells
+        extent <tuple/list> - map extent
+        levels <int> - (half-)number of contours; total number w/ log is 2*N+1
+        log <bool> - plot in log scale
+        oversample <bool> - oversample the map to show characteristic pixel structure
+        cmap <str/mpl.cm.ColorMap object> - color map for plotting
+        add_slider <bool> - show a slider at the bottom of the plot to choose the model
+        slider_index <int> - index at with which the slider starts
+        savename <str> - filename of the html file
+   """
+    from bokeh import layouts as bklo
+    from bokeh import plotting as bkpl
+    from bokeh import palettes as bkpalettes
+    from bokeh import models as bkmd
+    if isinstance(gls, np.ndarray) and len(gls.shape) == 3:
+        ensemble_data = np.array(gls, dtype=np.float32)
+        if extent is None:
+            extent = [-1, 1, -1, 1]
+    else:  # if isinstance(gls, object):
+        ensemble_data = []
+        for m in gls.models:
+            obj, dta = m['obj,data'][obj_index]
+            dlsds = DLSDS(obj.z, obj.sources[src_index].z)
+            # grid = dlsds * obj.basis._to_grid(dta['kappa'], subcells)
+            grid = dlsds * obj.basis.kappa_grid(dta)
+            ensemble_data.append(grid)
+        ensemble_data = np.array(ensemble_data, dtype=np.float32)
+        if extent is None:
+            # R = obj.basis.maprad
+            R = obj.basis.mapextent
+            extent = [-R, R, -R, R]
+            # pixrad = obj.basis.pixrad
+    # msg = "\n".join(["Ensemble data: {}", "obj idx: {}", "subcells: {}",
+    #                  "extent: {}", "levels: {}", "log: {}", "oversample: {}",
+    #                  "cmap: {}", "add slider: {}", "slider idx: {}",
+    #                  "savename: {}"]).format(
+    #                      ensemble_data.shape, obj_index, subcells, extent,
+    #                      levels, log, oversample, cmap, add_slider,
+    #                      slider_index, savename)
+    N = ensemble_data.shape[0]
+    ensemble_data = np.array([np.flipud(e) for e in ensemble_data])
+    img_data = np.array([
+        kappa_map_transf(m, obj_index=obj_index, subcells=subcells, extent=extent,
+                         levels=levels, delta=delta, log=log, oversample=oversample)[0]
+        for m in ensemble_data], dtype=np.float32)
+    x = np.linspace(extent[0], extent[1], img_data.shape[2])
+    y = np.linspace(extent[2], extent[3], img_data.shape[1])
+    source = bkmd.ColumnDataSource(data=dict(
+        images=[img_data],
+        image=[img_data[slider_index, :, :]],
+        kappa=[ensemble_data[slider_index, :, :]],
+        dimensions=[img_data[slider_index, :, :].shape],
+        x=[x[0]], y=[y[0]], dw=[abs(x[-1]-x[0])], dh=[abs(y[-1]-y[0])]))
+    p = bkpl.figure(tools="box_zoom,wheel_zoom,zoom_in,zoom_out,save,reset",
+                    tooltips=[("x", "$x"), ("y", "$y"), ("kappa", "@kappa")],
+                    x_range=extent[0:2], y_range=extent[-2:])
+    if cmap is None:
+        palette = GLEAMcmaps.palette('agaveglitch', 4*levels)
+    else:
+        if isinstance(cmap, str) and cmap.capitalize() in bkpalettes.all_palettes:
+            palette = bkpalettes.all_palettes[cmap.capitalize()][9]
+        elif hasattr(GLEAMcmaps, cmap):
+            palette = GLEAMcmaps.palette(cmap, 4*levels)
+        else:
+            palette = cmap
+
+    p.image(source=source, image='image', x='x', y='y', dw='dw', dh='dh',
+            palette=palette)
+    p.toolbar.logo = None
+
+    slider = bkmd.Slider(start=0, end=(N-1), value=slider_index, step=1,
+                         title="Ensemble model")
+    callback = bkmd.CustomJS(args=dict(source=source),
+                             code="""
+        var data = source.data;
+        var images = data['images'][0];
+        var image = data['image'][0];
+        var kappa = data['kappa'][0];
+        var L = data['dimensions'][0][0]*data['dimensions'][0][1];
+        var f = cb_obj.value;
+        var start = f*L;
+        var end = start+L;
+        image = images.slice(start, end);
+        source.data['image'] = [image];
+        source.data['kappa'] = [image.map(x => 10**x)];
+        source.change.emit();""")
+    slider.js_on_change('value', callback)
+
+    layout = bklo.column(p, slider)
+    bkpl.output_file(savename, title="Convergence map")
+    bkpl.save(layout, filename=savename, title="Convergence map")
+    # bkpl.show(layout)
+
+
 def kappa_profile_plot(model,
                        obj_index=0, correct_distances=True,
                        kappa1_line=True, einstein_radius_indicator=False,
-                       maprad=None,
+                       maprad=None, pixrad=None,
                        annotation_color='black', label=None,
                        **kwargs):
     """
@@ -374,9 +516,11 @@ def kappa_profile_plot(model,
     if isinstance(model, dict) and 'obj,data' in model:  # a glass model
         radii, profile = kappa_profile(model, obj_index=obj_index,
                                        correct_distances=correct_distances,
-                                       maprad=maprad)
+                                       maprad=maprad, pixrad=pixrad)
     elif isinstance(model, np.ndarray):  # kappa grid
-        radii, profile = kappa_profile(model, maprad=maprad)
+        radii, profile = kappa_profile(model,
+                                       correct_distances=correct_distances,
+                                       maprad=maprad, pixrad=pixrad)
     else:  # otherwise assume profile and radii were inputted
         radii, profile = model
     plot, = plt.plot(radii, profile, **kwargs)
@@ -396,7 +540,7 @@ def kappa_profile_plot(model,
 
 def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
                         correct_distances=True, interpolate=None,
-                        kappa1_line=True, einstein_radius_indicator=True, maprad=None,
+                        kappa1_line=True, einstein_radius_indicator=True, maprad=None, pixrad=None,
                         hilite_color=GLEAMcolors.red, annotation_color='black',
                         levels=20, cmap=GLEAMcmaps.agaveglitch,
                         adjust_limits=True, label=None, fontsize=None,
@@ -405,20 +549,34 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
     Plot all kappa profiles of a GLASS ensemble model either as lines or 2D histogram contours
 
     Args:
-        TODO
+        gls <GLASS.environment.Environment object /np.ndarray> - GLASS ensemble
+                                                                 or some other kappa grid models
+
+    Kwargs:
+        
     """
     # defaults
     kwargs.setdefault('lw', 1)
     kwargs.setdefault('ls', '-')
     kwargs.setdefault('color', GLEAMcolors.blue)
     kwargs.setdefault('alpha', 1)
+    # data
+    if isinstance(gls, np.ndarray):
+        data = gls
+        eavg = np.average(data, axis=0)
+    else:
+        data = gls.models
+        gls.make_ensemble_average()
+        eavg = gls.ensemble_average
     # output containers
     plots = []
     profiles = []
     radii = []
-    for m in gls.models:
+    ax = plt.gca()
+    for m in data:
         radius, profile = kappa_profile(m, obj_index=obj_index,
-                                        correct_distances=correct_distances, maprad=maprad)
+                                        correct_distances=correct_distances,
+                                        maprad=maprad, pixrad=pixrad)
         if interpolate > 1:
             radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
         if not as_range:
@@ -436,20 +594,23 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
         dens = H.T
         # levels = np.linspace(max(1, dens.min()), 0.9*dens.max(), levels)
         levels = np.logspace(0, 0.9*np.log10(dens.max()), levels)
-        # plt.imshow(dens, vmin=levels[0], vmax=levels[-1], cmap=cmap,
-        #            extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-        #            origin='lower', interpolation='gaussian')
+        plt.imshow(dens, vmin=levels[0], vmax=levels[-1], cmap=cmap,
+                   extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
+                   origin='lower', interpolation='gaussian')
         plt.contourf(dens, levels=levels, cmap=cmap,
                      extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]])
+        ax.set_aspect('auto')
     # radius, profile <- ensemble average
-    gls.make_ensemble_average()
-    radius, profile = kappa_profile(gls.ensemble_average, obj_index=obj_index,
-                                    correct_distances=correct_distances)
+    radius, profile = kappa_profile(eavg, obj_index=obj_index,
+                                    correct_distances=correct_distances,
+                                    maprad=maprad, pixrad=pixrad)
     if ensemble_average:
+        if interpolate > 1:
+            radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
         kw = dict(lw=1, ls='-', color=hilite_color, alpha=1)
         plot, radius, profile = kappa_profile_plot((radius, profile), obj_index=obj_index,
                                                    correct_distances=correct_distances,
-                                                   kappa1_line=False,
+                                                   kappa1_line=False, maprad=maprad, pixrad=pixrad,
                                                    annotation_color=annotation_color, **kw)
         plots.append(plot)
         profiles.append(profile)
@@ -458,11 +619,11 @@ def kappa_profiles_plot(gls, obj_index=0, ensemble_average=True, as_range=False,
         plt.axhline(1, lw=1, ls='-', color='black', alpha=0.5)
     if adjust_limits:
         plt.xlim(left=np.min(radius), right=np.max(radius))
+        # plt.ylim(bottom=np.min(profile), top=np.max(profiles))
     if einstein_radius_indicator:
         einstein_radius = find_einstein_radius(radius, profile)
         plt.axvline(einstein_radius, lw=1, ls='--', color=annotation_color, alpha=0.5)
         if label is not None:
-            ax = plt.gca()
             ax.text(1.025*einstein_radius/np.max(radius), 0.95, r'R$_{\mathsf{E}}$',
                     transform=ax.transAxes, fontsize=14, color=annotation_color)
     if label is not None:
@@ -503,6 +664,10 @@ def roche_potential_plot(data, N=85, log=False, zero_level='center', norm_level=
     """
     if isinstance(data, (tuple, list)):
         x, y, grid = data
+    elif isinstance(data, np.ndarray):
+        x = np.asarray([0, 1])
+        y = np.asarray([0, 1])
+        grid = data
     if isinstance(data, dict):
         pass
     # get zero level and normalization coordinates
@@ -612,6 +777,7 @@ def arrival_time_surface_plot(model, obj_index=0, src_index=0,
         extent = [-R, R, -R, R]
 
     # images
+    cmap = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
     min_clr = cmap(.8)
     sad_clr = cmap(.5)
     max_clr = cmap(.2)
