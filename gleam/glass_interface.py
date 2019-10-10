@@ -9,6 +9,9 @@ Is the GLASS half full or half empty?
 ###############################################################################
 import sys
 import os
+import re
+import getopt
+import numpy as np
 # from ctypes import cdll
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
@@ -22,7 +25,7 @@ if os.path.exists(libspath):
         lib = os.path.join(libspath, l)
         if lib not in sys.path or not any(['glass' in p for p in sys.path]):
             sys.path.insert(3, lib)
-
+import glass
 from glass.command import command, Commands
 from glass.environment import env, Environment
 from glass.exceptions import GLInputError
@@ -145,10 +148,12 @@ def glass_renv(**kwargs):
     Return:
         glass <module> - the glass environment as a module
     """
+    _, arglist = getopt.getopt(sys.argv[1:], 't:h', ['nw'])
     Environment.global_opts['ncpus_detected'] = _detect_cpus()
     Environment.global_opts['ncpus'] = 1
     Environment.global_opts['omp_opts'] = _detect_omp()
     Environment.global_opts['withgfx'] = True
+    Environment.global_opts['argv'] = arglist
     Commands.set_env(Environment())
     if 'threads' in kwargs and kwargs['threads'] >= 1:
         Environment.global_opts['ncpus'] = kwargs['threads']
@@ -253,6 +258,326 @@ def export_state(gls, selection=None, name="filtered.state"):
     else:
         state = gls
     state.savestate(name)
+
+
+def state2txt(gls, **kwargs):
+    """
+    Export a state model to a .txt file
+
+    Args:
+        env <glass.Environment object> - loaded glass state environment
+
+    Kwargs:
+        txtdata <np.ndarray> - preset data to write to the txt file
+        models <list(glass.model)> - glass input models, other than from the environment
+        obj_index <list(int)> - lens model index, in case more than one objects were modelled
+        src_index <int> - source model index, in case more than one sources were modelled
+        prop <str> - model grid property, e.g. ['kappa'|'arrival'|'potential'|'maginv'|'veldisp']
+        savename <str> - path of the exported file
+    """
+    statename = Environment.global_opts['argv'][0]
+    # extract options
+    txtdata = kwargs.pop('txtdata', [])
+    models = kwargs.pop('models', gls.models)
+    obj_index = kwargs.pop('obj_index', 0)
+    src_index = kwargs.pop('src_index', 0)
+    prop = kwargs.pop('prop', 'kappa')
+    savename = kwargs.pop('savename', None)
+    verbose = kwargs.pop('verbose', False)
+    if isinstance(obj_index, list):
+        for obji in obj_index:
+            if len(models[0]['obj,data']) <= obji:
+                continue
+            obj, data = models[0]['obj,data'][obji]
+            if isinstance(savename, list):
+                savename = savename[0]
+            else:
+                savename = os.path.join(os.path.dirname(statename),
+                                        "{:s}_{}.txt".format(obj.name, prop))
+            if verbose:
+                print("Object {:2d}: {:s}".format(obji, obj.name))
+            txtdta = 1*txtdata
+            dta, hdr = model2txt(txtdata=txtdta, models=models, prop=prop,
+                                 obj_index=obji, src_index=src_index,
+                                 savename=savename)
+            if verbose:
+                print(hdr)
+                print("Saving as {:s}...".format(savename))
+            # write to numpy txt file
+            np.savetxt(savename, dta, header=hdr)
+    elif isinstance(obj_index, int):
+        obj, data = models[0]['obj,data'][obj_index]
+        savename = savename if savename is not None else os.path.join(
+            os.path.dirname(statename), "{:s}_{}.txt".format(obj.name, prop))
+        if verbose:
+            print("Object {:2d}: {:s}".format(obj_index, obj.name))
+        dta, hdr = model2txt(txtdata=txtdata, models=models, prop=prop,
+                             obj_index=obj_index, src_index=src_index,
+                             savename=savename)
+        if verbose:
+            print(hdr)
+            print("Saving as {:s}...".format(savename))
+        # write to numpy txt file
+        np.savetxt(savename, dta, header=hdr)
+
+
+def model2txt(**kwargs):
+    """
+    Write ensemble models to a np.ndarray and a header string
+
+    Args:
+        None
+
+    Kwargs:
+        txtdata <np.ndarray> - preset data to write to the txt file
+        models <list(glass.model)> - glass input models, other than from the environment
+        obj_index <list(int)> - lens model index, in case more than one objects were modelled
+        src_index <int> - source model index, in case more than one sources were modelled
+        prop <str> - model grid property, e.g. ['kappa'|'arrival'|'potential'|'maginv'|'veldisp']
+
+    Return:
+        dta <np.ndarray> - data ready to be written to a txt file
+        hdr <str> - header with data info
+    """
+    from gleam.utils.lensing import DLSDS, dispersion_profile, roche_potential
+    txtdata = kwargs.pop('txtdata', [])
+    obj_index = kwargs.pop('obj_index', 0)
+    src_index = kwargs.pop('src_index', 0)
+    models = kwargs.pop('models', [])
+    prop = kwargs.pop('prop', 'kappa')
+    savename = os.path.basename(kwargs.pop('savename', ""))
+    if not txtdata:
+        for m in models:
+            obj, data = m['obj,data'][obj_index]
+            if prop == 'kappa':
+                pmap = obj.basis.kappa_grid(data)
+                comment = ["", "", ""]
+                correction = DLSDS(obj.z, obj.sources[0].z)
+            elif prop == 'potential':
+                pmap = obj.basis.potential_grid(data)
+                comment = ["", "", ""]
+                correction = 1
+            elif prop == 'arrival':
+                pmap = obj.basis.arrival_grid(data)[src_index]
+                comment = ["", "", ""]
+                correction = 1
+            elif prop == 'maginv':
+                pmap = obj.basis.maginv_grid(data)[src_index]
+                comment = ["", "", ""]
+                correction = 1
+            elif prop == 'roche':
+                gx, gy, pmap = roche_potential(m, obj_index=obj_index,
+                                               src_index=src_index)
+                comment = ["", "", ""]
+                correction = 1
+            elif prop == 'veldisp':
+                radii, profile = dispersion_profile(m, obj_index=obj_index)
+                pmap = np.stack((radii, profile), axis=0)
+                # comment will be appended to the header
+                comment = [">>> R, dispersion = data[0, :, :]  "
+                           + "# e.g. the first model's velocity dispersion",
+                           "R [light-seconds], dispersion [c]"]
+                correction = 1
+            pmap = correction*pmap if correction != 1 else pmap
+            txtdata.append(1*pmap)
+    if isinstance(txtdata, list):
+        txtdata = np.stack(txtdata, axis=0)
+    header = "\n".join(
+        ("{}".format(savename), "Usage:",
+         ">>> import numpy",
+         ">>> N_models, N, L = {}, {}, {}".format(txtdata.shape[0],
+                                                  txtdata.shape[1],
+                                                  txtdata.shape[2]),
+         ">>> data = numpy.loadtxt('{}')".format(savename),
+         ">>> data = data.reshape(N_models, N, L)"))
+    header = "\n".join([header, "\n".join(comment)])
+    txtdata = txtdata.reshape((txtdata.size))
+    # txtdata = txtdata.reshape((txtdata.shape[0]*txtdata.shape[1], txtdata.shape[2]))
+    return txtdata, header
+
+
+def state2fits(gls, **kwargs):
+    """
+    Export a state model to a .fits file
+
+    Args:
+        env <glass.Environment object> - loaded glass state environment
+
+    Kwargs:
+        fitsdata <np.ndarray> - preset data to write to the fits file
+        models <list(glass.model)> - glass input models, other than from the environment
+        obj_index <list(int)> - lens model index, in case more than one objects were modelled
+        src_index <int> - source model index, in case more than one sources were modelled
+        prop <str> - model grid property, e.g. ['kappa'|'arrival'|'potential'|'maginv']
+        savename <str> - path of the exported file
+
+    Return:
+        None
+    """
+    statename = Environment.global_opts['argv'][0]
+    # extract options
+    fitsdata = kwargs.pop('fitsdata', [])
+    models = kwargs.pop('models', gls.models)
+    obj_index = kwargs.pop('obj_index', 0)
+    src_index = kwargs.pop('src_index', 0)
+    prop = kwargs.pop('prop', 'kappa')
+    savename = kwargs.pop('savename', None)
+    verbose = kwargs.pop('verbose', False)
+    if isinstance(obj_index, list):
+        for obji in obj_index:
+            if len(models[0]['obj,data']) <= obji:
+                continue
+            obj, data = models[0]['obj,data'][obji]
+            if isinstance(savename, list):
+                savename = savename[0]
+            else:
+                savename = os.path.join(os.path.dirname(statename),
+                                        "{:s}_{}.fits".format(obj.name, prop))
+            if verbose:
+                print("Object {:2d}: {:s}".format(obji, obj.name))
+            fitsd = 1*fitsdata
+            hdu = model2hdu(fitsdata=fitsd, models=models, prop=prop,
+                            obj_index=obji, src_index=src_index,
+                            verbose=verbose)
+            if verbose:
+                print(hdu.header.tostring(sep='\n'))
+                print("Saving as {:s}...".format(savename))
+            hdu.writeto(savename)
+    elif isinstance(obj_index, int):
+        obj, data = models[0]['obj,data'][obj_index]
+        savename = savename if savename is not None else os.path.join(
+            os.path.dirname(statename), "{:s}_{}.fits".format(obj.name, prop))
+        if verbose:
+            print("Object {:2d}: {:s}".format(obj_index, obj.name))
+        hdu = model2hdu(fitsdata=fitsdata, models=models, prop=prop,
+                        obj_index=obj_index, src_index=src_index,
+                        verbose=verbose)
+        if verbose:
+            print(hdu.header.tostring(sep='\n'))
+            print("Saving as {:s}...".format(savename))
+        hdu.writeto(savename)
+
+
+def model2hdu(**kwargs):
+    """
+    Write ensemble models to an astropy.fits.PrimaryHDU data structure
+
+    Args:
+        None
+
+    Kwargs:
+        fitsdata <np.ndarray> - preset data to write to the fits file
+        models <list(glass.model)> - glass input models, other than from the environment
+        obj_index <list(int)> - lens model index, in case more than one objects were modelled
+        src_index <int> - source model index, in case more than one sources were modelled
+        prop <str> - model grid property, e.g. ['kappa', 'arrival', 'potential', 'maginv']
+
+    Return:
+        hdu <astropy.fits.PrimaryHDU object> - data ready to be written to a fits file
+    """
+    from astropy import wcs
+    from astropy.io import fits
+    from gleam.utils.lensing import DLSDS, dispersion_profile, roche_potential
+    fitsdata = kwargs.pop('fitsdata', [])
+    obj_index = kwargs.pop('obj_index', 0)
+    src_index = kwargs.pop('src_index', 0)
+    models = kwargs.pop('models', [])
+    prop = kwargs.pop('prop', 'kappa')
+    verbose = kwargs.pop('verbose', False)
+
+    N_models = len(models)
+    pix2deg_alt = None
+    if not fitsdata:
+        for i, m in enumerate(models):
+            if verbose:
+                message = "{:4d} / {:4d}\r".format(i+1, N_models)
+                sys.stdout.write(message)
+                sys.stdout.flush()
+            obj, data = m['obj,data'][obj_index]
+            if prop == 'kappa':
+                pmap = obj.basis.kappa_grid(data)
+                correction = DLSDS(obj.z, obj.sources[0].z)
+            elif prop == 'potential':
+                pmap = obj.basis.potential_grid(data)
+                correction = 1
+            elif prop == 'arrival':
+                pmap = obj.basis.arrival_grid(data)[src_index]
+                correction = 1
+            elif prop == 'maginv':
+                pmap = obj.basis.maginv_grid(data)[src_index]
+                correction = 1
+            elif prop == 'roche':
+                gx, gy, pmap = roche_potential(m, obj_index=obj_index,
+                                               src_index=src_index)
+                pix2deg_alt = [gx[-1, 0]/(pmap.shape[1]//2)/3600.,
+                               gy[-1, 0]/(pmap.shape[0]//2)/3600.]
+                correction = 1
+            pmap = correction*pmap if correction != 1 else pmap
+            fitsdata.append(1*pmap)
+    if isinstance(fitsdata, list):
+        fitsdata = np.stack(fitsdata, axis=0)
+    # set the wcs information
+    mapL = 2*obj.basis.mapextent
+    pix2deg = [direct*mapL/s/3600 for direct, s in zip([-1, 1], fitsdata.shape[1:])] \
+        if pix2deg_alt is None else pix2deg_alt
+    w = wcs.WCS(naxis=len(fitsdata.shape)-1)
+    w.wcs.ctype = ['deg', 'deg']
+    w.wcs.crpix = [d//2 for d in fitsdata.shape[1:]]
+    w.wcs.crval = [0, 0]
+    w.wcs.cd = np.array([[pix2deg[0], 0], [0, pix2deg[1]]])
+    w.wcs.crota = np.array([0, 0])
+    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    wdict = wcs2hdrdict(w.wcs)
+    # build header
+    hdu = fits.PrimaryHDU(fitsdata)
+    hdu.header.update(wdict)
+    hdu.header['COMMENT'] = "The ensemble model's {} grids; {} models along NAXIS3".format(prop, len(models))
+    hdu.header['COMMENT'] = "FITS (Flexible Image Transport System) format is defined in 'Astronomy  " \
+                            "and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H"
+    return hdu
+
+
+def wcs2hdrdict(wcs, hdr_defaults={}):
+    """
+    Convert astropy.wcs object into a fits header dictionary
+
+    Note:
+        wcs.to_header method annoyingly removes cd_matrix and reset cdelt attributes,
+        which is why this functions exists
+    """
+    import collections
+    hdr = collections.OrderedDict()
+    hdr['WCSAXES'] = (2, 'Number of World Coordinate System axes')
+    hdr['CRPIX1'] = 'Reference pixel for NAXIS1'
+    hdr['CRPIX2'] = 'Reference pixel for NAXIS2'
+    hdr['CRVAL1'] = '[deg] Coordinate value at reference point'
+    hdr['CRVAL2'] = '[deg] Coordinate value at reference point'
+    hdr['CTYPE1'] = 'Projection for NAXIS1'
+    hdr['CTYPE2'] = 'Projection for NAXIS2'
+    hdr['CUNIT1'] = 'Units of coordinate increment and value'
+    hdr['CUNIT2'] = 'Units of coordinate increment and value'
+    hdr['CROTA2'] = None
+    hdr['CD1_1'] = 'Linear projection matrix element'
+    hdr['CD1_2'] = 'Linear projection matrix element'
+    hdr['CD2_1'] = 'Linear projection matrix element'
+    hdr['CD2_2'] = 'Linear projection matrix element'
+    hdr.update(hdr_defaults)
+    wcs.to_header()
+    for k in hdr.keys():
+        key = ''.join([ki for ki in k if not ki.isdigit()]).replace('_', '')
+        idx = [int(i)-1 for i in re.sub("\D", "", k)]
+        if hasattr(wcs, key.lower()):
+            prop = wcs.__getattribute__(key.lower())
+            if hasattr(prop, '__len__'):
+                for i in idx:
+                    prop = prop[i]
+            if isinstance(hdr[k], (tuple, list)) and len(hdr[k]) == 2:
+                continue
+            if isinstance(prop, (int, float)):
+                hdr[k] = (prop, hdr[k])
+            else:
+                hdr[k] = (str(prop), hdr[k])
+    return hdr
 
 
 def parse_arguments():
