@@ -6,7 +6,7 @@ Better color module for more beautiful plots
 """
 import numpy as np
 import random
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, to_hex
 from matplotlib import pyplot as plt
 
 __all__ = ['color_variant', 'GLEAMcolors', 'GLEAMcmaps']
@@ -93,6 +93,8 @@ luminos1, luminos2, luminos3, luminos4 = '#9D72FF', '#FFB3FD', '#01FFFF', '#01FF
 stationary1, stationary2, stationary3, stationary4 = '#FE6B25', '#28CF75', '#EBF875', '#A0EDFF'
 prism1, prism2, prism3, prism4 = '#C24CF6', '#FF1493', '#FC6E22', '#FFFF66'
 retro1, retro2, retro3, retro4 = '#CE0000', '#FF5F01', '#FE1C80', '#FFE3F1'
+cozytime1, cozytime2, cozytime3, cozytime4, cozytime5 = (
+    '#FFEEB2', '#F4CE61', '#FFBF20', '#7D9CA1', '#4D8D97')
 acryliq1, acryliq2, acryliq3, acryliq4 = '#F21A1D', '#FF822E', '#03DDDC', '#FEF900'
 hibokeh1, hibokeh2, hibokeh3, hibokeh4 = '#0310EA', '#FB33DB', '#7FFF00', '#FCF340'
 flashy1, flashy2, flashy3, flashy4 = '#04005E', '#440BD4', '#FF2079', '#E92EFB'
@@ -139,6 +141,7 @@ luminos_palette = [luminos1, luminos2, luminos3, luminos4]
 stationary_palette = [stationary1, stationary2, stationary3, stationary4]
 prism_palette = [prism1, prism2, prism3, prism4]
 retro_palette = [retro1, retro2, retro3, retro4]
+cozytime_palette = [cozytime1, cozytime2, cozytime3, cozytime4, cozytime5]
 acryliq_palette = [acryliq1, acryliq2, acryliq3, acryliq4]
 hibokeh_palette = [hibokeh1, hibokeh2, hibokeh3, hibokeh4]
 flashy_palette = [flashy1, flashy2, flashy3, flashy4]
@@ -214,6 +217,11 @@ class GLEAMcolors:
     retro_palette = retro_palette
     retro1, retro2, retro3, retro4 = (retro1, retro2,
                                       retro3, retro4)
+
+    cozytime_palette = cozytime_palette
+    cozytime1, cozytime2, cozytime3, cozytime4, cozytime5 = (
+        cozytime1, cozytime2, cozytime3, cozytime4, cozytime5)
+
     acryliq_palette = acryliq_palette
     acryliq1, acryliq2, acryliq3, acryliq4 = (acryliq1, acryliq2,
                                               acryliq3, acryliq4)
@@ -292,6 +300,7 @@ luminos = LinearSegmentedColormap.from_list('luminos', luminos_palette)
 stationary = LinearSegmentedColormap.from_list('stationary', stationary_palette)
 prism = LinearSegmentedColormap.from_list('prism', prism_palette)
 retro = LinearSegmentedColormap.from_list('retro', retro_palette)
+cozytime = LinearSegmentedColormap.from_list('cozytime', cozytime_palette)
 acryliq = LinearSegmentedColormap.from_list('acryliq', acryliq_palette)
 hibokeh = LinearSegmentedColormap.from_list('hibokeh', hibokeh_palette)
 flashy = LinearSegmentedColormap.from_list('flashy', flashy_palette)
@@ -324,6 +333,7 @@ class GLEAMcmaps:
     stationary = stationary
     prism = prism
     retro = retro
+    cozytime = cozytime
     acryliq = acryliq
     hibokeh = hibokeh
     flashy = flashy
@@ -336,7 +346,8 @@ class GLEAMcmaps:
 
     aslist = [aquaria, geometric, neon, psychedelic, vivid, abstract, phoenix, cosmicnova,
               pinkpop, agaveglitch, coralglow, luxuria, luminos, stationary, prism, retro,
-              acryliq, hibokeh, flashy, cyber, zoas, graphiq, vibes, purplerain, vilux]
+              cozytime, acryliq, hibokeh, flashy, cyber, zoas, graphiq, vibes, purplerain,
+              vilux]
     asarray = np.asarray(aslist)
     N = len(aslist)
 
@@ -407,6 +418,20 @@ class GLEAMcmaps:
         return rcmap
 
     @classmethod
+    def palette(cls, cmap_name, N):
+        """
+        Return a palette of a colormap with N linearly interpolated color points
+
+        Args:
+            cmap_name <str> - name of the colormap
+            N <int> - number of colors in the palette
+        """
+        vals = np.linspace(0, 1, N)
+        cmap = cls.__dict__[cmap_name]
+        rgbas = cmap(vals)
+        return [to_hex(rgba, keep_alpha=False) for rgba in rgbas]
+
+    @classmethod
     def plot_gradients(cls, savefig=False):
         """
         Plot all color-map gradients
@@ -434,3 +459,8 @@ class GLEAMcmaps:
             ax.set_axis_off()
         if savefig:
             plt.savefig('palette.png')
+
+
+if __name__ == "__main__":
+    GLEAMcmaps.plot_gradients()
+    plt.show()
