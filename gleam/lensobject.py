@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/e4;46;13Mnv python
 # -*- coding: utf-8 -*-
 """
 @author: phdenzel
@@ -32,7 +32,8 @@ class LensObject(SkyF):
     """
     An object representing a gravitational lens
     """
-    params = SkyF.params + ['lens', 'srcimgs', 'zl', 'zs', 'tdelay', 'tderr',
+    params = SkyF.params + ['lens', 'srcimgs', 'zl', 'zs', 'mapr',
+                            'tdelay', 'tderr',
                             '_light_model', 'stel_mass', 'lens_map']
 
     def __init__(self, filepath, lens=None, srcimgs=None, zl=None, zs=None, mapr=None,
@@ -57,7 +58,7 @@ class LensObject(SkyF):
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
             zl <float> - redshift of the lens plane
             zs <float> - redshift of the source plane
-            mapr <float> - maprad for lens modeler (in arcsec)
+            maprad <float> - maprad for lens modeler (in arcsec)
             tdelay <list(float)> - time delays of the images
             tderr <list(float) - errors on the time delays
             _light_model <dict/gleam.model object> - a dict or direct input of the light model
@@ -109,7 +110,7 @@ class LensObject(SkyF):
                 self.srcimgs.append(p)
             shifts = self.src_shifts(unit='arcsec')
             src_sep = np.sqrt([x[0]*x[0]+x[1]*x[1] for x in shifts])
-            self.mapr = max(2*sum(src_sep)/len(src_sep), 1.25*max(src_sep))
+            self.mapr = self.maprad
         # set lens parameters manually
         self._lens = None
         if lens is not None:
@@ -263,6 +264,42 @@ class LensObject(SkyF):
         if verbose:
             print(shifts)
         return shifts
+
+    @property
+    def maprad(self):
+        """
+        Map radius of the lens
+
+        Args/Kwargs:
+            None
+
+        Return:
+            mapr <float> - map radius
+        """
+        if hasattr(self, 'mapr') and self.mapr is not None:
+            return self.mapr
+        elif hasattr(self, 'mapr'):
+            ABCD = LensFinder.relative_positions(
+                self.srcimgs, self.lens if self.lens else self.center)
+            if np.any(ABCD):
+                rmax = max([np.sqrt((x+y)**2) for (x, y) in ABCD])
+                rmin = min([np.sqrt((x+y)**2) for (x, y) in ABCD])
+                mapr = min(rmin+rmax, rmax+(rmax-rmin)*1.5)
+                self.mapr = mapr
+        else:
+            self.mapr = None
+        return self.mapr
+
+    @property
+    def delay_order(self):
+        N_srcimgs = len(self.srcimgs)
+        order = np.argsort(self.tdelay) if self.tdelay \
+                else np.array([(i-1) % N_srcimgs for i in range(N_srcimgs)])
+        return list(order)
+
+    @delay_order.setter
+    def delay_order(self, order):
+        pass
 
     @property
     def light_model(self):

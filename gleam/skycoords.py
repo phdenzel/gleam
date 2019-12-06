@@ -850,8 +850,8 @@ class SkyCoords(object):
         """
         if not any([c is None for c in [self.refx, self.refra, self.ra,
                                         self.refdec, self.px2deg_scale[0]]]):
-            return self.refx+(self.refra-self.ra) * math.cos(*self.deg2rad(self.refdec)) \
-                / self.px2deg_scale[0]
+            dra = (self.refra-self.ra) % 360
+            return self.refx + dra * math.cos(*self.deg2rad(self.refdec)) / self.px2deg_scale[0]
 
     @x.setter
     def x(self, x):

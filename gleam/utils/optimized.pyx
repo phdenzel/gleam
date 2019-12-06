@@ -5,6 +5,7 @@
 
 Cython versions of some methods in GLEAM
 """
+import sys
 import numpy as np
 import scipy.sparse.linalg as splin
 cimport numpy as np
@@ -344,7 +345,7 @@ cpdef d_p(np.float64_t[:] dij, Mij_p, sigmaM2,
         dp = splin.qmr(A, b)[0]
     elif method == 'row_norm':
         print("Row-norm is not yet compatible with cython!!!")
-        exit(1)
+        sys.exit(1)
     return dp
         
 

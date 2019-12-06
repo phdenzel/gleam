@@ -19,6 +19,7 @@ import gleam  # avoids cyclic imports with gleam.lensobject this way
 import sys
 import os
 import re
+import numpy as np
 # import copy
 
 
@@ -41,8 +42,10 @@ class GLSCFactory(object):
                 'lens': ['lens position', 'lens coordinates'],
                 'srcimgs': ['image positions', 'image coordinates'],
                 'photzp': ['zeropoint', 'zero-point', 'zero point', 'zp'],
+                'mapr': ['map radius', 'map extent', 'extent'],
                 'tdelay': ['time delay', 'delay', 'BCD - A', 'B - A'],
                 'tderr': ['time delay', 'delay', 'BCD - A', 'B - A'],
+                'delay_order': ['ordering', 'delay order'],
                 'double': ['B - A'],
                 'quad': ['BCD - A'],
                 'kext': ['external convergence', 'ext. convergence'],
@@ -384,7 +387,8 @@ class GLSCFactory(object):
                     print(self.lensobject.__getattribute__(k))
 
     @staticmethod
-    def lens_extract(lo, directory=None, quad=True, double=False, output=None, verbose=False):
+    def lens_extract(lo, directory=None, use_order=False, round_pos=True,
+                     output=None, verbose=False):
         """
         Extract GLSCFactory's search parameters from a LensObject object
 
@@ -406,8 +410,10 @@ class GLSCFactory(object):
                 par = lo.__getattribute__(k)
                 info[k] = par
         # exceptional transformations and assignments
-        lens = lo.lens.xy if lo.lens else lo.center.xy
-        ABCD = lo.srcimgs_xy
+        # lens = lo.lens.xy if lo.lens else lo.center.xy
+        # ABCD = lo.srcimgs_xy
+        ABCD = gleam.lensfinder.LensFinder.relative_positions(
+            lo.srcimgs, lo.lens if lo.lens else lo.center)
         # parity
         if len(lo.srcimgs) == 4:
             parity = ['min', 'min', 'sad', 'sad']
@@ -420,7 +426,27 @@ class GLSCFactory(object):
         else:
             ABCD = [ABCD[i] if len(ABCD) > i else [] for i in range(4)]
             parity = ['min', 'min', 'sad', 'sad']
-        info.update({'ABCD': ABCD, 'lens': lens, 'parity': parity, 'mapr': lo.mapr})
+
+        if round_pos:
+            ABCD = np.round(ABCD, 4).tolist()
+
+        if use_order:
+            image_order = (np.asarray(lo.delay_order)+1) % len(ABCD) \
+                          if np.any(lo.delay_order) else list(range(len(ABCD)))
+        else:
+            image_order = list(range(len(ABCD)))
+
+        pos_par_td = [ABCD[image_order[0]], parity[0]]
+        for i in range(1, len(ABCD)):
+            pos_par_td.append(ABCD[image_order[i]])  # position
+            pos_par_td.append(parity[i])             # parity
+            pos_par_td.append(None)                  # time delay default
+            
+        info.update({'ABCD': ABCD,
+                     'parity': parity,
+                     'mapr': round(lo.maprad, 4) if lo.maprad else lo.maprad,
+                     'pos_par_td': pos_par_td})
+
         # some defaults
         if not info['zl']:
             info['zl'] = 0.5

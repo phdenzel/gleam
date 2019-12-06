@@ -12,6 +12,7 @@ TODO:
 # Imports
 ###############################################################################
 from gleam.skycoords import SkyCoords
+from gleam.lensfinder import LensFinder
 from gleam.roiselector import ROISelector
 from gleam.megacam import MEGACAM_FPROPS
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
@@ -656,8 +657,8 @@ class SkyF(object):
         Return:
             extent <list(float)> - the map extent
         """
-        return [-0.5*self.px2arcsec[0]*self.naxis1, -0.5*self.px2arcsec[1]*self.naxis2,
-                0.5*self.px2arcsec[0]*self.naxis1, 0.5*self.px2arcsec[1]*self.naxis2]
+        return [-0.5*self.px2arcsec[0]*self.naxis1, 0.5*self.px2arcsec[0]*self.naxis1,
+                -0.5*self.px2arcsec[1]*self.naxis2, 0.5*self.px2arcsec[1]*self.naxis2]
 
     def p2skycoords(self, position, unit='arcsec', relative=True, verbose=False):
         """
@@ -690,7 +691,7 @@ class SkyF(object):
                     origin = [0, 0]
                 skyc = SkyCoords.from_arcsec(*[o+p for o, p in zip(origin, position)])
             else:
-                skyc = SkyCoords.from_arcsecs(*position)
+                skyc = SkyCoords.from_arcsec(*position)
         else:  # unit is degrees
             if relative:
                 if hasattr(self, 'lens') and self.lens is not None:
@@ -1142,7 +1143,7 @@ class SkyF(object):
             return f*sgma2
 
     @staticmethod
-    def pxscale_from_hdr(hdr, as_degrees=False, verbose=False):
+    def pxscale_from_hdr(hdr, as_degrees=False, verbose=False, debug=False):
         """
         Get pixel scale from .fits file header (assuming ctype=RA/DEC and cunit=deg)
 
@@ -1157,6 +1158,8 @@ class SkyF(object):
             cdelt1 <float>, cdelt2 <float> - pixel scales for RA and Dec
         """
         if any([(k not in hdr) or (hdr[k] is None) for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
+            if 'CDELT1' in hdr and 'CDELT2' in hdr:
+                return [hdr['CDELT1'], hdr['CDELT2']]
             return [None, None]
         if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
             print("Warning! In the WCS rotation East is not to the left!")
@@ -1169,7 +1172,8 @@ class SkyF(object):
         crota2 = 0.5*(math.atan2(-hdr['CD2_1'], sign*hdr['CD1_1'])
                       + math.atan2(sign*hdr['CD1_2'], hdr['CD2_2']))
         if abs(crota2) > 1e-9:
-            print("Warning! The coordinate system is skewed!")
+            if debug:
+                print("Warning! The coordinate system is skewed!")
         # select how to return pixel scale of RA, Dec
         if as_degrees:
             if verbose:
@@ -1180,7 +1184,7 @@ class SkyF(object):
         return [3600*cdelt1, 3600*cdelt2]
 
     @staticmethod
-    def crota2_from_hdr(hdr, as_degrees=False, verbose=False):
+    def crota2_from_hdr(hdr, as_degrees=False, verbose=False, debug=False):
         """
         Get rotation (of y-axis) and skew of coordinate system from .fits file header
         (assuming ctype=RA/DEC and cunit=deg)
@@ -1198,7 +1202,8 @@ class SkyF(object):
         if any([(k not in hdr) or (hdr[k] is None) for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
             return [None, None]
         if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
-            print("Warning! In the WCS rotation East is not to the left!")
+            if debug:
+                print("Warning! In the WCS rotation East is not to the left!")
         # calculate the determinante of the distortion matrix
         det = hdr['CD1_1']*hdr['CD2_2']-hdr['CD1_2']*hdr['CD2_1']
         sign = det//abs(det)  # the sign of the determinante

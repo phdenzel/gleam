@@ -1,6 +1,11 @@
 import sys
 import os.path
 
+import gleam.model.sersic
+import gleam.model.spemd
+import gleam.model.spep
+import gleam.model.modelbase
+
 # Add root to PYTHONPATH (root is two levels down)
 root = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                     os.path.pardir))

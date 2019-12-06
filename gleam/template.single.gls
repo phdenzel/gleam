@@ -24,7 +24,7 @@ include_prior(
     'profile_steepness',
     'J3gradient',
     'magnification',
-    'hubble_constant',
+#    'hubble_constant',
     'PLsmoothness3',
 #   'shared_h',
     'external_shear'
@@ -33,7 +33,7 @@ include_prior(
 
 ### Cosmology
 omega(0.27, 0.73)
-hubble_constant(72.032)
+# hubble_constant(72.032)
 # hubble_time(13.7)
 
 
@@ -44,12 +44,12 @@ _zl =
 globject(name)
 zlens(zl)
 
-pixrad(12)
-steepness(0, None)
-hires(1, 5)
+pixrad(10)
+steepness(0.25, None)
+hires(1, 3)
 
 smooth(2, include_central_pixel=False)
-local_gradient(80)
+local_gradient(45)
 
 _mapr =
 maprad(mapr)
@@ -58,13 +58,10 @@ maprad(mapr)
 ### Source
 _zs = 
 
-_lens = 
-_ABCD = 
-_parity = 
-_px2arcsec = 
-
-for i in range(len(ABCD)):
-    ABCD[i] = (ABCD[i][0]-lens[0])*px2arcsec[0], (ABCD[i][1]-lens[1])*px2arcsec[1]
+# _ABCD = 
+# _parity =
+_pos_par_td =
+ABCD = pos_par_td[0:1]+pos_par_td[2:-1:3]
 
 if len(ABCD) < 4:
     symm()
@@ -72,26 +69,15 @@ if len(ABCD) < 4:
 else:
     shear(0.1)
 
-_tdelay = 
-_tderr = 
-# idxs of tdelay ordered after delay times
-delay_order = np.argsort(tdelay) if tdelay else np.array([(i-1) % len(ABCD) for i in range(len(ABCD))])
-# idxs of ABCD ordered after delay times
-image_order = (delay_order+1) % len(ABCD)
-
-
-pos_par_td = [ABCD[image_order[0]], parity[0]]
-for i in range(1, len(ABCD)):
-    pos_par_td.append(ABCD[image_order[i]])  # position
-    pos_par_td.append(parity[i])             # parity
-    pos_par_td.append(None)                  # time delay default
-
 source(zs, *pos_par_td)
 
+_tdelay = 
+_tderr = 
 # explicit time delays
 if tdelay:
-    for i, td in enumerate(tdelay[:-1]):
-        delay(ABCD[0], ABCD[i+1], [td-tderr[i], td+tderr[i]])
+    for i, td in enumerate(tdelay[1:]):
+        if td:
+            delay(ABCD[i], ABCD[i+1], [td-tderr[i+1], td+tderr[i+1]])
 
 
 ###############################################################################

@@ -1,6 +1,14 @@
 import sys
 import os.path
 
+import gleam.app.menubar
+import gleam.app.navbar
+import gleam.app.prototype
+import gleam.app.statusbar
+import gleam.app.toolbar
+import gleam.app.window
+
+
 # Add root to PYTHONPATH (root is two levels down)
 root = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                     os.path.pardir))

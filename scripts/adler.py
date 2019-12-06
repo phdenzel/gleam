@@ -775,7 +775,7 @@ if __name__ == "__main__":
     ROCHE_HIST_LOOP  = 0
     ROCHE_MAP_LOOP   = 0
     K_PROFILE_LOOP   = 0
-    CHI2VSROCHE_LOOP = 1
+    CHI2VSROCHE_LOOP = 0
     DATA_LOOP        = 0
     SOURCE_LOOP      = 0
     SYNTH_LOOP       = 0
@@ -786,7 +786,7 @@ if __name__ == "__main__":
     SYNTHS_ONLY      = 0
 
     ROCHE_DEBUG_LOOP = 0
-    TABLE_LOOP       = 0
+    TABLE_LOOP       = 1
 
     # not frequently used loops
     DIR_LOOP       = 0
@@ -796,6 +796,7 @@ if __name__ == "__main__":
     RECACHE_LOOP   = 0
     POTENTIAL_LOOP = 0
 
+    ############################################################################
     # # LOOP OPERATIONS
     # # create a directory structure
     if DIR_LOOP:
@@ -1095,6 +1096,8 @@ if __name__ == "__main__":
         obj_index = 0
         head = ['Image system', 'Visible maxima', 'Tangential arcs', r'R$_{E}$ [arcsec]', 'a [arcsec]', 'b [arcsec]', r'$\phi$ [radians]']
         data = {ki: [None]*len(head) for ki in k}
+        r_E_truth = {ki: None for ki in k}
+        phi_truth = {ki: None for ki in k}
         # Image number info
         for ki in k:
             files = sfiles[ki]
@@ -1133,6 +1136,7 @@ if __name__ == "__main__":
                                                maprad=eagle_maprad)
                 r_E = find_einstein_radius(radii, profile)
                 data[ki][3] = "{:.2f}".format(r_E)
+                r_E_truth[ki] = r_E
                 if kwargs.get('verbose', False):
                     print(r_E)
         # a, b, phi
@@ -1149,6 +1153,7 @@ if __name__ == "__main__":
                 name = os.path.basename(f).replace(".state", "")
                 eq, gq = qpms[f]
                 ea, eb, ephi = qpm_props(eq, verbose=False)
+                phi_truth[ki] = ephi
                 data[ki][4] = r'{:.2f}'.format(ea)
                 data[ki][5] = r'{:.2f}'.format(eb)
                 data[ki][6] = r'{:.2f}'.format(ephi)
@@ -1196,13 +1201,27 @@ if __name__ == "__main__":
             for f in files:
                 gls = glass.glcmds.loadstate(f)
                 gls.make_ensemble_average()
-                radii, profile = kappa_profile(gls.ensemble_average, obj_index=obj_index,
-                                               correct_distances=True)
-                r_E = find_einstein_radius(radii, profile)
-                data[ki][3] = "{:.2f}".format(r_E)
+                radii = []
+                profiles = []
+                r_Es = []
+                N_models = len(gls.models)
+                for i, m in enumerate(gls.models):
+                    sys.stdout.write('{:4d}/{:4d}\r'.format(i+1, N_models))
+                    sys.stdout.flush()
+                    r, p = kappa_profile(m, obj_index=obj_index, correct_distances=True)
+                    radii.append(r)
+                    profiles.append(p)
+                    r_E = find_einstein_radius(r, p)
+                    r_Es.append(r_E)
+                r_E = np.mean(r_Es)
+                r_E_err_internal = np.std(r_Es)
+                r_E_err_2truth = np.sqrt((r_E_truth[ki] - r_E)**2)
+                pxl = gls.models[0]['obj,data'][0][0].basis.top_level_cell_size
+                data[ki][3] = "{:.2f} $\pm$ {:.2f} compare to {:.2f} \% {:5.2f}".format(r_E, r_E_err_2truth, pxl, 100*r_E_err_2truth/r_E)
                 if kwargs.get('verbose', False):
                     print(r_E)
         # a, b, phi
+        phi_ens = {ki: [] for ki in k}
         loadname = 'qpms.pkl'
         if path is None:
             path = ""
@@ -1214,6 +1233,16 @@ if __name__ == "__main__":
             files = sfiles[ki]
             for f in files:
                 gls = glass.glcmds.loadstate(f)
+                for m in gls.models:
+                    obj, dta = m['obj,data'][obj_index]
+                    dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
+                    maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
+                    mapextent = obj.basis.top_level_cell_size * (2*obj.basis.pixrad+1)
+                    kappa = obj.basis._to_grid(dta['kappa'], 1)
+                    kappa_grid = dlsds * kappa
+                    ensqpm = inertia_tensor(kappa_grid, pixel_scale=obj.basis.top_level_cell_size, activation=0.25)
+                    a, b, phi = qpm_props(ensqpm, verbose=False)
+                    phi_ens[ki].append(phi)
                 gls.make_ensemble_average()
                 obj, dta = gls.ensemble_average['obj,data'][obj_index]
                 dlsds = DLSDS(obj.z, obj.sources[obj_index].z)
@@ -1238,6 +1267,34 @@ if __name__ == "__main__":
                     print(a, b, phi)
         df = pd.DataFrame.from_dict(data, orient='index', columns=head)
         print(df.to_latex(bold_rows=1, encoding='utf-8', escape=False))
+        doubles = []
+        quads = []
+        for l, s in zip(df['R$_{E}$ [arcsec]'], df['Image system']):
+            r = float(l.split('%')[-1].strip())
+            if s.strip() == 'double':
+                doubles.append(r)
+            else:
+                quads.append(r)
+        print("AVERAGE R_E error (quads): ", np.average(quads), np.median(quads))
+        print("AVERAGE R_E error (dbles): ", np.average(doubles), np.median(doubles))
+
+        print("PHI Errors")
+        phi_errs = []
+        for ki in k:
+            phi = np.median(phi_ens[ki])
+            phi = phi if phi > 0.5*np.pi else np.pi - phi
+            phi_mean = np.mean(phi_ens[ki])
+            phi_mean = phi_mean if phi_mean > 0.5*np.pi else np.pi - phi_mean
+            phi_err_internal = 360/(2*np.pi)*np.std(phi_ens[ki])
+            # phi_err_internal = phi_err_internal if phi_err_internal < 90 else (180 - phi_err_internal)
+            phi_err_2truth = 360/(2*np.pi)*(np.sqrt((phi_truth[ki] - phi_mean)**2))
+            # phi_err_2truth = phi_err_2truth if phi_err_2truth < 90 else (180 - phi_err_2truth)
+            phi_err = phi_err_2truth
+            if phi_err < 100:
+                phi_errs.append(phi_err)
+            print(phi_mean, phi_err_internal, phi_err_2truth)
+        # print(df.to_csv(sep='\t'))
+        print(np.average(phi_errs), np.median(phi_errs))
 
     # # complex ellipticity plots
     if ELLIPTICITY_LOOP:
