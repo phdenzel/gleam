@@ -108,6 +108,8 @@ acryliq1, acryliq2, acryliq3, acryliq4 = '#F21A1D', '#FF822E', '#03DDDC', '#FEF9
 hibokeh1, hibokeh2, hibokeh3, hibokeh4 = '#0310EA', '#FB33DB', '#7FFF00', '#FCF340'
 flashy1, flashy2, flashy3, flashy4 = '#04005E', '#440BD4', '#FF2079', '#E92EFB'
 cyber1, cyber2, cyber3, cyber4 = '#00218A', '#535EEB', '#BC75F9', '#BDBDFD'
+cyberfade1, cyberfade2, cyberfade3, cyberfade4, cyberfade5, cyberfade6 = (
+    '#00218A', '#535EEB', '#BC75F9', '#BDBDFD', '#DEDEFE', '#FFFFFF')
 zoas1, zoas2, zoas3, zoas4 = '#001437', '#7898FB', '#5CE5D5', '#B8FB3C'
 vilux1, vilux2, vilux3, vilux4, vilux5, vilux6, vilux7 = (
     '#001437', '#85B2FF', '#17E7B6', '#D4FD87', '#FDEB87', '#FDD74C', '#FCAA43')
@@ -162,6 +164,7 @@ acryliq_palette = [acryliq1, acryliq2, acryliq3, acryliq4]
 hibokeh_palette = [hibokeh1, hibokeh2, hibokeh3, hibokeh4]
 flashy_palette = [flashy1, flashy2, flashy3, flashy4]
 cyber_palette = [cyber1, cyber2, cyber3, cyber4]
+cyberfade_palette = [cyberfade1, cyberfade2, cyberfade3, cyberfade4, cyberfade5, cyberfade6]
 zoas_palette = [zoas1, zoas2, zoas3, zoas4]
 vilux_palette = [vilux1, vilux2, vilux3, vilux4, vilux5, vilux6, vilux7]
 graphiq_palette = [graphiq1, graphiq2, graphiq3, graphiq4]
@@ -269,6 +272,11 @@ class GLEAMcolors:
     cyber_palette = cyber_palette
     cyber1, cyber2, cyber3, cyber4 = (cyber1, cyber2,
                                       cyber3, cyber4)
+
+    cyberfade_palette = cyberfade_palette
+    cyberfade1, cyberfade2, cyberfade3, cyberfade4, cyberfade5, cyberfade6 = (
+        cyberfade1, cyberfade2, cyberfade3, cyberfade4, cyberfade5, cyberfade6)
+
     zoas_palette = zoas_palette
     zoas1, zoas2, zoas3, zoas4 = (zoas1, zoas2,
                                   zoas3, zoas4)
@@ -290,8 +298,8 @@ class GLEAMcolors:
                 cosmicnova_palette, pinkpop_palette, agaveglitch_palette, coralglow_palette,
                 luxuria_palette, luminos_palette, stationary_palette, prism_palette, retro_palette,
                 terrean_palette, cozytime_palette, acryliq_palette, hibokeh_palette,
-                flashy_palette, cyber_palette, zoas_palette, vilux_palette, graphiq_palette,
-                vibes_palette, purplerain_palette]
+                flashy_palette, cyber_palette, cyberfade_palette, zoas_palette, vilux_palette,
+                graphiq_palette, vibes_palette, purplerain_palette]
 
     @classmethod
     def cmap_from_color(cls, color_str, secondary_color=None):
@@ -347,6 +355,7 @@ acryliq = LinearSegmentedColormap.from_list('acryliq', acryliq_palette)
 hibokeh = LinearSegmentedColormap.from_list('hibokeh', hibokeh_palette)
 flashy = LinearSegmentedColormap.from_list('flashy', flashy_palette)
 cyber = LinearSegmentedColormap.from_list('cyber', cyber_palette)
+cyberfade = LinearSegmentedColormap.from_list('cyberfade', cyberfade_palette)
 zoas = LinearSegmentedColormap.from_list('zoas', zoas_palette)
 vilux = LinearSegmentedColormap.from_list('vilux', vilux_palette)
 graphiq = LinearSegmentedColormap.from_list('graphiq', graphiq_palette)
@@ -899,6 +908,7 @@ class GLEAMcmaps:
     hibokeh = hibokeh
     flashy = flashy
     cyber = cyber
+    cyberfade = cyberfade
     zoas = zoas
     vilux = vilux
     graphiq = graphiq
@@ -909,7 +919,7 @@ class GLEAMcmaps:
     aslist = [arcus, aquaria, geometric, neon, psychedelic, ioba, mintrock, puked_rainbow,
               twofourone, vivid, abstract, phoenix, cosmicnova, pinkpop, agaveglitch, coralglow,
               luxuria, luminos, stationary, prism, retro, terrean, cozytime, acryliq, hibokeh,
-              flashy, cyber, zoas, graphiq, vibes, purplerain, vilux,
+              flashy, cyber, cyberfade, zoas, graphiq, vibes, purplerain, vilux,
               twilight]
     asarray = np.asarray(aslist)
     N = len(aslist)
@@ -1022,6 +1032,13 @@ class GLEAMcmaps:
             ax.set_axis_off()
         if savefig:
             plt.savefig('palette.png')
+
+    @staticmethod
+    def register_all(verbose=False):
+        for g in GLEAMcmaps.aslist:
+            if verbose:
+                print(g.name)
+            plt.register_cmap(name=g.name, cmap=g)
 
 
 if __name__ == "__main__":

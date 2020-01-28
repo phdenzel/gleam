@@ -133,7 +133,8 @@ def square_subplots(fig):
 
 def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
                   position='bottom left', origin='center',
-                  padding=(0.08, 0.06), color='white'):
+                  padding=(0.08, 0.06), color='white',
+                  fontsize=16):
     """
     Add a scalebar to an image plot
 
@@ -179,7 +180,7 @@ def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
     textshift = np.asarray([wh[0]*(abs(position_xy[0]*8 - 1)/8), 1.5*wh[1]*updown])
     textpos = barpos + textshift
     ax.text(textpos[0], textpos[1], lbl,
-            color=color, fontsize=16, va=va, ha=ha, zorder=1000)
+            color=color, fontsize=fontsize, va=va, ha=ha, zorder=1000)
     plt.gca().set_aspect('equal')
 
 
@@ -563,6 +564,7 @@ def roche_potential_plot(model, N=None,
                          draw_images=False, background=None, color='white',
                          cmap=GLEAMcmaps.phoenix,
                          clabels=False, scalebar=False, label=None, colorbar=False,
+                         fontsize=None,
                          **kwargs):
     """
     Plot the Roche potential data in a standardized manner
@@ -685,12 +687,14 @@ def roche_potential_plot(model, N=None,
         plt.clabel(cs, cs.levels[:1], fmt='%2.1f', inline=True,
                    alpha=0.75, fontsize=10)
     if scalebar:
-        plot_scalebar(x.max(), length=1., position='bottom left', origin='center', color=color)
+        plot_scalebar(x.max(), length=1., position='bottom left', origin='center', color=color,
+                      fontsize=fontsize)
         plt.axis('off')
         plt.gcf().axes[0].get_xaxis().set_visible(False)
         plt.gcf().axes[0].get_yaxis().set_visible(False)
     if label is not None:
-        plot_labelbox(label, position='top right', padding=(0.03, 0.03), color=color)
+        plot_labelbox(label, position='top left', padding=(0.03, 0.03), color=color,
+                      fontsize=fontsize)
     plt.gca().set_aspect('equal')
 
 
@@ -857,7 +861,7 @@ def kappa_profile_plot(model, refined=True,
 
 
 def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, refined=True,
-                        interpolate=None,
+                        interpolate=None, extent=None,
                         as_range=False, kappa1_line=True, einstein_radius_indicator=True,
                         maprad=None, pixrad=None,
                         hilite_color=GLEAMcolors.red, annotation_color='black',
@@ -945,11 +949,9 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         dens = H.T
         dens = np.log10(dens + 1)
         levels = np.linspace(dens.min(), dens.max(), levels)
-        # plt.imshow(dens, vmin=levels[0], vmax=levels[-1], cmap=cmap,
-        #            extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-        #            origin='lower', interpolation='gaussian')
-        plt.contourf(dens, levels=levels, cmap=cmap,
-                     extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]])
+        cs = plt.contourf(dens, levels=levels, cmap=cmap,
+                          extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]])
+        plots.append(cs)
         ax.set_aspect('auto')
     # radius, profile <- ensemble average
     radius, profile = kappa_profile(eavg, obj_index=obj_index,
@@ -965,7 +967,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         profiles.append(profile)
         radii.append(radius)
     if kappa1_line:
-        plt.axhline(1, lw=1, ls='-', color='black', alpha=0.5)
+        plt.axhline(1, lw=1, ls='-', color=annotation_color, alpha=0.5)
     if adjust_limits:
         plt.xlim(left=np.min(radius), right=np.max(radius))
         inner_slope = abs((profile[1]-profile[0])/(radius[1]-radius[0]))
@@ -977,15 +979,16 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         einstein_radius = find_einstein_radius(radius, profile)
         plt.axvline(einstein_radius, lw=1, ls='--', color=annotation_color, alpha=0.5)
         if label is not None:
-            ax.text(1.025*einstein_radius/np.max(radius), 0.95, r'R$_{\mathsf{E}}$',
-                    transform=ax.transAxes, fontsize=14, color=annotation_color)
+            ax.text(0.87*einstein_radius/np.max(radius), 0.9, r'R$_{\mathsf{E}}$',
+                    transform=ax.transAxes, fontsize=fontsize, color=annotation_color)
     if label is not None:
-        plot_labelbox(label, position='top right', padding=(0.03, 0.03), color=annotation_color)
+        plot_labelbox(label, position='top right', padding=(0.03, 0.04), color=annotation_color,
+                      fontsize=fontsize-1)
     fontsize = max(ax.xaxis.label.get_size(), ax.yaxis.label.get_size()) \
         if fontsize is None else fontsize
     if label_axes:
         plt.xlabel(r'R [arcsec]', fontsize=fontsize)
-        plt.ylabel(r'$\mathsf{\kappa}_{<\mathsf{R}}$', fontsize=fontsize)
+        plt.ylabel(r'$\mathsf{\ka ppa}_{<\mathsf{R}}$', fontsize=fontsize+2)
     return plots, profiles, radii
 
 
@@ -996,7 +999,7 @@ def complex_ellipticity_plot(epsilon,
                              markersize=None, markersizes=[4],
                              ls=None, lss=['-'],
                              contours=False, levels=10, cmap=None,
-                             origin_marker=True, adjust_limits=True,
+                             origin_marker=True, adjust_limits=True, axlabels=True,
                              label=None, fontsize=None, annotation_color='black',
                              legend=None, colorbar=False):
     """
@@ -1085,9 +1088,9 @@ def complex_ellipticity_plot(epsilon,
         lim = max(xlim, ylim)
         plt.xlim(left=-lim, right=lim)
         plt.ylim(bottom=-lim, top=lim)
-        plt.gca().set_aspect('equal')
-    plt.xlabel(r'$\mathrm{\mathsf{Re\,\epsilon}}$', fontsize=fontsize)
-    plt.ylabel(r'$\mathrm{\mathsf{Im\,\epsilon}}$', fontsize=fontsize)
+    if axlabels:
+        plt.xlabel(r'$\mathrm{\mathsf{Re\,\epsilon}}$', fontsize=fontsize)
+        plt.ylabel(r'$\mathrm{\mathsf{Im\,\epsilon}}$', fontsize=fontsize)
     return plots
 
 
@@ -1183,6 +1186,257 @@ def viewstate_plots(model, obj_index=None, refined=True,
             plt.show()
 
 
+# INTERACTIVE ##################################################################
+class IAColorbar(object):
+    def __init__(self, cbar, mappable, verbose=False):
+        self.cbar = cbar
+        self.mappable = mappable
+        self.press = None
+        self.cycle = sorted([i for i in dir(plt.cm) if hasattr(getattr(plt.cm, i), 'N')])
+        cmap_name = cbar.get_cmap().name
+        if cmap_name not in self.cycle:
+            self.cycle.append(cmap_name)
+        self.index = self.cycle.index(cmap_name)
+        self.verbose = verbose
+
+    def connect(self):
+        """
+        Connect to all the events we need
+        """
+        self.cidpress = self.cbar.patch.figure.canvas.mpl_connect(
+            'button_press_event', self.on_press)
+        self.cidrelease = self.cbar.patch.figure.canvas.mpl_connect(
+            'button_release_event', self.on_release)
+        self.cidmotion = self.cbar.patch.figure.canvas.mpl_connect(
+            'motion_notify_event', self.on_motion)
+        self.keypress = self.cbar.patch.figure.canvas.mpl_connect(
+            'key_press_event', self.key_press)
+
+    def on_press(self, event):
+        """
+        On button press we will see if the mouse is over us and store some data
+        """
+        if event.inaxes != self.cbar.ax: return
+        self.press = event.x, event.y
+
+    def key_press(self, event):
+        if event.key=='down':
+            self.index += 1
+        elif event.key=='up':
+            self.index -= 1
+        if self.index < 0:
+            self.index = len(self.cycle)
+        elif self.index >= len(self.cycle):
+            self.index = 0
+        cmap = self.cycle[self.index]
+        self.cbar.set_cmap(cmap)
+        self.cbar.draw_all()
+        self.mappable.set_cmap(cmap)
+        if self.verbose:
+            print(cmap)
+        self.cbar.patch.figure.canvas.draw()
+
+    def on_motion(self, event):
+        """
+        On motion we will move the rect if the mouse is over us
+        """
+        if self.press is None: return
+        if event.inaxes != self.cbar.ax: return
+        xprev, yprev = self.press
+        dx = event.x - xprev
+        dy = event.y - yprev
+        self.press = event.x,event.y
+        #print 'x0=%f, xpress=%f, event.xdata=%f, dx=%f, x0+dx=%f'%(x0, xpress, event.xdata, dx, x0+dx)
+        scale = self.cbar.norm.vmax - self.cbar.norm.vmin
+        perc = 0.03
+        if event.button==1:
+            self.cbar.norm.vmin -= (perc*scale)*np.sign(dy)
+            self.cbar.norm.vmax -= (perc*scale)*np.sign(dy)
+        elif event.button==3:
+            self.cbar.norm.vmin -= (perc*scale)*np.sign(dy)
+            self.cbar.norm.vmax += (perc*scale)*np.sign(dy)
+        self.cbar.draw_all()
+        self.mappable.set_norm(self.cbar.norm)
+        self.cbar.patch.figure.canvas.draw()
+
+    def on_release(self, event):
+        """
+        On release we reset the press data
+        """
+        self.press = None
+        self.mappable.set_norm(self.cbar.norm)
+        self.cbar.patch.figure.canvas.draw()
+
+    def disconnect(self):
+        """
+        Disconnect all the stored connection ids
+        """
+        self.cbar.patch.figure.canvas.mpl_disconnect(self.cidpress)
+        self.cbar.patch.figure.canvas.mpl_disconnect(self.cidrelease)
+        self.cbar.patch.figure.canvas.mpl_disconnect(self.cidmotion)
+
+
+
+class IPColorbar(object):
+    def __init__(self, cbar, mappable, log=False,
+                 lim=None, step=0.1, orientation='horizontal',
+                 verbose=False):
+        from IPython.display import display
+        import ipywidgets as widgets
+        self.cbar = cbar
+        self.mappable = mappable
+        self.figure = self.cbar.patch.figure
+        self.verbose = verbose
+        # interactive slider
+        v_curr = [cbar.norm.vmin, cbar.norm.vmax]
+        data = self.mappable.get_array()
+        if lim is None:
+            lim = [np.min(data), np.max(data)]
+            lim[0] = lim[0] - abs(lim[0]) * 0.05
+            lim[1] = lim[1] + abs(lim[1]) * 0.05
+        if lim[1] <= 2*step:
+            step = lim[1] / 100
+        self.slider = widgets.FloatRangeSlider(
+            value=v_curr, min=lim[0], max=lim[1], step=step,
+            description='Colorbar', disabled=False, continuous_update=False,
+            orientation=orientation, readout=True, readout_format='.4f',
+            layout=widgets.Layout(width='100%'))
+        # colormaps
+        self.cycle = plt.colormaps()
+        cmap_name = cbar.get_cmap().name
+        self.index = self.cycle.index(cmap_name)
+        self.dropdown = widgets.Dropdown(
+            options=self.cycle, value=cmap_name,
+            description='Colormap', disabled=False, layout=widgets.Layout(width='100%'))
+        self.container = widgets.HBox([self.dropdown, self.slider])
+        display(self.container)
+
+    def connect(self):
+        """
+        Connect to all the events we need
+        """
+        self.dropdown.observe(self.on_dropdown_change, names='value')
+        self.slider.observe(self.on_slider_change, names='value')
+
+    def on_dropdown_change(self, state):
+        new_cmap = state['new']
+        if self.verbose:
+            print(new_cmap)
+        self.index = self.cycle.index(new_cmap)
+        self.cbar.set_cmap(new_cmap)
+        self.cbar.draw_all()
+        self.mappable.set_cmap(new_cmap)
+        self.figure.canvas.draw()
+
+    def on_slider_change(self, state):
+        new_v = state['new']
+        if self.verbose:
+            print(new_v)
+        self.cbar.norm.vmin = new_v[0]
+        self.cbar.norm.vmax = new_v[1]
+        self.cbar.draw_all()
+        self.mappable.set_norm(self.cbar.norm)
+        self.figure.canvas.draw()
+
+
+
+class IPPointCache(object):
+    def __init__(self, mappable, color=GLEAMcolors.purple, height='200px',
+                 use_modes=['L', 'I', 'm', 'S', 'M'], verbose=False):
+        from IPython.display import display
+        import ipywidgets as widgets
+        self.mappable = mappable
+        self.color = color
+        self.figure = self.mappable._axes.patch.figure
+        self.xy = []
+        self.modes = []
+        self.log = []
+        self.verbose = verbose
+        self.text_display = widgets.Textarea(
+            value='', placeholder='Cache', description='Points',
+            continuous_update=True, disabled=False,
+            layout=widgets.Layout(width='75%', height=height))
+        if use_modes:
+            self.mode_selector = widgets.Dropdown(
+                options=use_modes, value=use_modes[0],
+                description='Mode', disabled=False,
+                layout=widgets.Layout(width='50%'))
+            self.container = widgets.HBox([self.text_display, self.mode_selector])
+        else:
+            self.mode_selector = None
+            self.container = self.text_display
+        display(self.container)
+
+    def connect(self):
+        """
+        Connect to all the events we need
+        """
+        self.cid = self.figure.canvas.mpl_connect(
+            'button_press_event', self.on_click)
+        return self.cid
+
+    def on_click(self, event):
+        """
+        On button press we will store some data in container
+        """
+        if self.figure.canvas.manager.toolbar.mode == 'zoom rect':
+            return
+        self.log.append(event)
+        self.sync_cache()
+        mode = self.mode_selector.value if self.mode_selector else '\r'
+        xy = [event.xdata, event.ydata]
+        self.modes += [mode]
+        self.xy.append(xy)
+        if self.mode_selector:
+            if self.mode_selector.options[0] in self.modes:
+                self.mode_selector.value = self.mode_selector.options[1]
+            else:
+                self.mode_selector.value = self.mode_selector.options[0]
+        text_value = "\n".join([str(c) for c in ["".join(self.modes)]+self.xy])
+        self.text_display.value = text_value
+
+    def sync_cache(self):
+        if self.text_display.value == '':
+            self.xy = []
+            self.modes = []
+        field = self.text_display.value.split('\n')
+        modes = list(field[0])
+        text = field[1:]
+        deletes = 0
+        for i, (m, xy) in enumerate(zip(modes[:], text[:])):
+            if m == '' or m == ' ' or xy == '':
+                self.modes.pop(i)
+                self.xy.pop(i)
+                deletes += 1
+            else:
+                pos_txt = str(xy).replace('[', '').replace(']', '').split(', ')
+                self.modes[i-deletes] = m
+                self.xy[i-deletes] = [float(pos_txt[0]), float(pos_txt[1])]
+
+    def distances_to(self, index, pixel_scale=1):
+        """
+        Get all coordinate distances to a selected point
+        """
+        # defaults
+        if index >= len(self.xy):
+            return None
+        if isinstance(pixel_scale, (int, float)):
+            pixel_scale = [pixel_scale, pixel_scale]
+        # get point coordinates
+        distances = []
+        xy = self.xy[:]
+        # split into subject/objects
+        subject = xy.pop(index)
+        objects = xy
+        for obj in objects:
+            dst = [(obj[0]-subject[0]) * pixel_scale[0],
+                   (obj[1]-subject[1]) * pixel_scale[1]]
+            distances.append(dst)
+        return distances
+
+
+
+# EXPERIMENTAL #################################################################
 def kappa_ensemble_interactive(gls, obj_index=0, src_index=0, subcells=1,
                                extent=None, levels=3, delta=0.2, log=True,
                                oversample=True,

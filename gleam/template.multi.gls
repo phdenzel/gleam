@@ -3,6 +3,14 @@
 import os
 import numpy as np
 
+try:
+    from Cocoa import NSSound
+    from time import sleep
+    sound = NSSound.alloc()
+    sound.initWithContentsOfFile_byReference_('/System/Library/Sounds/Glass.aiff', True)
+except ImportError:
+    sound = False
+
 
 ### Meta info
 _dpath = 
@@ -24,16 +32,17 @@ include_prior(
     'profile_steepness',
     'J3gradient',
     'magnification',
-    'hubble_constant',
+#    'hubble_constant',
     'PLsmoothness3',
     'shared_h',
+#   'external_mass',
     'external_shear'
 )
 
 
 ### Cosmology
 omega(0.27, 0.73)
-hubble_constant(72.032)
+# hubble_constant(72.032)
 # hubble_time(13.7)
 
 
@@ -45,14 +54,14 @@ globject(name)
 zlens(zl)
 
 pixrad(8)
-steepness(0, None)
-# hires(1, 5)
+steepness(0.25, None)
+# hires(1, 3)
 
 smooth(2, include_central_pixel=False)
 local_gradient(60)
 
-_mapr =
-maprad(mapr)
+# _mapr =
+# maprad(mapr)
 
 
 ### Source

@@ -16,6 +16,7 @@ from gleam.lensfinder import LensFinder
 from gleam.roiselector import ROISelector
 from gleam.megacam import MEGACAM_FPROPS
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
+from gleam.utils.rgb_map import richardson_lucy
 
 import sys
 import os
@@ -1159,7 +1160,10 @@ class SkyF(object):
         """
         if any([(k not in hdr) or (hdr[k] is None) for k in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']]):
             if 'CDELT1' in hdr and 'CDELT2' in hdr:
-                return [hdr['CDELT1'], hdr['CDELT2']]
+                if as_degrees:
+                     return [hdr['CDELT1'], hdr['CDELT2']]
+                else:
+                    return [hdr['CDELT1']*3600., hdr['CDELT2']*3600.]
             return [None, None]
         if hdr['CD1_1']//abs(hdr['CD1_1']) > 0:
             print("Warning! In the WCS rotation East is not to the left!")
@@ -1292,7 +1296,7 @@ class SkyF(object):
         return formula
 
     def plot_f(self, fig, ax=None, as_magnitudes=False, scalebar=True,
-               colorbar=False, plain=False,
+               colorbar=False, deconv=False,
                verbose=False, cmap='magma', reverse_map=False, **kwargs):
         """
         Plot the image on an axis
@@ -1320,21 +1324,27 @@ class SkyF(object):
         cmap.set_bad('black', alpha=1)
         cmap.set_under('black', alpha=1)
         # plot data
+        plt_out = []
         if as_magnitudes:
             if self.naxis_plus is not None and len(self.data.shape) > 2:
-                img = ax.imshow(np.sum(self.magnitudes, axis=0), cmap=cmap, **kwargs)
+                d = np.sum(self.magnitudes, axis=0)
             else:
-                img = ax.imshow(self.magnitudes, cmap=cmap, **kwargs)
+                d = self.magnitudes
         else:
             if self.naxis_plus is not None and len(self.data.shape) > 2:
                 d = np.sum(self.data, axis=0)
-                img = ax.imshow(d, cmap=cmap, vmax=np.nanmax(d)*0.1, **kwargs)
             else:
                 d = self.data
-                img = ax.imshow(d, cmap=cmap, **kwargs)
+        psf = kwargs.pop('psf', np.ones((5, 5))/25.)
+        iterations = kwargs.pop('iterations', 30)
+        if deconv:
+            d = richardson_lucy(d, psf=psf, iterations=iterations)
+        img = ax.imshow(d, cmap=cmap, **kwargs)
+        plt_out.append(img)
         if colorbar:  # plot colorbar
             clrbar = fig.colorbar(img)
             clrbar.outline.set_visible(False)
+            plt_out.append(clrbar)
         if scalebar and self.px2arcsec[0] is not None:  # plot scalebar
             from matplotlib import patches
             barpos = (0.05*self.naxis1, 0.025*self.naxis2)
@@ -1354,7 +1364,7 @@ class SkyF(object):
         # some verbosity
         if verbose:
             print(ax)
-        return fig, ax
+        return fig, ax, plt_out
 
     def show_f(self, savefig=None, **kwargs):
         """

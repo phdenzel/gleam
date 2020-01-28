@@ -460,9 +460,10 @@ class LensObject(SkyF):
         del draw
         return img
 
-    def plot_f(self, fig, ax=None, as_magnitudes=False, lens=False, source_images=False,
-               label_images=False, sequence=None, scalebar=True, colorbar=False,
-               plain=False, verbose=False, cmap='magma', **kwargs):
+    def plot_f(self, fig, ax=None, as_magnitudes=False, deconv=False,
+               lens=False, source_images=False, label_images=False, sequence=None,
+               scalebar=True, colorbar=False, cmap='magma',
+               verbose=False, **kwargs):
         """
         Plot the image on an axis
 
@@ -487,8 +488,8 @@ class LensObject(SkyF):
         """
         if sequence is None:
             sequence = 'ABCDE'
-        fig, ax = super(LensObject, self).plot_f(
-            fig, ax, as_magnitudes=as_magnitudes, plain=plain, verbose=False,
+        fig, ax, plt_out = super(LensObject, self).plot_f(
+            fig, ax, as_magnitudes=as_magnitudes, deconv=deconv, verbose=False,
             scalebar=scalebar, colorbar=colorbar, cmap=cmap, **kwargs)
         if lens and self.lens is not None:
             ax.scatter(*self.lens.xy, marker='o', s=3**2*math.pi, c=glmc.purpleblue)
@@ -502,7 +503,7 @@ class LensObject(SkyF):
         # some verbosity
         if verbose:
             print(ax)
-        return fig, ax
+        return fig, ax, plt_out
 
 
 # MAIN FUNCTION ###############################################################

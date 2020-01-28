@@ -17,7 +17,8 @@ from gleam.reconsrc import ReconSrc, synth_filter, synth_filter_mp
 from gleam.multilens import MultiLens
 from gleam.glass_interface import glass_renv, filter_env, export_state
 from gleam.utils.encode import an_sort
-from gleam.utils.lensing import downsample_model, upsample_model, radial_profile, \
+from gleam.utils.lensing import LensModel, \
+    downsample_model, upsample_model, radial_profile, \
     find_einstein_radius, kappa_profile, DLSDS, \
     complex_ellipticity, inertia_tensor, qpm_props, \
     potential_grid, roche_potential_grid, roche_potential
@@ -769,13 +770,13 @@ if __name__ == "__main__":
     K_DIFF_LOOP      = 0
     QUADPM_LOOP      = 0
     ABPHI_LOOP       = 0
-    ELLIPTICITY_LOOP = 0
+    ELLIPTICITY_LOOP = 1
     ELLIPTC_ALL_LOOP = 0
     ROCHE_LOOP       = 0
     ROCHE_HIST_LOOP  = 0
     ROCHE_MAP_LOOP   = 0
-    K_PROFILE_LOOP   = 0
-    CHI2VSROCHE_LOOP = 0
+    K_PROFILE_LOOP   = 1
+    CHI2VSROCHE_LOOP = 1
     DATA_LOOP        = 0
     SOURCE_LOOP      = 0
     SYNTH_LOOP       = 0
@@ -786,7 +787,7 @@ if __name__ == "__main__":
     SYNTHS_ONLY      = 0
 
     ROCHE_DEBUG_LOOP = 0
-    TABLE_LOOP       = 1
+    TABLE_LOOP       = 0
 
     # not frequently used loops
     DIR_LOOP       = 0
@@ -795,6 +796,8 @@ if __name__ == "__main__":
     RSFILTR_LOOP   = 0
     RECACHE_LOOP   = 0
     POTENTIAL_LOOP = 0
+
+    # matplotlib.rcParams['']
 
     ############################################################################
     # # LOOP OPERATIONS
@@ -825,7 +828,8 @@ if __name__ == "__main__":
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
         kwargs = dict(path=os.path.join(anlysdir, sfiles_str),
-                      variables=['inv_proj', 'N_nil', 'r_max', 'M_fullres', 'r_fullres', 'reproj_d_ij'],
+                      variables=['inv_proj', 'N_nil', 'r_max',
+                                 'M_fullres', 'r_fullres', 'reproj_d_ij'],
                       save_obj=True, verbose=1)
         # sfiles = states
         cache_loop(k, jsons, sfiles, **kwargs)
@@ -1297,9 +1301,12 @@ if __name__ == "__main__":
         print(np.average(phi_errs), np.median(phi_errs))
 
     # # complex ellipticity plots
-    if ELLIPTICITY_LOOP:
+    if 0 and ELLIPTICITY_LOOP:
         print("### Plotting complex ellipticity plots")
-        # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
+        matplotlib.rcParams['xtick.labelsize'] = 18
+        matplotlib.rcParams['ytick.labelsize'] = 18
+        matplotlib.rcParams['axes.labelsize'] = 18
+        matplotlib.rcParams['axes.titlesize'] = 18
         k = keys
         kwargs = dict(verbose=1)
         # sfiles = states
@@ -1340,7 +1347,7 @@ if __name__ == "__main__":
                                          lss=['--', '--'],
                                          markers=['o', 'o'], markersizes=[2, 6],
                                          contours=True, levels=6,
-                                         # cmap=GLEAMcmaps.coralglow,
+                                         axlabels=False,  # cmap=GLEAMcmaps.coralglow,
                                          cmap=GLEAMcmaps.reverse(GLEAMcmaps.cyber), alpha=0.8,
                                          origin_marker=False, adjust_limits=False)
                 complex_ellipticity_plot([glass_epsilon, eagle_epsilon],
@@ -1351,12 +1358,110 @@ if __name__ == "__main__":
                                          contours=False, levels=6,
                                          cmap=GLEAMcolors.cmap_from_color(GLEAMcolors.blue),
                                          origin_marker=True, adjust_limits=True,
-                                         colorbar=False,
-                                         label=ki, fontsize=14, annotation_color='black')
+                                         colorbar=False, axlabels=False, fontsize=24,
+                                         annotation_color='black')
+                plot_labelbox(ki, position='top right', padding=(0.03, 0.03), color='black',
+                              fontsize=18)
+                plt.gca().set_aspect('equal')
                 # plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
                 plt.tight_layout()
                 plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 plt.close()
+
+    # # complex ellipticity plots
+    if ELLIPTICITY_LOOP:
+        print("### Plotting complex ellipticity plots (single figure)")
+        matplotlib.rcParams['xtick.labelsize'] = 16
+        matplotlib.rcParams['ytick.labelsize'] = 16
+        matplotlib.rcParams['axes.labelsize'] = 18
+        matplotlib.rcParams['axes.titlesize'] = 18
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0",
+             "H2S2A0B90G0", "H3S1A0B90G0", "H2S1A0B90G0",
+             "H160S0A90B0G0", "H4S3A0B0G90", "H30S0A0B90G0",
+             "H13S0A0B90G0", "H2S7A0B90G0", "H1S0A0B90G0",
+             "H1S1A0B90G0", "H23S0A0B90G0", "H234S0A0B90G0"]
+        kwargs = dict(verbose=1)
+        # sfiles = states
+        path = os.path.join(anlysdir, sfiles_str)
+        loadname = 'qpms.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            qpms = pickle.load(f)
+        # complex ellipticities
+        fig, axes = plt.subplots(len(k)//3, 3, sharex=False, sharey=False,
+                                 figsize=(6, 9))
+        # fig = plt.figure(figsize=(8.27, 11.69))
+        # gs = matplotlib.gridspec.GridSpec(len(k)//3, 3)
+        # gs.update(wspace=0.025, hspace=0.05)
+        for i, ki in enumerate(k):
+            files = sfiles[ki]
+            for f in files:
+                eq, gq = qpms[f]
+                ea, eb, ephi = qpm_props(eq)
+                gprops = [qpm_props(q) for q in gq]
+                ga, gb, gphi = [p[0] for p in gprops], \
+                               [p[1] for p in gprops], \
+                               [p[2] for p in gprops]
+                eagle_epsilon = complex_ellipticity(ea, eb, ephi)
+                glass_epsilon = complex_ellipticity(ga, gb, gphi)
+                name = os.path.basename(f).replace(".state", "")
+                if kwargs.get('verbose', False):
+                    print(ki)
+                plt.sca(axes[i // 3][i % 3])
+                complex_ellipticity_plot([glass_epsilon],
+                                         scatter=False, samples=[-1, -1], ensemble_averages=True,
+                                         colors=[GLEAMcolors.blue, GLEAMcolors.red],
+                                         lss=['--', '--'],
+                                         markers=['o', 'o'], markersizes=[1, 5],
+                                         contours=True, levels=6,
+                                         # cmap=GLEAMcmaps.coralglow,
+                                         cmap=GLEAMcmaps.reverse(GLEAMcmaps.cyber), alpha=0.8,
+                                         origin_marker=False, adjust_limits=False,
+                                         axlabels=False)
+                complex_ellipticity_plot([glass_epsilon, eagle_epsilon],
+                                         scatter=True, samples=[10, -1], ensemble_averages=True,
+                                         colors=[GLEAMcolors.red, GLEAMcolors.red],
+                                         lss=[(0, (1, 1)), (0, (1, 1))],
+                                         markers=['o', 'o'], markersizes=[1, 5],
+                                         contours=False, levels=6,
+                                         cmap=GLEAMcolors.cmap_from_color(GLEAMcolors.blue),
+                                         origin_marker=True, adjust_limits=False,
+                                         colorbar=False,
+                                         fontsize=12, annotation_color='black',
+                                         axlabels=False)
+                plot_labelbox(ki, position='top right', padding=(0.05, 0.075), color='black',
+                              fontsize=8)
+                axes[i // 3][i % 3].set_yticks(np.linspace(-0.2, 0.2, 5))
+                axes[i // 3][i % 3].set_xticks(np.linspace(-0.2, 0.2, 5))
+                if (i % 3) == 0:
+                    axes[i // 3][i % 3].set_yticklabels(["", "", "0", "", "0.2"])
+                    if (i // 3) == 2:
+                        axes[i // 3][i % 3].set_ylabel(r'$\mathrm{\mathsf{Im\,\epsilon}}$')
+                else:
+                    axes[i // 3][i % 3].set_yticklabels(["", "", "", "", ""])
+                if (i // 3) > 3:
+                    axes[i // 3][i % 3].set_xticklabels(["-0.2", "", "0", "", ""])
+                    if (i % 3) == 1:
+                        axes[i // 3][i % 3].set_xlabel(r'$\mathrm{\mathsf{Re\,\epsilon}}$')
+                else:
+                    axes[i // 3][i % 3].set_xticklabels(["", "", "", "", ""])
+                lim = 0.225
+                plt.xlim(left=-lim, right=lim)
+                plt.ylim(bottom=-lim, top=lim)
+                axes[i // 3][i % 3].set_aspect('equal')
+                # plt.gci().colorbar.set_label(r'$\mathrm{\mathsf{N_{models}}}$')
+        # plt.tight_layout()
+        axes[4][0].set_yticklabels(["-0.2", "", "0", "", "0.2"])
+        axes[4][2].set_xticklabels(["-0.2", "", "0", "", "0.2"])
+        fig.subplots_adjust(hspace=0, wspace=0)
+        path = os.path.join(anlysdir, sfiles_str)
+        savename = os.path.join(path, 'ellipticities.pdf')
+        print(savename)
+        plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+        plt.close()
 
     # # complex ellipticity summary plot
     if ELLIPTC_ALL_LOOP:
@@ -1660,7 +1765,7 @@ if __name__ == "__main__":
                           background=None, color='black',
                           levels=25, contours=1, linewidths=1.5,
                           contours_only=0,
-                          clabels=1, colorbar=0, label=ki, scalebar=1)
+                          clabels=1, colorbar=0, label=ki, fontsize=22, scalebar=1)
                 # SEAGLE model
                 plt.figure(figsize=(5, 5))
                 roche_potential_plot((gx, gy, eagle_degarr), **kw)
@@ -1782,7 +1887,7 @@ if __name__ == "__main__":
                     plt.show()
 
     # # kappa profile ensembles
-    if K_PROFILE_LOOP:
+    if 0 and K_PROFILE_LOOP:
         print("### Plotting kappa radial profiles ensembles")
         # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
         k = keys
@@ -1795,33 +1900,25 @@ if __name__ == "__main__":
                 sf = sfiles[ki][idx]
                 print(sf)
                 name = os.path.basename(sf).replace(".state", "")
-                loadname = "reconsrc_{}.pkl".format(name)
                 if kappa_files[ki]:
                     eagle_model = fits.getdata(kappa_files[ki][0], header=True)
+                    em = LensModel(kappa_files[ki][0])
                 else:
                     eagle_model = None
-                if path is None:
-                    path = ""
-                if os.path.exists(os.path.join(path, ki)):
-                    loadname = os.path.join(path, ki, loadname)
-                elif os.path.exists(path):
-                    loadname = os.path.join(path, loadname)
-                if os.path.exists(loadname):
-                    with open(loadname, 'rb') as f:
-                        recon_src = pickle.load(f)
-                if kwargs.get('verbose', False):
-                    print('Loading '+loadname)
+                lm = LensModel(sf)
                 # plt.figure(figsize=(5.68, 5.392))
-                kappa_profiles_plot(recon_src.gls, as_range=True, cmap=GLEAMcmaps.agaveglitch,
-                                    interpolate=100, levels=50,
-                                    ensemble_average=False, correct_distances=True,
+                kappa_profiles_plot(lm, as_range=True, refined=False, ensemble_average=False,
+                                    cmap=GLEAMcmaps.agaveglitch,
+                                    interpolate=100, levels=40,
+                                    adjust_limits=True,
                                     kappa1_line=True, einstein_radius_indicator=True,
-                                    label=ki, fontsize=14)
+                                    annotation_color='white', label_axes=True,
+                                    label=ki, fontsize=18)
                 eagle_kappa_map = eagle_model[0]
                 eagle_kappa_map = np.flip(eagle_kappa_map, 0)
                 eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
                 eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
-                kappa_profile_plot(eagle_kappa_map, correct_distances=False, kappa1_line=False,
+                kappa_profile_plot(em, kappa1_line=False,
                                    maprad=eagle_maprad, color=GLEAMcolors.red, ls='-')
                 plt.tight_layout()
                 savename = "kappa_profiles_{}.{}".format(name, extension)
@@ -1837,11 +1934,94 @@ if __name__ == "__main__":
                 plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 plt.close()
 
+    # # kappa profile ensembles
+    if K_PROFILE_LOOP:
+        print("### Plotting kappa radial profiles ensembles (single figure)")
+        matplotlib.rcParams['xtick.labelsize'] = 16
+        matplotlib.rcParams['ytick.labelsize'] = 16
+        matplotlib.rcParams['axes.labelsize'] = 18
+        matplotlib.rcParams['axes.titlesize'] = 18
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0",
+             "H2S2A0B90G0", "H3S1A0B90G0", "H2S1A0B90G0",
+             "H160S0A90B0G0", "H4S3A0B0G90", "H30S0A0B90G0",
+             "H13S0A0B90G0", "H2S7A0B90G0", "H1S0A0B90G0",
+             "H1S1A0B90G0", "H23S0A0B90G0", "H234S0A0B90G0"]
+        kwargs = dict(verbose=1)
+        # sfiles = states
+        path = os.path.join(anlysdir, sfiles_str)
+        fig, axes = plt.subplots(len(k)//3, 3, sharex=False, sharey=False,
+                                 figsize=(6, 9))
+        for i, ki in enumerate(k):
+            print(ki)
+            for idx in range(len(sfiles[ki])):
+                sf = sfiles[ki][idx]
+                print(sf)
+                name = os.path.basename(sf).replace(".state", "")
+                if kappa_files[ki]:
+                    eagle_model = fits.getdata(kappa_files[ki][0], header=True)
+                    em = LensModel(kappa_files[ki][0])
+                else:
+                    eagle_model = None
+                lm = LensModel(sf)
+                plt.sca(axes[i // 3][i % 3])
+                extent = [0, 2.5, 0.5, 3]
+                eagle_kappa_map = eagle_model[0]
+                eagle_kappa_map = np.flip(eagle_kappa_map, 0)
+                eagle_pixrad = tuple(r//2 for r in eagle_kappa_map.shape)
+                eagle_maprad = eagle_pixrad[1]*eagle_model[1]['CDELT2']*3600
+                kappa_profile_plot(em, kappa1_line=False,
+                                   maprad=eagle_maprad, color=GLEAMcolors.red, ls='-')
+                plots, _, _ = kappa_profiles_plot(lm, as_range=True, cmap=GLEAMcmaps.agaveglitch,
+                                                  interpolate=150, levels=40, refined=False,
+                                                  ensemble_average=False, label_axes=False,
+                                                  adjust_limits=False,
+                                                  kappa1_line=True, einstein_radius_indicator=True,
+                                                  fontsize=12, annotation_color='white')
+                plt.contourf(np.ones((4, 4))*plots[0].levels[0], extent=extent,
+                             cmap=GLEAMcmaps.agaveglitch, levels=plots[0].levels, zorder=-99)
+                plot_labelbox(ki, position='top right', padding=(0.03, 0.04), color='white',
+                              fontsize=8)
+                axes[i // 3][i % 3].set_xlim(left=0, right=2.5)
+                axes[i // 3][i % 3].set_ylim(bottom=0.75, top=3)
+                axes[i // 3][i % 3].set_yticks(np.linspace(extent[2], extent[3], 10))
+                axes[i // 3][i % 3].set_xticks(np.linspace(extent[0], extent[1], 6))
+                if (i % 3) == 0:
+                    axes[i // 3][i % 3].set_yticklabels(
+                        ["", "1", "", "1.5", "", "2", "", "2.5", "", ""])
+                    if (i // 3) == 2:
+                        axes[i // 3][i % 3].set_ylabel(r'$\mathsf{\kappa}_{<\mathsf{R}}$',
+                                                       fontsize=22)
+                else:
+                    axes[i // 3][i % 3].set_yticklabels([""]*10)
+                if (i // 3) > 3:
+                    axes[i // 3][i % 3].set_xticklabels(["0", "", "1", "", "2", ""])
+                    if (i % 3) == 1:
+                        axes[i // 3][i % 3].set_xlabel(r'R [arcsec]', fontsize=16)
+                else:
+                    axes[i // 3][i % 3].set_xticklabels([""]*6)
+                #  axes[4][0].set_yticklabels(["0.75", "", "", "1.5", "", "2", "", "2.5", "", ""])
+                # axes[4][2].set_xticklabels(["0", "", "1", "", "2", "2.5"])
+                axes[i // 3][i % 3].set_frame_on(True)
+                axes[i // 3][i % 3].set_facecolor(GLEAMcmaps.agaveglitch(0.1))
+        # plt.tight_layout()
+        fig.subplots_adjust(hspace=0, wspace=0)
+        savename = "kappa_profiles.{}".format(extension)
+        savename = os.path.join(path, savename)
+        if kwargs.get('verbose', False):
+            print('Saving '+savename)
+        print(savename)
+        plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+        plt.close()
+
     # # chi2 vs scalarRoche
-    if CHI2VSROCHE_LOOP:
+    if 0 and CHI2VSROCHE_LOOP:
         print("### Plotting chi2 vs scalar product scatter")
-        # k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0"]
-        k = keys
+        # k = keys
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0",
+             "H2S2A0B90G0", "H3S1A0B90G0", "H2S1A0B90G0",
+             "H160S0A90B0G0", "H4S3A0B0G90", "H30S0A0B90G0",
+             "H13S0A0B90G0", "H2S7A0B90G0", "H1S0A0B90G0",
+             "H1S1A0B90G0", "H23S0A0B90G0", "H234S0A0B90G0"]
         kwargs = dict(optimized=True, psf_file=psf_file, reduced=True, verbose=1)
         # sfiles = states
         path = os.path.join(anlysdir, sfiles_str)
@@ -1871,12 +2051,12 @@ if __name__ == "__main__":
                 chi2 = chi2_analysis(recon_src, **kwargs)
                 ip = scalarRoche[sf]
                 # Plot chi2 vs scalar product
-                # plt.figure(figsize=(5.68, 5.392))
                 plt.plot(chi2, ip, marker='o', lw=0, color=GLEAMcolors.blue_marguerite, alpha=0.2)
-                plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black')
-                plt.xlabel(r'$\chi^{2}$', fontsize=14)
+                plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black',
+                              fontsize=18)
+                plt.xlabel(r'$\chi^{2}$', fontsize=18)
                 plt.ylabel(r'$\langle\mathcal{P}, \mathcal{P}_{\mathsf{model}}\rangle$',
-                           fontsize=14)
+                           fontsize=18)
                 plt.tight_layout()
                 # save the figure
                 savename = "chi2_VS_scalarRoche_{}.{}".format(name, extension)
@@ -1891,6 +2071,86 @@ if __name__ == "__main__":
                 plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
                 # plt.show()
                 plt.close()
+
+    # # chi2 vs scalarRoche
+    if CHI2VSROCHE_LOOP:
+        print("### Plotting chi2 vs scalar product scatter (single figure)")
+        matplotlib.rcParams['xtick.labelsize'] = 16
+        matplotlib.rcParams['ytick.labelsize'] = 16
+        matplotlib.rcParams['axes.labelsize'] = 18
+        matplotlib.rcParams['axes.titlesize'] = 18
+        # k = keys
+        k = ["H3S0A0B90G0", "H10S0A0B90G0", "H36S0A0B90G0",
+             "H2S2A0B90G0", "H3S1A0B90G0", "H2S1A0B90G0",
+             "H160S0A90B0G0", "H4S3A0B0G90", "H30S0A0B90G0",
+             "H13S0A0B90G0", "H2S7A0B90G0", "H1S0A0B90G0",
+             "H1S1A0B90G0", "H23S0A0B90G0", "H234S0A0B90G0"
+        ]
+        kwargs = dict(optimized=True, psf_file=psf_file, reduced=True, verbose=1)
+        # sfiles = states
+        path = os.path.join(anlysdir, sfiles_str)
+        loadname = 'chi2vsRocheScalar.pkl'
+        if path is None:
+            path = ""
+        elif os.path.exists(path):
+            loadname = os.path.join(path, loadname)
+        with open(loadname, 'rb') as f:
+            chi2vsRocheScalar = pickle.load(f)
+        fig, axes = plt.subplots(len(k)//3, 3, sharex=False, sharey=False,
+                                 figsize=(6, 9))
+        for i, ki in enumerate(k):
+            for sf in sfiles[ki]:
+                name = os.path.basename(sf).replace(".state", "")
+                print(ki)
+                # gather chi2 values
+                chi2, ip = chi2vsRocheScalar[ki]
+                # Plot chi2 vs scalar product
+                plt.sca(axes[i // 3][i % 3])
+                # plt.plot(chi2, ip, marker='o', markersize=2, lw=0, color=GLEAMcolors.blue_marguerite, alpha=0.2)
+                # plot_labelbox(ki, position='bottom left', padding=(0.04, 0.04), color='black',
+                #               fontsize=10)
+                plt.hexbin(chi2, ip, gridsize=20, xscale='linear', yscale='linear', extent=[2, 5, -0.25, 1],
+                           # cmap=GLEAMcmaps.vilux, vmin=None, vmax=None,
+                           cmap=GLEAMcmaps.reverse(GLEAMcmaps.cyberfade), vmin=None, vmax=None,
+                           )
+                if i in [7, 8, 9, 13]:
+                    plot_labelbox(ki, position='top right', padding=(0.03, 0.04), color='black',
+                                  fontsize=8)
+                else:
+                    plot_labelbox(ki, position='bottom left', padding=(0.03, 0.04), color='black',
+                                  fontsize=8)
+                axes[i // 3][i % 3].set_yticks((-0.25, 0, 0.25, 0.5, 0.75, 1))
+                axes[i // 3][i % 3].set_xticks((2, 2.5, 3, 3.5, 4, 4.5, 5))
+                if (i % 3) == 0:
+                    axes[i // 3][i % 3].set_yticklabels(["", "0", "", "0.5", "", "1"])
+                    if (i // 3) == 2:
+                        axes[i // 3][i % 3].set_ylabel(
+                            r'$\langle\mathcal{P}, \mathcal{P}_{\mathsf{model}}\rangle$',
+                            fontsize=18)
+                else:
+                    axes[i // 3][i % 3].set_yticklabels(["", "", "", "", "", ""])
+                if (i // 3) > 3:
+                    axes[i // 3][i % 3].set_xticklabels(["2", "", "3", "", "4", "", ""])
+                    if (i % 3) == 1:
+                        axes[i // 3][i % 3].set_xlabel(r'$\chi^{2}_{\nu}$', fontsize=18)
+                else:
+                    axes[i // 3][i % 3].set_xticklabels(["", "", "", "", "", "", ""])
+                plt.xlim(2, 5)
+                plt.ylim(-0.25, 1)
+        plt.tight_layout()
+        axes[4][2].set_xticklabels(["2", "", "3", "", "4", "", "5"])
+        fig.subplots_adjust(hspace=0, wspace=0)
+        # picklesave = os.path.join(path, 'chi2vsRocheScalar.pkl')
+        # with open(picklesave, 'wb') as f:
+        #     pickle.dump(chi2vsRocheScalar, f)
+        # save the figure
+        savename = "chi2_VS_scalarRoche.{}".format(extension)
+        savename = os.path.join(path, savename)
+        if kwargs.get('verbose', False):
+            print('Saving '+savename)
+        plt.savefig(savename, dpi=500, transparent=True, bbox_inches='tight', pad_inches=0)
+        # plt.show()
+        plt.close()
 
     # # data maps
     if DATA_LOOP:

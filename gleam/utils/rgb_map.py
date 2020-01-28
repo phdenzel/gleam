@@ -6,6 +6,7 @@ Color transformation utilities for gleam maps
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage import restoration
 from colorsys import hsv_to_rgb
 
 
@@ -62,6 +63,14 @@ def lupton_like(i, r, g, method='standard'):
     stack[stack < 0] = 0
     stack[stack > 1] = 1
     return stack
+
+
+def richardson_lucy(img, psf=np.ones((5, 5))/25, iterations=30):
+    """
+    Richardson-Lucy deconvolution
+    """
+    deconv = restoration.richardson_lucy(img.copy(), psf, iterations=iterations)
+    return deconv
 
 
 def rgba(data, cmap=None):
