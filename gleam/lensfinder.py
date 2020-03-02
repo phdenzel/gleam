@@ -28,7 +28,7 @@ class LensFinder(object):
     Framework for finding peaks in the sky (.fits files)
     """
     def __init__(self, lensobject, n=5, min_q=0.1, sigma=(4, 4), centroid=5, separate_lens=True,
-                 verbose=False):
+                 auto=True, verbose=False):
         """
         Initialize peak finding in a lensobject
 
@@ -57,7 +57,7 @@ class LensFinder(object):
         self.peaks = [SkyCoords.empty()]
         self.lens_candidate, self.lens_value, self.lens_index = None, None, None
         self.source_candidates, self.source_values, self.source_indices = [], [], []
-        if self.lensobject.data is not None:
+        if self.lensobject.data is not None and auto:
             # estimate threshold
             self.threshold = self.threshold_estimate(self.lensobject.data, sigma=self.sigma)
             # find peaks
@@ -77,8 +77,8 @@ class LensFinder(object):
                     [self.peak_values[i] for i in range(len(self.peak_values))
                      if i != self.lens_index],
                     [i for i in range(len(self.peak_positions)) if i != self.lens_index])
-            # if self.source_candidates is not None and self.lens_candidate is not None:
-            #     self.order_by_distance(self.source_candidates, self.lens_candidate)
+                # if self.source_candidates is not None and self.lens_candidate is not None:
+                #     self.order_by_distance(self.source_candidates, self.lens_candidate)
         # some verbosity
         if verbose:
             print(self.__v__)

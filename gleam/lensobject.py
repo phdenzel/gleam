@@ -58,7 +58,7 @@ class LensObject(SkyF):
             srcimgs <list(int,int)> - overwrite the source image pixel coordinates
             zl <float> - redshift of the lens plane
             zs <float> - redshift of the source plane
-            maprad <float> - maprad for lens modeler (in arcsec)
+            mapr <float> - maprad for lens modeler (in arcsec)
             tdelay <list(float)> - time delays of the images
             tderr <list(float) - errors on the time delays
             _light_model <dict/gleam.model object> - a dict or direct input of the light model
@@ -76,6 +76,7 @@ class LensObject(SkyF):
                 output <str> - output name of the .gls file
                 name <str> - object name in the .gls file (extracted from output by default)
             finder_options <dict> - options for the LensFinder encompassing the following:
+                auto <bool> - automatically search for lens candidates
                 n <int> - number of peak candidates allowed
                 min_q <float> - a percentage quotient for the min. peak separation
                 sigma <int(,int)> - lower/upper sigma for signal-to-noise estimate
@@ -102,6 +103,7 @@ class LensObject(SkyF):
         self.glscfactory.sync_lens_params(verbose=False)  # load parameters from text file or dict
         # LensFinder for automatic search of lens and source image positions
         self._lens = self.center  # needs lens reference for dummy shifts
+        finder_options.setdefault('auto', auto)
         self.finder = LensFinder(self, **finder_options)
         if auto:
             if self.finder.lens_candidate is not None:
@@ -110,7 +112,7 @@ class LensObject(SkyF):
                 self.srcimgs.append(p)
             shifts = self.src_shifts(unit='arcsec')
             src_sep = np.sqrt([x[0]*x[0]+x[1]*x[1] for x in shifts])
-            self.mapr = self.maprad
+        self.mapr = self.maprad
         # set lens parameters manually
         self._lens = None
         if lens is not None:
@@ -278,7 +280,7 @@ class LensObject(SkyF):
         """
         if hasattr(self, 'mapr') and self.mapr is not None:
             return self.mapr
-        elif hasattr(self, 'mapr'):
+        elif np.any(self.lens) and np.any(self.srcimgs):
             ABCD = LensFinder.relative_positions(
                 self.srcimgs, self.lens if self.lens else self.center)
             if np.any(ABCD):
@@ -287,7 +289,7 @@ class LensObject(SkyF):
                 mapr = min(rmin+rmax, rmax+(rmax-rmin)*1.5)
                 self.mapr = mapr
         else:
-            self.mapr = None
+            self.mapr = self.extent[1]
         return self.mapr
 
     @property

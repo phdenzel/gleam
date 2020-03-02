@@ -7,7 +7,8 @@ Color transformation utilities for gleam maps
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import restoration
-from colorsys import hsv_to_rgb
+from skimage.color import hsv2rgb
+# from colorsys import hsv_to_rgb
 
 
 def lupton_like(i, r, g, method='standard'):
@@ -65,6 +66,66 @@ def lupton_like(i, r, g, method='standard'):
     return stack
 
 
+def asin_stack(r, g, b, s_r=0.4, s_g=0.6, s_b=1.7, alpha=0.09, Q=1.0):
+    """
+    Stack data from 3 .fits files to produce a false-color picture;
+
+    Args:
+        r, g, b <np.ndarray> - data maps using arbitrary filters
+
+    Return:
+        stack <np.ndarray> - stacked image data of shape(N,M,4); ready for matplotlib.pyplot.imshow
+    """
+    stack = np.zeros(r.shape+(4,))
+    # determine type of stacking
+    # r = (r - r.min()) / (r.max() - r.min())
+    # g = (g - g.min()) / (g.max() - g.min())
+    # b = (b - b.min()) / (b.max() - b.min())
+    intensity = r*s_r + g*s_g + b*s_b
+    # reds
+    stack[:, :, 0] = r*s_r*np.arcsinh(alpha*Q*intensity)/(Q*intensity)
+    # greens
+    stack[:, :, 1] = g*s_g*np.arcsinh(alpha*Q*intensity)/(Q*intensity)
+    # blues
+    stack[:, :, 2] = b*s_b*np.arcsinh(alpha*Q*intensity)/(Q*intensity)
+    # alphas
+    stack[:, :, 3] = 1
+    # limit numbers outside of range [0, 1]
+    stack[stack < 0] = 0
+    stack[stack > 1] = 1
+    return stack
+
+
+def hsv_stack(c1, c2, c3, hues=[360, 180, 240], rf=1., gf=1., bf=1.,
+              l1=1., l2=1., l3=1., alpha=0.09, Q=1.0,
+              saturation_curve=np.arcsinh):
+    """
+    Sets the hue of each individual channel and converts into rgba data image
+    """
+    c1 = np.asarray(c1)
+    c2 = np.asarray(c2)
+    c3 = np.asarray(c3)
+    c1 = (c1 - c1.min()) / (c1.max() - c1.min())
+    c2 = (c2 - c2.min()) / (c2.max() - c2.min())
+    c3 = (c3 - c3.min()) / (c3.max() - c3.min())
+    # hue = (hues[0]*c1*rf + hues[1]*c2*gf + hues[2]*c3*bf) / (c1*rf+c2*gf+c3*bf)
+    # value = c1*l1 + c2*l2 + c3*l3
+    # saturation = saturation_curve(Q*value) / (Q*value)
+    stacks = []
+    for i, (l, c) in enumerate(zip([l1, l2, l3], [c1, c2, c3])):
+        stack = np.zeros(c1.shape+(4,))
+        value = c#*l*3
+        hue = hues[i] / 360.
+        stack[:, :, 0] = hue
+        stack[:, :, 1] = 1. - (1.-2*value)**2  # np.ones_like(value)
+        stack[:, :, 2] = value
+        stack[:, :, :3] = hsv2rgb(stack[:, :, :3])
+        stack[:, :, 3] = 1
+        stacks.append(stack[:])
+    # stack = (stacks[0]*rf + stacks[1]*gf + stacks[2]*bf)
+    return stacks
+
+
 def richardson_lucy(img, psf=np.ones((5, 5))/25, iterations=30):
     """
     Richardson-Lucy deconvolution
@@ -88,7 +149,8 @@ def rgba(data, cmap=None):
     if len(data.shape) != 2:
         raise IndexError(
             "Wrong input shape {}! Input 2D data with shape of (N, M)!".format(data.shape))
-    cmap = plt.get_cmap()
+    if cmap is None:
+        cmap = plt.get_cmap()
     img = cmap(plt.Normalize(data.min(), data.max())(data))
     return img
 

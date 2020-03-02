@@ -81,12 +81,79 @@ class ModelArray(object):
 
     @classmethod
     def from_fitsfile(cls, filename, **kwargs):
-        hdu = fits.open(filename)
-        dta, hdr = hdu[0].data, hdu[0].header
+        with open(filename) as f:
+            hdu = fits.open(f, memmap=False)
+            dta, hdr = hdu[0].data, hdu[0].header
+        hdu.close()
         pixrad = dta.shape[-1]//2
         maprad = pixrad * hdr['CD2_2']*3600
         kwargs.update({'filename': filename, 'pixrad': pixrad, 'maprad': maprad})
         return cls(dta, **kwargs)
+
+    @classmethod
+    def from_fitsfiles(cls, filenames, **kwargs):
+        data = None
+        pixrad = None
+        maprad = None
+        index = 0
+        for filename in filenames:
+            with open(filename) as f:
+                hdu = fits.open(f, memmap=False)
+                dta, hdr = hdu[0].data, hdu[0].header
+            hdu.close()
+            if np.sum(dta) == 0:
+                if data is not None:
+                    data = data[:-1]
+                continue
+            if pixrad is None:
+                pixrad = dta.shape[-1]//2
+            if dta.shape[-1]//2 != pixrad:
+                if data is not None:
+                    data = data[:-1]
+                continue
+            if maprad is None:
+                maprad = pixrad * hdr['CD2_2']*3600
+            if (pixrad * hdr['CD2_2']*3600) != maprad:
+                if data is not None:
+                    data = data[:-1]
+                continue
+            if data is None:
+                data = np.empty((len(filenames),) + dta.shape)
+            data[index] = dta
+            index += 1
+        kwargs.update({'pixrad': pixrad, 'maprad': maprad})
+        kwargs.setdefault('filename', 'lensmodels.fits')
+        return cls(data, **kwargs)
+
+    def subset(self, indices=None, mask=None, **kwargs):
+        kw = [('filepath', 'filename'),
+              ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
+              ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
+              ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima')]
+        for key in kw:
+            if hasattr(self, key[0]):
+                v = self.__getattribute__(key[0])
+                kwargs.setdefault(key[1], v)
+        if mask is not None:
+            data = self.data[mask]
+        elif indices is not None:
+            data = np.select(self.data, indices)
+        else:
+            data = self.data
+        return self.__class__(data, **kwargs)
+
+    def save(self, savename, **kwargs):
+        import cPickle as pickle
+        kw = [('filepath', 'filename'),
+              ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
+              ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
+              ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima')]
+        for key in kw:
+            if hasattr(self, key[0]):
+                v = self.__getattribute__(key[0])
+                kwargs.setdefault(key[1], v)
+        with open(savename, 'wb') as f:
+            pickle.dump((self.data[:], kwargs), f)
 
     def __str__(self):
         return "<LensModel@{}>".format("".join(self.filename.split('.')[:-1]))
@@ -205,6 +272,29 @@ class ModelArray(object):
     @property
     def N_src(self):
         return 1
+
+    def rescale(self, zl, zs, zl_new, zs_new, cosmo=None):
+        """
+        Rescale the lens model to new lens and source redshifts
+        """
+        if cosmo is None:
+            cosmo = cosmology()
+        dldsdls = DLDSDLS(zl, zs)
+        dldsdls_new = DLDSDLS(zl_new, zs_new)
+        # dl = DL(zl, zs)
+        # sigma = dldsdls / dldsdls_new
+        # dl_new = DL(zl_new, zs_new)
+        # delta = dl_new / dl
+        self.data = self.data * sigma
+        self.models = [m * sigma for m in self.models]
+        # self.maprad = self.maprad * delta if self.maprad is not None else None
+        self.kappa = self.kappa * sigma if self.kappa is not None else None
+        # self.minima = [[m[0]*delta, m[1]*delta] for m in self.minima]
+        # self.saddle_points = [[m[0]*delta, m[1]*delta] for m in self.saddle_points]
+        # self.maxima = [[m[0]*delta, m[1]*delta] for m in self.maxima]
+        # self.shears  #  rescale like kappa?
+        # self.betas = [[b[0]*delta, b[1]*delta] for b in self.betas]
+        
 
     def xy_grid(self, N=None, maprad=None, pixel_size=None):
         N = self.data.shape[-1] if N is None else N
@@ -669,6 +759,10 @@ class LensModel(MetaModel):
             bases = (ModelArray, object)
             cls = mcls.__class__.__new__(mcls, mcls.__name__, bases, cdict)
             return cls.from_fitsfile(args, **kwargs)
+        elif isinstance(args, list) and isinstance(args[0], str) and args[0].endswith('.fits'):
+            bases = (ModelArray, object)
+            cls = mcls.__class__.__new__(mcls, mcls.__name__, bases, cdict)
+            return cls.from_fitsfiles(args, **kwargs)
         # GLASS model
         if isinstance(args, str) and args.endswith('.state'):
             bases = (GLASSModel, ModelArray, object)
@@ -691,7 +785,7 @@ class LensModel(MetaModel):
 
 
 ###############################################################################
-def cosmology(Omega_m, Omega_l, Omega_k=0, Omega_r=None):
+def cosmology(Omega_m=0.279952, Omega_l=0.72, Omega_k=0, Omega_r=None):
     cosmo = {}
     cosmo['Omega_m'] = Omega_m
     cosmo['Omega_l'] = Omega_l
@@ -806,7 +900,7 @@ def DLSDS(zl, zs, cosmo=None):
     return Dls/Ds
 
 
-def downsample_model(kappa, extent, shape, pixel_scale=1., verbose=False):
+def downsample_model(kappa, extent, shape, pixel_scale=1., sanitize=True, verbose=False):
     """
     Resample (usually downsample) a model's kappa grid to match the specified scale and size
 
@@ -837,12 +931,13 @@ def downsample_model(kappa, extent, shape, pixel_scale=1., verbose=False):
 
     rescale = interpolate.interp2d(xmdl, ymdl, kappa)
     kappa_resmap = rescale(newx, newy)
-    kappa_resmap[kappa_resmap < 0] = 0
+    if sanitize:
+        kappa_resmap[kappa_resmap < 0] = 0
 
     return kappa_resmap
 
 
-def upsample_model(gls_model, extent, shape, verbose=False):
+def upsample_model(kappa, extent, shape, pixel_scale=1., sanitize=True, verbose=False):
     """
     Resample (usually upsample) a model's kappa grid to match the specified scales and size
 
@@ -857,33 +952,36 @@ def upsample_model(gls_model, extent, shape, verbose=False):
     Return:
         kappa_resmap <np.ndarray> - resampled kappa grid
     """
-    obj, data = gls_model['obj,data'][0]
-    kappa_map = obj.basis._to_grid(data['kappa'], 1)
-    pixrad = obj.basis.pixrad
-    maprad = obj.basis.top_level_cell_size * (obj.basis.pixrad)
-    mapextent = (-obj.basis.top_level_cell_size * (obj.basis.pixrad+0.5),
-                 obj.basis.top_level_cell_size * (obj.basis.pixrad+0.5))
-    cell_size = obj.basis.top_level_cell_size
+    # obj, data = gls_model['obj,data'][0]
+    # kappa_map = obj.basis._to_grid(data['kappa'], 1)
+    # pixrad = obj.basis.pixrad
+    # maprad = obj.basis.top_level_cell_size * (obj.basis.pixrad)
+    # mapextent = (-obj.basis.top_level_cell_size * (obj.basis.pixrad+0.5),
+    #              obj.basis.top_level_cell_size * (obj.basis.pixrad+0.5))
+    # cell_size = obj.basis.top_level_cell_size
+    pixrad = tuple(r//2 for r in kappa.shape)
+    maprad = pixrad[1]*pixel_scale
 
     if verbose:
-        print(obj)
-        print("Kappa map: {}".format(kappa_map.shape))
+        print("Kappa map: {}".format(kappa.shape))
         print("Pixrad {}".format(pixrad))
         print("Maprad {}".format(maprad))
-        print("Mapextent {}".format(mapextent))
-        print("Cellsize {}".format(cell_size))
+        # print(obj)
+        # print("Mapextent {}".format(mapextent))
+        # print("Cellsize {}".format(cell_size))
 
-    xmdl = np.linspace(-maprad, maprad, kappa_map.shape[0])
-    ymdl = np.linspace(-maprad, maprad, kappa_map.shape[1])
+    xmdl = np.linspace(-maprad, maprad, kappa.shape[0])
+    ymdl = np.linspace(-maprad, maprad, kappa.shape[1])
     Xmdl, Ymdl = np.meshgrid(xmdl, ymdl)
     xnew = np.linspace(extent[0], extent[1], shape[0])
     ynew = np.linspace(extent[2], extent[3], shape[1])
     Xnew, Ynew = np.meshgrid(xnew, ynew)
 
-    rescale = interpolate.Rbf(Xmdl, Ymdl, kappa_map)
-    # rescale = interpolate.interp2d(xmdl, ymdl, kappa_map)
+    # rescale = interpolate.Rbf(Xmdl, Ymdl, kappa)
+    rescale = interpolate.interp2d(xmdl, ymdl, kappa)
     kappa_resmap = rescale(xnew, ynew)
-    kappa_resmap[kappa_resmap < 0] = 0
+    if sanitize:
+        kappa_resmap[kappa_resmap < 0] = 0
 
     return kappa_resmap
 
@@ -920,7 +1018,7 @@ def radial_profile(data, center=None, bins=None):
     return encavg
 
 
-def kappa_profile(model, obj_index=0, maprad=None, pixrad=None, refined=True, factor=1):
+def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, refined=True, factor=1):
     """
     Calculate radial kappa profiles for GLASS models or (for other models) by
     simply radially binning a generally kappa grid
@@ -938,14 +1036,14 @@ def kappa_profile(model, obj_index=0, maprad=None, pixrad=None, refined=True, fa
     """
     if isinstance(model, LensModel):
         model.obj_idx = min(obj_index, model.N_obj-1)
-    elif isinstance(model, np.ndarray):  # kappa grid was directly inputted
+    elif isinstance(model, np.ndarray):  # kappa grid was directly input
         pixrad = model.shape[-1] if pixrad is None else pixrad
         maprad = 1 if maprad is None else maprad
         model = LensModel(model, maprad=maprad, pixrad=pixrad)
         kappa_grid = model.data
     else:
         model = LensModel(model)
-    kappa_grid = model.kappa_grid(refined=refined)*factor
+    kappa_grid = model.kappa_grid(model_index=mdl_index, refined=refined)*factor
     maprad = model.maprad if maprad is None else maprad
     pixrad = model.pixrad if pixrad is None else pixrad
     profile = radial_profile(kappa_grid, bins=pixrad)
@@ -1144,7 +1242,7 @@ def inertia_tensor(kappa, pixel_scale=1, activation=None, com_correct=True):
     return np.matrix([[Ixx, Ixy], [Iyx, Iyy]])
 
 
-def qpm_props(qpm, verbose=False):
+def qpm_abphi(qpm, verbose=False):
     """
     Calculate properties of the quadrupole moment:
         semi-major axis, semi-minor axis, and position angle
@@ -1171,6 +1269,8 @@ def qpm_props(qpm, verbose=False):
     phi = np.arctan2(sinphi, cosphi)
     if phi < 0:
         phi += np.pi
+    if phi > np.pi:
+        phi -= np.pi
     return a, b, phi
 
 

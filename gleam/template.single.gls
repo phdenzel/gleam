@@ -42,7 +42,7 @@ include_prior(
 
 ### Cosmology
 omega(0.27, 0.73)
-# hubble_constant(72.032)
+hubble_constant(72.032)
 # hubble_time(13.7)
 
 
@@ -55,7 +55,7 @@ zlens(zl)
 
 pixrad(8)
 steepness(0.25, None)
-hires(1, 3)
+# hires(1, 3)
 
 smooth(2, include_central_pixel=False)
 local_gradient(45)
@@ -76,7 +76,7 @@ if len(ABCD) < 4:
     symm()
     shear(0.01)
 else:
-    shear(0.1)
+    shear(0.3)
 
 source(zs, *pos_par_td)
 

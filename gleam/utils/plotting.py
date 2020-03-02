@@ -347,10 +347,11 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
         kappa1 = 0
         grid = np.log10(grid)
         grid[grid <= clevels[0]] = clevels[0]
+        grid[np.isnan(grid)] = np.nanmin(grid)
     else:
         kappa1 = 1
         clevels = np.concatenate(((0,), 10**clev2))
-    clevels[0] -= 1e-6
+    # clevels[0] -= 1e-6
     return grid, (kappa1, clevels, extent)
 
 
@@ -901,6 +902,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
     kwargs.setdefault('ls', '-')
     kwargs.setdefault('color', GLEAMcolors.blue)
     kwargs.setdefault('alpha', 1)
+    verbose = kwargs.pop('verbose', False)
     # data
     if isinstance(model, (tuple, list)):
         model = np.asarray(model)
@@ -977,6 +979,8 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
             plt.ylim(bottom=np.min(profile), top=np.max(profile))
     if einstein_radius_indicator:
         einstein_radius = find_einstein_radius(radius, profile)
+        if verbose:
+            print("<R_E> = {} arcsec".format(einstein_radius))
         plt.axvline(einstein_radius, lw=1, ls='--', color=annotation_color, alpha=0.5)
         if label is not None:
             ax.text(0.87*einstein_radius/np.max(radius), 0.9, r'R$_{\mathsf{E}}$',
@@ -1150,7 +1154,8 @@ def viewstate_plots(model, obj_index=None, refined=True,
         plt.subplot(234)
         plt.title(r'$\kappa_{<R}$')
         if model.N > 1:
-            kappa_profiles_plot(model, obj_index=obj, refined=refined, as_range=1, interpolate=200)
+            kappa_profiles_plot(model, obj_index=obj, refined=refined, as_range=1, interpolate=200,
+                                verbose=verbose)
         else:
             kappa_profile_plot(model, obj_index=obj, refined=refined, einstein_radius_indicator=1)
         # plt.ylabel(r'arcsec')

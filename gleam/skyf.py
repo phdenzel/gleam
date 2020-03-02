@@ -476,6 +476,23 @@ class SkyF(object):
         else:
             return 0
 
+    @naxis1.setter
+    def naxis1(self, nax1):
+        """
+        Setter for length axis 1
+
+        Args:
+            nax1 <int> - new length of naxis1
+
+        Kwargs/Return:
+            None
+        """
+        if nax1 in self.data.shape:
+            self.hdr['NAXIS1'] = nax1
+        else:
+            print("Warning! Setting naxis1 to different value than data.shape")
+            self.hdr['NAXIS1'] = nax1
+
     @property
     def naxis2(self):
         """
@@ -493,6 +510,23 @@ class SkyF(object):
             return self.data.shape[1]
         else:
             return 0
+
+    @naxis2.setter
+    def naxis2(self, nax2):
+        """
+        Setter for length axis 2
+
+        Args:
+            nax2 <int> - new length of naxis2
+
+        Kwargs/Return:
+            None
+        """
+        if nax2 in self.data.shape:
+            self.hdr['NAXIS2'] = int(nax2)
+        else:
+            print("Warning! Setting naxis2 to different value than data.shape")
+            self.hdr['NAXIS2'] = int(nax2)
 
     @property
     def naxis_plus(self):
@@ -1296,7 +1330,7 @@ class SkyF(object):
         return formula
 
     def plot_f(self, fig, ax=None, as_magnitudes=False, scalebar=True,
-               colorbar=False, deconv=False,
+               flip=False, filter_nan=True, colorbar=False, deconv=False,
                verbose=False, cmap='magma', reverse_map=False, **kwargs):
         """
         Plot the image on an axis
@@ -1339,6 +1373,10 @@ class SkyF(object):
         iterations = kwargs.pop('iterations', 30)
         if deconv:
             d = richardson_lucy(d, psf=psf, iterations=iterations)
+        if flip:
+            d = np.flipud(d)
+        if filter_nan:
+            d = np.nan_to_num(d)
         img = ax.imshow(d, cmap=cmap, **kwargs)
         plt_out.append(img)
         if colorbar:  # plot colorbar
@@ -1355,8 +1393,8 @@ class SkyF(object):
             ax.text(barpos[0]+w/4, barpos[1]+2*h, r"$\mathrm{{{:.1f}''}}$".format(scale),
                     color='white', fontsize=16)
             # flip axes
-        ax.set_xlim(left=0, right=self.naxis1)
-        ax.set_ylim(bottom=0, top=self.naxis2)
+        # ax.set_xlim(left=0, right=self.naxis1)
+        # ax.set_ylim(bottom=0, top=self.naxis2)
         ax.set_aspect('equal')
         # no axis tick labels
         plt.axis('off')
