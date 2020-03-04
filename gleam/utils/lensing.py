@@ -16,7 +16,7 @@ from scipy.integrate import odeint
 from astropy.io import fits
 from gleam.utils.linalg import eigvals, eigvecs, angle
 from gleam.utils.units import units as gu
-from gleam.glass_interface import glass_basis, glass_renv
+from gleam.glass_interface import glass_basis, glass_renv, _detect_cpus, _detect_omp
 glass = glass_renv()
 
 
@@ -31,6 +31,9 @@ class ModelArray(object):
                  grid_size=None, pixrad=None, maprad=None, kappa=None,
                  obj_index=None, src_index=None,
                  minima=[], saddle_points=[], maxima=[],
+                 betas=[], shears=[],
+                 zl=None, zs=None,
+                 cosmo={'Omega_m': 0.3, 'Omega_l': 0.7, 'Omega_k': 0, 'Omega_r': 0.0},
                  verbose=False):
         """
         Args:
@@ -56,6 +59,9 @@ class ModelArray(object):
         self.minima = minima
         self.saddle_points = saddle_points
         self.maxima = maxima
+        self.zl = zl
+        self.zs = zs
+        self.cosmo = cosmo
         # Convergence data
         if data is None:
             pass
@@ -72,10 +78,16 @@ class ModelArray(object):
             self.models = [d for d in self.data]
         # Shear
         if not hasattr(self, 'shears'):
-            self.shears = None
+            if shears:
+                self.shears = shears
+            else:
+                self.shears = None
         # Source position
         if not hasattr(self, 'betas'):
-            self.betas = [np.array([0, 0])]*self.N
+            if betas:
+                self.betas = betas
+            else:
+                self.betas = [np.array([0, 0])]*self.N
         if verbose:
             print(self.__v__)
 
@@ -129,7 +141,8 @@ class ModelArray(object):
         kw = [('filepath', 'filename'),
               ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
               ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
-              ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima')]
+              ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima'),
+              ('zl', 'zl'), ('zs', 'zs'), ('cosmo', 'cosmo')]
         for key in kw:
             if hasattr(self, key[0]):
                 v = self.__getattribute__(key[0])
@@ -221,8 +234,6 @@ class ModelArray(object):
 
     @minima.setter
     def minima(self, minima):
-        if not hasattr(self, '_minima'):
-            self._minima = []
         self._minima = minima
 
     @property
@@ -233,8 +244,6 @@ class ModelArray(object):
 
     @saddle_points.setter
     def saddle_points(self, saddle_points):
-        if not hasattr(self, '_saddle_points'):
-            self._saddle_points = []
         self._saddle_points = saddle_points
 
     @property
@@ -245,9 +254,57 @@ class ModelArray(object):
 
     @maxima.setter
     def maxima(self, maxima):
-        if not hasattr(self, '_maxima'):
-            self._maxima = []
         self._maxima = maxima
+
+    @property
+    def cosmo(self):
+        if not hasattr(self, '_cosmo'):
+            self._cosmo = {'Omega_m': 0.3, 'Omega_l': 0.7,
+                           'Omega_k': 0, 'Omega_r': 0.0}
+        return self._cosmo
+
+    @cosmo.setter
+    def cosmo(self, cosmo):
+        self._cosmo = cosmo
+        if not (self.zl is None or self.zs is None):
+            self._dlsds = DLSDS(self.zl, self.zs, cosmo=self._cosmo)
+
+    @property
+    def zl(self):
+        if not hasattr(self, '_zl'):
+            self._zl = None
+        return self._zl
+
+    @zl.setter
+    def zl(self, zl):
+        self._zl = zl
+        if not (self.zs is None):
+            self._dlsds = DLSDS(self._zl, self.zs, cosmo=self.cosmo)
+
+    @property
+    def zs(self):
+        if not hasattr(self, '_zs'):
+            self._zs = None
+        return self._zs
+
+    @zs.setter
+    def zs(self, zs):
+        self._zs = zs
+        if not self.zl is None:
+            self._dlsds = DLSDS(self.zl, self._zs, cosmo=self.cosmo)
+
+    @property
+    def dlsds(self):
+        if not hasattr(self, '_dlsds'):
+            if not (self.zl is None and self.zs is None):
+                self._dlsds = DLSDS(self.zl, self.zs, cosmo=self.cosmo)
+            else:
+                self._dlsds = 1
+        return self._dlsds
+
+    @dlsds.setter
+    def dlsds(self, dlsds):
+        self._dslds = dlsds
 
     @property
     def obj_idx(self):
@@ -281,14 +338,14 @@ class ModelArray(object):
             cosmo = cosmology()
         dldsdls = DLDSDLS(zl, zs)
         dldsdls_new = DLDSDLS(zl_new, zs_new)
+        sigma = dldsdls / dldsdls_new
         # dl = DL(zl, zs)
-        # sigma = dldsdls / dldsdls_new
         # dl_new = DL(zl_new, zs_new)
         # delta = dl_new / dl
         self.data = self.data * sigma
         self.models = [m * sigma for m in self.models]
-        # self.maprad = self.maprad * delta if self.maprad is not None else None
         self.kappa = self.kappa * sigma if self.kappa is not None else None
+        # self.maprad = self.maprad * delta if self.maprad is not None else None
         # self.minima = [[m[0]*delta, m[1]*delta] for m in self.minima]
         # self.saddle_points = [[m[0]*delta, m[1]*delta] for m in self.saddle_points]
         # self.maxima = [[m[0]*delta, m[1]*delta] for m in self.maxima]
@@ -296,11 +353,24 @@ class ModelArray(object):
         # self.betas = [[b[0]*delta, b[1]*delta] for b in self.betas]
         
 
-    def xy_grid(self, N=None, maprad=None, pixel_size=None):
-        N = self.data.shape[-1] if N is None else N
+    def xy_grid(self, N=None, maprad=None, pixel_size=None, as_complex=False, refined=True):
+        N = self.kappa_grid(refined=refined).shape[-1] if N is None else N
         maprad = self.maprad if maprad is None else maprad
         pixel_size = self.pixel_size if pixel_size is None else pixel_size
-        return xy_grid(N, 2*maprad, pixel_size)
+        xy = xy_grid(N, 2*maprad, pixel_size)
+        if as_complex:
+            xy_compl = np.empty((N, N), dtype=np.complex)
+            xy_compl.real = xy[0, ...]
+            xy_compl.imag = xy[1, ...]
+            return xy_compl
+        return xy
+
+    def cellsize_grid(self, N=None, maprad=None, pixel_size=None, refined=True):
+        N = self.kappa_grid(refined=refined).shape[-1] if N is None else N
+        maprad = self.maprad if maprad is None else maprad
+        cell_size = 2*maprad / N
+        cell_sizes = np.ones((N, N)) * cell_size
+        return cell_sizes
 
     def kappa_grid(self, model_index=-1, refined=True):
         if refined and hasattr(self, 'data_hires'):
@@ -567,18 +637,21 @@ class GLASSModel(ModelArray):
         if not hasattr(self, 'all_data'):
             dta = {'hires': [], 'toplevel': [], 'dlsds': [],
                    'minima': [], 'saddle_points': [], 'maxima': [],
-                   'H0': [], 'cosmology': cosmo}
+                   'zl': [], 'zs': [], 'H0': [], 'cosmology': cosmo}
             for obj_idx in range(self.N_obj):
                 mdta = {'toplevel': [], 'hires': [], 'dlsds': [], 'H0': []}
                 for m in self.env.models:
                     obj, data = m['obj,data'][obj_idx]
                     src = obj.sources[src_index]
-                    dlsds = DLSDS(obj.z, src.z, cosmo=cosmo)
+                    zl, zs = obj.z, src.z
+                    dlsds = DLSDS(zl, zs, cosmo=cosmo)
                     mdta['toplevel'].append(dlsds * obj.basis._to_grid(data['kappa'], 1))
                     mdta['hires'].append(dlsds * obj.basis.kappa_grid(data))
                     mdta['H0'].append(data['H0'])
                 imgs = src.images
                 mdta['dlsds'] = dlsds
+                mdta['zl'] = zl
+                mdta['zs'] = zs
                 mdta['minima'] = [i._pos for i in imgs if i.parity == 0]
                 mdta['saddle_points'] = [i._pos for i in imgs if i.parity == 1]
                 mdta['maxima'] = [i._pos for i in imgs if i.parity == 2]
@@ -587,8 +660,8 @@ class GLASSModel(ModelArray):
             for k in ['toplevel', 'hires']:
                 dta[k] = np.array(dta[k], dtype=np.float32)
             self.all_data = dta
-        self.filepath = filename
-        self.filename = os.path.basename(filename)
+        self.filepath = filename if filename is not None else ""
+        self.filename = os.path.basename(filename) if filename is not None else ""
         self.src_idx = src_index
         self.obj_idx = obj_index  # calls super(GLASSModel, self)__init__()
         if self.N_src > 1:  # TODO: can be removed once multiple sources are handled correctly
@@ -620,9 +693,9 @@ class GLASSModel(ModelArray):
     def data_toplevel(self):
         return self.all_data['toplevel'][self.obj_idx]
 
-    @property
-    def dlsds(self):
-        return self.all_data['dlsds'][self.obj_idx]
+    # @property
+    # def dlsds(self):
+    #     return self.all_data['dlsds'][self.obj_idx]
 
     @property
     def H0(self):
@@ -634,30 +707,6 @@ class GLASSModel(ModelArray):
         Get current models from GLASS environment
         """
         return [m['obj,data'][self.obj_idx] for m in self.env.models]
-
-    @property
-    def minima(self):
-        return np.asarray(self.all_data['minima'][self.obj_idx])
-
-    @minima.setter
-    def minima(self, minima):
-        super(GLASSModel, self.__class__).minima.fset(self, minima)
-
-    @property
-    def saddle_points(self):
-        return np.asarray(self.all_data['saddle_points'][self.obj_idx])
-
-    @saddle_points.setter
-    def saddle_points(self, saddle_points):
-        super(GLASSModel, self.__class__).saddle_points.fset(self, saddle_points)
-
-    @property
-    def maxima(self):
-        return np.asarray(self.all_data['maxima'][self.obj_idx])
-
-    @maxima.setter
-    def maxima(self, maxima):
-        super(GLASSModel, self.__class__).maxima.fset(self, maxima)
 
     @property
     def betas(self):
@@ -703,12 +752,16 @@ class GLASSModel(ModelArray):
         obj, data = self.env.models[0]['obj,data'][obj_index]
         kappa = glass.scales.convert('kappa to Msun/arcsec^2', 1,
                                      obj.dL, self.env.nu[self.src_idx])
-        minima = self.all_data['minima'][obj_index]
-        saddle_points = self.all_data['saddle_points'][obj_index]
-        maxima = self.all_data['maxima'][obj_index]
+        minima = np.asarray(self.all_data['minima'][obj_index])
+        saddle_points = np.asarray(self.all_data['saddle_points'][obj_index])
+        maxima = np.asarray(self.all_data['maxima'][obj_index])
+        zl = self.all_data['zl'][obj_index]
+        zs = self.all_data['zs'][obj_index]
+        cosmo = self.all_data['cosmology']
         super(GLASSModel, self).__init__(
             dta, filename=self.filepath, pixrad=obj.basis.pixrad, maprad=obj.basis.mapextent,
-            kappa=kappa, minima=minima, maxima=maxima, saddle_points=saddle_points)
+            kappa=kappa, minima=minima, maxima=maxima, saddle_points=saddle_points,
+            zl=zl, zs=zs, cosmo=cosmo)
 
     @property
     def src_idx(self):
@@ -768,8 +821,10 @@ class LensModel(MetaModel):
             bases = (GLASSModel, ModelArray, object)
             cls = mcls.__class__.__new__(mcls, mcls.__name__, bases, cdict)
             return cls.from_filename(args, **kwargs)
-        elif isinstance(args, object) and hasattr(args, 'models') and 'obj,data' in args.models[0]:
+        elif isinstance(args, glass.environment.Environment):
             bases = (GLASSModel, ModelArray, object)
+        # elif isinstance(args, object) and hasattr(args, 'models') and 'obj,data' in args.models[0]:
+        #     bases = (GLASSModel, ModelArray, object)
         elif isinstance(args, dict) and 'obj,data' in args:
             NotImplemented
         # PixeLens model
@@ -1342,6 +1397,95 @@ def lnr(x, y, xn, yn, a):
         - lnr_indef(xm, yp, xm2, yp2) - lnr_indef(xp, ym, xp2, ym2)
 
 
+def grad(W, r0, r, a, threads=1, use_omp=False):
+    """
+    Args:
+        W <np.ndarray> - kappa grid
+        r0 <complex> - theta point of reference
+        r <np.ndarray(complex)> - array of all pixel coordinates
+        a <np.ndarray> - pixel size
+    """
+    import weave
+    from numpy import pi
+    code = """
+    int i;
+    std::complex<double> v(0,0);
+    //Py_BEGIN_ALLOW_THREADS
+    double xx=0,yy=0;
+    #ifdef WITH_OMP
+    omp_set_num_threads(threads);
+    #endif
+    #pragma omp parallel for reduction(+:xx) reduction(+:yy)
+    for (i=0; i < l; i++)
+    {
+        double vx,vy;
+        std::complex<double> dr = r0-r[i];
+        const double xi = std::real(dr);
+        const double yi = std::imag(dr);
+        const double xm = xi - a[i]/2;
+        const double xp = xi + a[i]/2;
+        const double ym = yi - a[i]/2;
+        const double yp = yi + a[i]/2;
+        const double xm2 = xm*xm;
+        const double xp2 = xp*xp;
+        const double ym2 = ym*ym;
+        const double yp2 = yp*yp;
+        const double log_xm2_ym2 = log(xm2 + ym2);
+        const double log_xp2_yp2 = log(xp2 + yp2);
+        const double log_xp2_ym2 = log(xp2 + ym2);
+        const double log_xm2_yp2 = log(xm2 + yp2);
+        vx = (xm*atan(ym/xm) + xp*atan(yp/xp)) + (ym*log_xm2_ym2 + yp*log_xp2_yp2) / 2
+           - (xm*atan(yp/xm) + xp*atan(ym/xp)) - (ym*log_xp2_ym2 + yp*log_xm2_yp2) / 2;
+        vx /= pi;
+        vx *= W[i];
+        vy = (ym*atan(xm/ym) + yp*atan(xp/yp)) + (xm*log_xm2_ym2 + xp*log_xp2_yp2) / 2
+           - (ym*atan(xp/ym) + yp*atan(xm/yp)) - (xm*log_xm2_yp2 + xp*log_xp2_ym2) / 2;
+        vy /= pi;
+        vy *= W[i];
+        //v += std::complex<double>(vx,vy);
+        xx += vx;
+        yy += vy;
+    }
+    //Py_END_ALLOW_THREADS
+    return_val = std::complex<double>(xx,yy);
+    """
+    l = len(r)
+    if use_omp:
+        kw = _detect_omp(force_gcc=True)
+    else:
+        kw = {}
+    # threads = _detect_cpus()
+    v = weave.inline(code, ['l', 'W','r0','r', 'pi', 'a', 'threads'], **kw)
+    return v
+
+
+def external_shear_grad(shear, theta):
+    """
+    Returns external shear (as complex two-component point) for given point
+    """
+    shear = np.asarray(shear)
+    dx = np.array([theta.real, theta.imag])
+    dy = np.array([-theta.imag, theta.real])
+    return complex(sum(shear * dx), sum(shear * dy))
+
+
+def deflect(theta, kappa, ploc, cell_size, shear=None):
+    """
+    Returns the deflection, i.e. potential gradient
+
+    Args:
+        theta <> - angular position
+        kappa <> - kappa map
+        ploc <> - pixel locations of the kappa map
+        cell_size <> - array of pixel sizes
+    """
+    s = grad(kappa, theta, ploc, cell_size)
+    if shear is not None:
+        extp = external_shear_grad(shear, theta)
+        s += extp
+    return s
+
+
 def arrival_time(theta, beta, kappa, N, grid_size, factor=1, shear=None, verbose=False):
     """
     Calculate the arrival time for a given kappa map and beta at position theta
@@ -1352,7 +1496,7 @@ def arrival_time(theta, beta, kappa, N, grid_size, factor=1, shear=None, verbose
     Q = lnr(theta[0], theta[1], xn, yn, pixel_size)
     pot = -np.sum(kappa*Q) / (2*np.pi) * factor
     if shear is not None:
-        pot -= external_shear(shear, theta)
+        pot -= external_shear_grid(shear, theta)
     return geom + pot
 
 
@@ -1396,7 +1540,7 @@ def potential_grid(kappa, N, grid_size, factor=1, ext=None, verbose=False):
     return gx, gy, psi
 
 
-def external_shear(shear, theta):
+def external_shear_grid(shear, theta):
     """
     Shear value at theta
 

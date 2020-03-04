@@ -66,7 +66,7 @@ def _detect_cpus():
     return 1
 
 
-def _detect_omp():
+def _detect_omp(force_gcc=False):
     """
     Detects the OpenMP options
 
@@ -74,9 +74,15 @@ def _detect_omp():
         None
     """
     global _omp_opts
-    if _omp_opts is not None:
-        return _omp_opts
-    if 'clang' in sys.version:  # probably macOS clang build
+    # if _omp_opts is not None:
+    #     return _omp_opts
+    if force_gcc:
+        kw = dict(
+            extra_compile_args=['-O3', '-fopenmp', '-DWITH_OMP',
+                                '-Wall', '-Wno-unused-variable'],
+            extra_link_args=['-lgomp'],
+            headers=['<omp.h>'])
+    elif 'clang' in sys.version:  # probably macOS clang build
         kw = dict(
             extra_compile_args=['-O3', '-DWITH_OMP', '-Wno-unused-variable'])
     else:  # most likely some gcc build

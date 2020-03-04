@@ -34,6 +34,7 @@ from gleam.skyf import SkyF
 from gleam.lensobject import LensObject
 from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
+from gleam.utils.lensing import LensModel, deflect
 from gleam.utils.linalg import is_symm2D
 import gleam.utils.optimized as cython_optimized
 import gleam.utils.rgb_map as glmrgb
@@ -52,13 +53,13 @@ class ReconSrc(object):
     """
     Framework for source reconstruction
     """
-    def __init__(self, gleamobject, glsfile, M=40, M_fullres=None, mask_keys=[], verbose=False):
+    def __init__(self, gleamobject, model, M=40, M_fullres=None, mask_keys=[], verbose=False):
         """
         Initialize
 
         Args:
             gleamobject <GLEAM object> - a GLEAM object instance with .fits file's data
-            glsfile <str> - filename of a GLASS .state file
+            model <str> - filename of a GLASS .state file, or a loaded GLASS state, or a LensModel object
 
         Kwargs:
             M <int> - source plane pixel radius; the total source plane will be (2*M+1)x(2*M+1)
@@ -75,10 +76,19 @@ class ReconSrc(object):
             self.lensobject = self.gleamobject
         else:
             raise TypeError("ReconSrc needs a GLEAM object (LensObject/MultiLens) as input!")
-        # grab first lensobject if there are more than one; TODO: make method with more lenses
-        self.lensobject = self.lens_objects[0]
+        self.lensobject = self.lens_objects[0]  # grab first lensobject if there are more than one; TODO: make method with more lenses
         self.mask_keys = mask_keys  # sets mask
-        self.gls = glass.glcmds.loadstate(glsfile)
+        # load model data
+        if isinstance(model, str) and model.endswith('.state'):
+            self.model = LensModel(glass.glcmds.loadstate(model))
+        elif isinstance(model, glass.environment.Environment):
+            self.model = LensModel(model)
+        elif isinstance(model, LensModel) and model.__class__.__base__.__name__ == 'GLASSModel':
+            self.model = model
+        elif isinstance(model, LensModel):
+            self.model = model
+        else:
+            self.model = LensModel(model)
         self.model_index = -1
         self.obj_index = 0
 
@@ -98,8 +108,8 @@ class ReconSrc(object):
         self.psf = None
 
         # cache for high demand operations
-        self._cache = {v: {k: {i: None for i in range(-1, len(self.gls.models))}
-                           for k in range(len(self.gls.objects))}
+        self._cache = {v: {k: {i: None for i in range(-1, self.model.N)}
+                           for k in range(self.model.N_obj)}
                        for v in ['inv_proj', 'M_fullres', 'r_fullres',
                                  'M', 'r_max', 'N_nil', 'reproj_d_ij']}
 
@@ -130,7 +140,7 @@ class ReconSrc(object):
         Return:
             tests <list(str)> - a list of test variable strings
         """
-        return ['lensobject', 'gls', 'mask_keys', 'M', 'N', 'r_max',
+        return ['lensobject', 'model', 'mask_keys', 'M', 'N', 'r_max',
                 'M_fullres', 'N_fullres', 'r_fullres', 'N_nil']
 
     @property
@@ -263,8 +273,9 @@ class ReconSrc(object):
             None
         """
         if index is None:
-            index = (self.obj_index + 1) % len(self.gls.objects)
+            index = (self.obj_index + 1) % self.model.N_obj
         self.obj_index = index
+        self.model.obj_idx = self.obj_index
 
     def chmdl(self, index=None):
         """
@@ -280,8 +291,11 @@ class ReconSrc(object):
             None
         """
         if index is None:
-            index = (self.model_index + 1) % len(self.gls.models)
+            index = (self.model_index + 1) % self.model.N
         self.model_index = index
+        self.ploc = self.model.xy_grid(as_complex=True).flatten()
+        self.cell_sizes = self.model.cellsize_grid().flatten()
+        
 
     def ensavg_mdl(self, selection=None):
         """
@@ -298,12 +312,10 @@ class ReconSrc(object):
                                                          of the ensemble average
         """
         if selection is None:
-            self.gls.make_ensemble_average()
-            return self.gls.ensemble_average['obj,data'][self.obj_index]
+            return self.model.ensemble_average()
         else:
-            envcpy = filter_env(self.gls, selection)
-            envcpy.make_ensemble_average()
-            return envcpy.ensemble_average['obj,data'][self.obj_index]
+            mdlcpy = self.model.subset(selection)
+            return mdlcpy.ensemble_average()
 
     def update_cache(self, cache, variables=['inv_proj', 'M_fullres', 'r_fullres',
                                              'M', 'r_max', 'N_nil', 'reproj_d_ij'],
@@ -345,8 +357,8 @@ class ReconSrc(object):
             None
         """
         for v in variables:
-            self._cache[v] = {k: {i: None for i in range(-1, len(self.gls.models))}
-                              for k in range(len(self.gls.objects))}
+            self._cache[v] = {k: {i: None for i in range(-1, self.model.N)}
+                              for k in range(self.model.N_obj)}
 
     @staticmethod
     def _psf_f(psf_data, dx, dy, center=None):
@@ -426,7 +438,7 @@ class ReconSrc(object):
 
         Kwargs:
             flat <bool> - return the flattened array
-            composite <bool> - return the composite data array
+            composite <bool> - return the composite data array [not yet tested]
 
         Return:
             dij <np.ndarray> - the lens plane data array
@@ -451,7 +463,7 @@ class ReconSrc(object):
         Kwargs:
             flat <bool> - return the flattened array
             mask <bool> - return only the masked part of the lens plane data
-            composite <bool> - return the composite data array
+            composite <bool> - return the composite data array [not yet tested]
 
         Return:
             dij <np.ndarray> - the lens plane data array
@@ -465,7 +477,7 @@ class ReconSrc(object):
             dij[~msk] = 0
         return dij
 
-    def delta_beta(self, theta):
+    def delta_beta_XXX(self, theta):
         """
         Delta beta from lens equation using the current GLASS model
 
@@ -478,15 +490,16 @@ class ReconSrc(object):
         Return:
             delta_beta <np.ndarray> - beta from lens equation
         """
+        self.model_index = 1
         if self.model_index >= 0:
-            obj, data = self.gls.models[self.model_index]['obj,data'][self.obj_index]
+            obj, data = self.model.env.models[self.model_index]['obj,data'][self.obj_index]
         else:
             obj, data = self.ensavg_mdl()
         if isinstance(theta, np.ndarray) and len(theta) > 2:  # seems to work with
             ang_pos = np.empty(theta.shape[:-1], dtype=np.complex)
             ang_pos.real = theta[..., 0]
             ang_pos.imag = theta[..., 1]
-            deflect = np.vectorize(obj.basis.deflect)  # , excluded=['data'])
+            deflect = np.vectorize(obj.basis.deflect)
         elif not isinstance(theta, (list, tuple)) and len(theta) == 2:
             ang_pos = complex(*theta)
             deflect = obj.basis.deflect
@@ -496,6 +509,41 @@ class ReconSrc(object):
         src = data['src'][0]
         zcap = obj.sources[0].zcap
         dbeta = src - ang_pos + deflect(ang_pos, data) / zcap
+        return np.array([dbeta.real, dbeta.imag]).T
+
+    def delta_beta(self, ang_pos, beta=0j):
+        """
+        Delta beta from lens equation using the current kappa model
+
+        Args:
+            theta <np.ndarray/list/tuple/complex> - 2D angular position coordinates
+
+        Kwargs:
+            beta <complex> - source point position
+
+        Return:
+            delta_beta <np.ndarray> - beta from lens equation
+        """
+        data = self.model.kappa_grid(model_index=self.model_index, refined=False).flatten()
+        ploc = self.model.xy_grid(as_complex=True, refined=False).flatten()
+        cell_sizes = self.model.cellsize_grid(refined=False).flatten()
+        if isinstance(ang_pos, np.ndarray) and len(ang_pos) > 2:
+            theta = np.empty(ang_pos.shape[:-1], dtype=np.complex)
+            theta.real = ang_pos[..., 1]
+            theta.imag = ang_pos[..., 0]
+            alpha = np.vectorize(deflect, signature='(),(m),(m),(m)->()')
+        elif isinstance(ang_pos, (list, tuple)) and len(ang_pos) == 2:
+            theta = complex(*ang_pos)
+            alpha = deflect
+        else:
+            theta = ang_pos
+            alpha = deflect
+        zcap = 1./self.model.dlsds
+        if np.any(self.model.betas[self.obj_index]):
+            beta = self.model.betas[self.obj_index]
+            if not isinstance(beta, complex):
+                beta = complex(*beta)
+        dbeta = beta - theta + alpha(theta, data, ploc, cell_sizes)  # / zcap
         return np.array([dbeta.real, dbeta.imag]).T
 
     def srcgrid_deflections(self, mask=None):
@@ -551,6 +599,96 @@ class ReconSrc(object):
         xy = np.int16(np.floor(pixrad*(1+dbeta/maprad))+.5)
         return xy
 
+    def inv_proj_matrix_XXX(self, cy_opt=False, use_mask=False, asarray=False):
+        """
+        The projection matrix to get from the image plane to the source plane
+
+        Args:
+            None
+
+        Kwargs:
+            cy_opt <bool> - use optimized cython method to construct inverse projection matrix [not yet standalone]
+            asarray <bool> - if True, return matrix as array, otherwise as scipy.sparse matrix
+
+        Return:
+            Mij_p <scipy.sparse.lil.lil_matrix> - inverse projection map from image to source plane
+        """
+        if cy_opt:
+            Lx, Ly = self.lensobject.naxis1, self.lensobject.naxis2
+            if hasattr(self.lensobject, 'lens'):
+                origin = self.lensobject.lens
+            else:
+                origin = self.lensobject.center
+            obj, data = self.model.models[self.model_index]['obj,data'][self.obj_index]
+            msk = self.image_mask() if use_masks else None
+            image_ij = np.array([self.lensobject.yx2idx(ix, iy)
+                                 for ix, iy in zip(*np.where(msk))], dtype=np.int32)
+            src = data['src'][0]
+            zcap = obj.sources[0].zcap
+            kappa = data['kappa']
+            ploc = obj.basis.ploc
+            cell_size = obj.basis.cell_size
+            extra_potentials = [(data[e.name], e) for e in obj.extra_potentials]
+            Mij_p = sparse_Lmatrix((Lx*Ly, self.N*self.N), dtype=np.int32)
+            Mij_p, N_nil, M_fullres, r_fullres, r_max = cython_optimized.inv_proj_matrix(
+                Mij_p, Lx, Ly, self.N, image_ij,
+                origin.x, origin.y, self.lensobject.px2arcsec[0],
+                src.real, src.imag, zcap, kappa, ploc, cell_size,
+                extra_potentials)
+            Mij_p = Mij_p.tocsr()
+            self.N_nil = N_nil
+            self.M_fullres = M_fullres
+            self.r_fullres = r_fullres
+            self.r_max = r_max
+        else:
+            # # lens plane
+            LxL = self.lensobject.naxis1*self.lensobject.naxis2
+            ij = range(LxL)
+            # calculate optimal mapping resolution
+            msk = self.image_mask()
+            _, self.r_max = self.srcgrid_deflections(mask=msk)
+            if use_mask and np.any(self.mask):
+                ij = [self.lensobject.yx2idx(ix, iy) for ix, iy in zip(*np.where(~self.mask))]
+                dbeta, self.r_fullres = self.srcgrid_deflections(mask=~self.mask)
+            else:
+                dbeta, self.r_fullres = self.srcgrid_deflections(mask=None)
+            map2px = self.M/self.r_max
+            self.M_fullres = int(self.r_fullres*map2px+.5)
+            # get model's source grid mapping
+            xy = self.srcgrid_mapping(dbeta=dbeta, pixrad=self.M_fullres, maprad=self.r_fullres)
+            # # source plane dimensions
+            NxN = self.N*self.N
+            N_l, N_r = self.N_fullres//2-self.N//2, self.N_fullres//2+self.N//2
+            # # construct projection matrix
+            self.N_nil = 0
+            Mij_p = sparse_Lmatrix((LxL, NxN), dtype=np.int16)
+            for i, (x, y) in enumerate(xy):
+                # antialiasing
+                if (N_l < x < N_r) and (N_l < y < N_r):
+                    x -= N_l
+                    y -= N_l
+                else:
+                    self.N_nil += 1
+                    continue
+                # fill matrix entry
+                p_idx = self.lensobject.yx2idx(y, x, cols=self.N)
+                if p_idx >= NxN:
+                    message = "Warning!"
+                    message += " Projection discovered pixel out of range in matrix construction!"
+                    message += " Something might be wrong!"
+                    print(message)
+                    continue
+                ij_idx = ij[i]
+                Mij_p[ij_idx, p_idx] = 1
+            Mij_p = Mij_p.tocsr()
+        self._cache['N_nil'][self.obj_index][self.model_index] = self.N_nil
+        self._cache['M_fullres'][self.obj_index][self.model_index] = self.M_fullres
+        self._cache['r_fullres'][self.obj_index][self.model_index] = self.r_fullres
+        self._cache['r_max'][self.obj_index][self.model_index] = self.r_max
+        if asarray:
+            return Mij_p.toarray()
+        return Mij_p
+
     def inv_proj_matrix(self, cy_opt=False, use_mask=False, asarray=False):
         """
         The projection matrix to get from the image plane to the source plane
@@ -571,7 +709,7 @@ class ReconSrc(object):
                 origin = self.lensobject.lens
             else:
                 origin = self.lensobject.center
-            obj, data = self.gls.models[self.model_index]['obj,data'][self.obj_index]
+            obj, data = self.model.models[self.model_index]['obj,data'][self.obj_index]
             msk = self.image_mask() if use_masks else None
             image_ij = np.array([self.lensobject.yx2idx(ix, iy)
                                  for ix, iy in zip(*np.where(msk))], dtype=np.int32)
@@ -677,6 +815,7 @@ class ReconSrc(object):
             sigma <float/np.ndarray> - uncertainty map
             sigma2 <float/np.ndarray> - squared uncertainty map
             sigmaM2 <scipy.sparse.diags> - sparse diagonal matrix with inverse sigma2s
+            use_mask <bool> - masked areas will not be projected
             composite <bool> - return the composite data array
 
         Return:

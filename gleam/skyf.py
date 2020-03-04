@@ -808,7 +808,7 @@ class SkyF(object):
             position = self.p2skycoords(position, unit='pixel')
         # origin
         if origin is None:
-            if hasattr(self, 'lens'):
+            if hasattr(self, 'lens') and self.lens is not None:
                 origin = self.lens
             else:
                 origin = self.center
