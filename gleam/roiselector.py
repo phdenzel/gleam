@@ -518,6 +518,9 @@ class ROISelector(object):
                     img = s.draw2img(img)
         return img
 
+    def plot_rois(self, ax):
+        pass
+
     @staticmethod
     def r_integrate(data, mask=None, center=None, R=None):
         """
@@ -1068,6 +1071,9 @@ class ROISelector(object):
             del draw
             return img
 
+        def plot2ax(self, ax, ):
+            pass
+
 ###############################################################################
     class Rectangle(Polygon):
         """
@@ -1610,6 +1616,9 @@ class ROISelector(object):
             draw.ellipse((cx0, cy0, cx1, cy1), fill=fill, outline=outline)
             del draw
             return img
+
+        def plot2ax(self, ax):
+            pass
 
 ###############################################################################
     class Ring(object):

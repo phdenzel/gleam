@@ -20,6 +20,7 @@ TODO:
 import sys
 import os
 import numpy as np
+import time
 from functools import partial
 from pathos.multiprocessing import ProcessingPool as Pool
 from scipy.sparse import lil_matrix as sparse_Lmatrix
@@ -225,7 +226,7 @@ class ReconSrc(object):
             mask = np.logical_or.reduce([mask]+self.lensobject.roi._masks[k])
         return mask
 
-    def image_mask(self, f=0.8, n_sigma=5):
+    def image_mask(self, f=0.8, n_sigma=3):
         """
         Estimate a mask which includes most of the images
 
@@ -238,9 +239,25 @@ class ReconSrc(object):
         Return:
             mask <np.ndarray(bool)> - mask splitting signal from background
         """
-        threshold_map = self.lensobject.finder.threshold_estimate(self.lens_map(), sigma=n_sigma)
-        mask = np.abs(self.lens_map()) >= f*threshold_map
+        data = self.lens_map().copy()
+        if np.any(self.mask):
+            lmsk = self.mask
+            data[lmsk] = 0
+        threshold_map = self.lensobject.finder.threshold_estimate(data, sigma=n_sigma)
+        mask = np.abs(data) >= f*threshold_map
         return mask
+
+    def ring_mask(self, dr=10, inner=None):
+        """
+        Kwargs:
+            dr <int> - thickness of the ring mask
+            inner <int> - inner radius of the ring
+        """
+        if np.any(self.mask):
+            rmsk = self.mask
+            # get center and radius of rmsk
+            # expand by dr -> Rmsk
+            # return Rmsk and not rmsk
 
     def chbnd(self, index=None):
         """
@@ -477,40 +494,6 @@ class ReconSrc(object):
             dij[~msk] = 0
         return dij
 
-    def delta_beta_XXX(self, theta):
-        """
-        Delta beta from lens equation using the current GLASS model
-
-        Args:
-            theta <np.ndarray/list/tuple/complex> - 2D angular position coordinates
-
-        Kwargs:
-            None
-
-        Return:
-            delta_beta <np.ndarray> - beta from lens equation
-        """
-        self.model_index = 1
-        if self.model_index >= 0:
-            obj, data = self.model.env.models[self.model_index]['obj,data'][self.obj_index]
-        else:
-            obj, data = self.ensavg_mdl()
-        if isinstance(theta, np.ndarray) and len(theta) > 2:  # seems to work with
-            ang_pos = np.empty(theta.shape[:-1], dtype=np.complex)
-            ang_pos.real = theta[..., 0]
-            ang_pos.imag = theta[..., 1]
-            deflect = np.vectorize(obj.basis.deflect)
-        elif not isinstance(theta, (list, tuple)) and len(theta) == 2:
-            ang_pos = complex(*theta)
-            deflect = obj.basis.deflect
-        else:
-            ang_pos = theta
-            deflect = obj.basis.deflect
-        src = data['src'][0]
-        zcap = obj.sources[0].zcap
-        dbeta = src - ang_pos + deflect(ang_pos, data) / zcap
-        return np.array([dbeta.real, dbeta.imag]).T
-
     def delta_beta(self, ang_pos, beta=0j):
         """
         Delta beta from lens equation using the current kappa model
@@ -543,7 +526,10 @@ class ReconSrc(object):
             beta = self.model.betas[self.obj_index]
             if not isinstance(beta, complex):
                 beta = complex(*beta)
-        dbeta = beta - theta + alpha(theta, data, ploc, cell_sizes)  # / zcap
+        # TODO: add shear
+        # if np.any(self.model.shears[self.obj_index]):
+        #     pass
+        dbeta = beta - theta + alpha(theta, data, ploc, cell_sizes)  / zcap
         return np.array([dbeta.real, dbeta.imag]).T
 
     def srcgrid_deflections(self, mask=None):
@@ -599,96 +585,6 @@ class ReconSrc(object):
         xy = np.int16(np.floor(pixrad*(1+dbeta/maprad))+.5)
         return xy
 
-    def inv_proj_matrix_XXX(self, cy_opt=False, use_mask=False, asarray=False):
-        """
-        The projection matrix to get from the image plane to the source plane
-
-        Args:
-            None
-
-        Kwargs:
-            cy_opt <bool> - use optimized cython method to construct inverse projection matrix [not yet standalone]
-            asarray <bool> - if True, return matrix as array, otherwise as scipy.sparse matrix
-
-        Return:
-            Mij_p <scipy.sparse.lil.lil_matrix> - inverse projection map from image to source plane
-        """
-        if cy_opt:
-            Lx, Ly = self.lensobject.naxis1, self.lensobject.naxis2
-            if hasattr(self.lensobject, 'lens'):
-                origin = self.lensobject.lens
-            else:
-                origin = self.lensobject.center
-            obj, data = self.model.models[self.model_index]['obj,data'][self.obj_index]
-            msk = self.image_mask() if use_masks else None
-            image_ij = np.array([self.lensobject.yx2idx(ix, iy)
-                                 for ix, iy in zip(*np.where(msk))], dtype=np.int32)
-            src = data['src'][0]
-            zcap = obj.sources[0].zcap
-            kappa = data['kappa']
-            ploc = obj.basis.ploc
-            cell_size = obj.basis.cell_size
-            extra_potentials = [(data[e.name], e) for e in obj.extra_potentials]
-            Mij_p = sparse_Lmatrix((Lx*Ly, self.N*self.N), dtype=np.int32)
-            Mij_p, N_nil, M_fullres, r_fullres, r_max = cython_optimized.inv_proj_matrix(
-                Mij_p, Lx, Ly, self.N, image_ij,
-                origin.x, origin.y, self.lensobject.px2arcsec[0],
-                src.real, src.imag, zcap, kappa, ploc, cell_size,
-                extra_potentials)
-            Mij_p = Mij_p.tocsr()
-            self.N_nil = N_nil
-            self.M_fullres = M_fullres
-            self.r_fullres = r_fullres
-            self.r_max = r_max
-        else:
-            # # lens plane
-            LxL = self.lensobject.naxis1*self.lensobject.naxis2
-            ij = range(LxL)
-            # calculate optimal mapping resolution
-            msk = self.image_mask()
-            _, self.r_max = self.srcgrid_deflections(mask=msk)
-            if use_mask and np.any(self.mask):
-                ij = [self.lensobject.yx2idx(ix, iy) for ix, iy in zip(*np.where(~self.mask))]
-                dbeta, self.r_fullres = self.srcgrid_deflections(mask=~self.mask)
-            else:
-                dbeta, self.r_fullres = self.srcgrid_deflections(mask=None)
-            map2px = self.M/self.r_max
-            self.M_fullres = int(self.r_fullres*map2px+.5)
-            # get model's source grid mapping
-            xy = self.srcgrid_mapping(dbeta=dbeta, pixrad=self.M_fullres, maprad=self.r_fullres)
-            # # source plane dimensions
-            NxN = self.N*self.N
-            N_l, N_r = self.N_fullres//2-self.N//2, self.N_fullres//2+self.N//2
-            # # construct projection matrix
-            self.N_nil = 0
-            Mij_p = sparse_Lmatrix((LxL, NxN), dtype=np.int16)
-            for i, (x, y) in enumerate(xy):
-                # antialiasing
-                if (N_l < x < N_r) and (N_l < y < N_r):
-                    x -= N_l
-                    y -= N_l
-                else:
-                    self.N_nil += 1
-                    continue
-                # fill matrix entry
-                p_idx = self.lensobject.yx2idx(y, x, cols=self.N)
-                if p_idx >= NxN:
-                    message = "Warning!"
-                    message += " Projection discovered pixel out of range in matrix construction!"
-                    message += " Something might be wrong!"
-                    print(message)
-                    continue
-                ij_idx = ij[i]
-                Mij_p[ij_idx, p_idx] = 1
-            Mij_p = Mij_p.tocsr()
-        self._cache['N_nil'][self.obj_index][self.model_index] = self.N_nil
-        self._cache['M_fullres'][self.obj_index][self.model_index] = self.M_fullres
-        self._cache['r_fullres'][self.obj_index][self.model_index] = self.r_fullres
-        self._cache['r_max'][self.obj_index][self.model_index] = self.r_max
-        if asarray:
-            return Mij_p.toarray()
-        return Mij_p
-
     def inv_proj_matrix(self, cy_opt=False, use_mask=False, asarray=False):
         """
         The projection matrix to get from the image plane to the source plane
@@ -698,6 +594,7 @@ class ReconSrc(object):
 
         Kwargs:
             cy_opt <bool> - use optimized cython method to construct inverse projection matrix
+                            [currently broken]
             asarray <bool> - if True, return matrix as array, otherwise as scipy.sparse matrix
 
         Return:
@@ -709,22 +606,25 @@ class ReconSrc(object):
                 origin = self.lensobject.lens
             else:
                 origin = self.lensobject.center
-            obj, data = self.model.models[self.model_index]['obj,data'][self.obj_index]
-            msk = self.image_mask() if use_masks else None
+            # msk = self.image_mask() if use_mask else None
+            msk = self.mask if use_mask else None
             image_ij = np.array([self.lensobject.yx2idx(ix, iy)
                                  for ix, iy in zip(*np.where(msk))], dtype=np.int32)
-            src = data['src'][0]
-            zcap = obj.sources[0].zcap
-            kappa = data['kappa']
-            ploc = obj.basis.ploc
-            cell_size = obj.basis.cell_size
-            extra_potentials = [(data[e.name], e) for e in obj.extra_potentials]
+            if np.any(self.model.betas[self.obj_index]):
+                src = self.model.betas[self.obj_index]
+                if not isinstance(src, complex):
+                    src = complex(*src)
+            zcap = 1./self.model.dlsds
+            kappa = self.model.kappa_grid(model_index=self.model_index, refined=False).flatten()
+            ploc = self.model.xy_grid(as_complex=True, refined=False).flatten()
+            cell_size = self.model.cellsize_grid(refined=False).flatten()
+            extra_potentials = [(data[e.name], e) for e in obj.extra_potentials]  # fix
             Mij_p = sparse_Lmatrix((Lx*Ly, self.N*self.N), dtype=np.int32)
             Mij_p, N_nil, M_fullres, r_fullres, r_max = cython_optimized.inv_proj_matrix(
                 Mij_p, Lx, Ly, self.N, image_ij,
                 origin.x, origin.y, self.lensobject.px2arcsec[0],
                 src.real, src.imag, zcap, kappa, ploc, cell_size,
-                extra_potentials)
+                [])
             Mij_p = Mij_p.tocsr()
             self.N_nil = N_nil
             self.M_fullres = M_fullres
@@ -735,6 +635,7 @@ class ReconSrc(object):
             LxL = self.lensobject.naxis1*self.lensobject.naxis2
             ij = range(LxL)
             # calculate optimal mapping resolution
+            # msk = self.mask if use_mask else None
             msk = self.image_mask()
             _, self.r_max = self.srcgrid_deflections(mask=msk)
             if use_mask and np.any(self.mask):
@@ -979,7 +880,7 @@ class ReconSrc(object):
         """
         return self.reproj_d_ij(flat=flat, **kwargs)
 
-    def residual_map(self, flat=False, **kwargs):
+    def residual_map(self, flat=False, nonzero_only=False, **kwargs):
         """
         Evaluate the reprojection by calculating the residual map to the lens map data
 
@@ -994,6 +895,7 @@ class ReconSrc(object):
             sigma <float/np.ndarray> - uncertainty map
             sigma2 <float/np.ndarray> - squared uncertainty map
             sigmaM2 <scipy.sparse.diags> - sparse diagonal matrix with inverse sigma2s
+            ignore_null <bool> - 
             composite <bool> - return the composite data array
 
         Return:
@@ -1006,7 +908,10 @@ class ReconSrc(object):
         sigma2 = kwargs.pop('sigma2', None)
         if sigma2 is None:
             sigma2 = sigma*sigma
-        return (data-reproj)**2/sigma2
+        residuals = (data-reproj)**2/sigma2
+        if nonzero_only:
+            residuals[reproj == 0] = 0
+        return residuals
 
     def reproj_chi2(self, data=None, reduced=False, output_all=False, nonzero_only=False,
                     noise=0, sigma=1, sigma2=None, sigmaM2=None,
@@ -1054,11 +959,12 @@ class ReconSrc(object):
             data = data + noise
         residual = data - reproj
         if nonzero_only:
-            msk = reproj != 0
-            n_i = sigma2[msk] if hasattr(sigma2, '__len__') else sigma2
-            chi2 = np.sum(residual[msk]**2/n_i)
-        else:
-            chi2 = np.sum(residual**2/sigma2)
+            msk = reproj == 0
+            residual[msk] = 0
+            # msk = reproj != 0
+            # n_i = sigma2[msk] if hasattr(sigma2, '__len__') else sigma2
+            # chi2 = np.sum(residual[msk]**2/n_i)
+        chi2 = np.sum(residual**2/sigma2)
         if reduced:
             N = self.lens_map().size
             chi2 = chi2 / (N - self.N_nil)

@@ -13,6 +13,7 @@ from functools import partial
 from scipy import interpolate
 from scipy import optimize
 from scipy.integrate import odeint
+from scipy import ndimage
 from astropy.io import fits
 from gleam.utils.linalg import eigvals, eigvecs, angle
 from gleam.utils.units import units as gu
@@ -351,6 +352,49 @@ class ModelArray(object):
         # self.maxima = [[m[0]*delta, m[1]*delta] for m in self.maxima]
         # self.shears  #  rescale like kappa?
         # self.betas = [[b[0]*delta, b[1]*delta] for b in self.betas]
+
+    def rotate(self, angle, data_attr='data', create_instance=True,
+               **kwargs):
+        """
+        Rotate map data by angle(s)
+        """
+        d = self.__getattribute__(data_attr).copy()
+        if isinstance(d, dict):
+            d = d['data'].copy()
+        if isinstance(angle, (int, float)):
+            angle = np.array([angle]*self.N)
+        kwargs.setdefault('pixrad', self.pixrad)
+        kwargs.setdefault('maprad', self.maprad)
+        rotation = np.vectorize(partial(ndimage.rotate, reshape=False),
+                                signature='(m,n),()->(m,n)')
+        self.rotated = {}
+        self.rotated['data'] = rotation(d, angle)
+        self.rotated['angle'] = angle.copy()
+        self.rotated.update(kwargs)
+        if create_instance:
+            obj = self.__class__(self.rotated['data'], **kwargs)
+            self.rotated['obj'] = obj
+            return obj
+        
+
+    def resample(self, pixrad, data_attr='data', create_instance=True,
+                 **kwargs):
+        """
+        Resample map data to a lower pixrad
+        """
+        d = self.__getattribute__(data_attr).copy()
+        if isinstance(d, dict):
+            d = d['data'].copy()
+        kwargs.setdefault('pixrad', pixrad)
+        kwargs.setdefault('maprad', self.maprad)
+        zoom_factor = (2 * pixrad + 1.)/(2 * self.pixrad + 1)
+        self.resampled = {}
+        self.resampled['data'] = ndimage.interpolation.zoom(d, [1, zoom_factor, zoom_factor], order=0)
+        self.resampled.update(kwargs)
+        if create_instance:
+            obj = self.__class__(self.resampled['data'], **kwargs)
+            self.resampled['obj'] = obj
+            return obj
         
 
     def xy_grid(self, N=None, maprad=None, pixel_size=None, as_complex=False, refined=True):
