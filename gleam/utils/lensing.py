@@ -15,7 +15,7 @@ from scipy import optimize
 from scipy.integrate import odeint
 from scipy import ndimage
 from astropy.io import fits
-from gleam.utils.linalg import eigvals, eigvecs, angle
+from gleam.utils.linalg import eigvals, eigvecs, angle_between
 from gleam.utils.units import units as gu
 from gleam.glass_interface import glass_basis, glass_renv, _detect_cpus, _detect_omp
 glass = glass_renv()
@@ -156,18 +156,22 @@ class ModelArray(object):
             data = self.data
         return self.__class__(data, **kwargs)
 
-    def save(self, savename, **kwargs):
+    def save(self, savename=None, **kwargs):
         import cPickle as pickle
         kw = [('filepath', 'filename'),
               ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
               ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
-              ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima')]
+              ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima'),
+              ('_zl', 'zl'), ('_zs', 'zs')]
         for key in kw:
             if hasattr(self, key[0]):
                 v = self.__getattribute__(key[0])
                 kwargs.setdefault(key[1], v)
-        with open(savename, 'wb') as f:
-            pickle.dump((self.data[:], kwargs), f)
+        if savename is not None:
+            with open(savename, 'wb') as f:
+                pickle.dump((self.data.copy(), kwargs), f)
+        else:
+            return self.data.copy(), kwargs        
 
     def __str__(self):
         return "<LensModel@{}>".format("".join(self.filename.split('.')[:-1]))
@@ -175,7 +179,7 @@ class ModelArray(object):
     @property
     def tests(self):
         return ['filename', 'filepath', 'N', 'pixrad', 'maprad', 'pixel_size', 'kappa',
-                'minima', 'saddle_points', 'maxima']
+                'minima', 'saddle_points', 'maxima', 'zl', 'zs']
 
     @property
     def __v__(self):
@@ -331,12 +335,16 @@ class ModelArray(object):
     def N_src(self):
         return 1
 
-    def rescale(self, zl, zs, zl_new, zs_new, cosmo=None):
+    def rescale(self, zl_new, zs_new, zl=None, zs=None, cosmo=None):
         """
         Rescale the lens model to new lens and source redshifts
         """
         if cosmo is None:
             cosmo = cosmology()
+        if zl is None:
+            zl = self.zl
+        if zs is None:
+            zs = self.zs
         dldsdls = DLDSDLS(zl, zs)
         dldsdls_new = DLDSDLS(zl_new, zs_new)
         sigma = dldsdls / dldsdls_new
@@ -346,6 +354,8 @@ class ModelArray(object):
         self.data = self.data * sigma
         self.models = [m * sigma for m in self.models]
         self.kappa = self.kappa * sigma if self.kappa is not None else None
+        self.zl = zl_new
+        self.zs = zs_new
         # self.maprad = self.maprad * delta if self.maprad is not None else None
         # self.minima = [[m[0]*delta, m[1]*delta] for m in self.minima]
         # self.saddle_points = [[m[0]*delta, m[1]*delta] for m in self.saddle_points]
@@ -387,9 +397,13 @@ class ModelArray(object):
             d = d['data'].copy()
         kwargs.setdefault('pixrad', pixrad)
         kwargs.setdefault('maprad', self.maprad)
+        kwargs.setdefault('filename', self.filepath)
+        kwargs.setdefault('zl', None)
+        kwargs.setdefault('zs', None)
         zoom_factor = (2 * pixrad + 1.)/(2 * self.pixrad + 1)
         self.resampled = {}
-        self.resampled['data'] = ndimage.interpolation.zoom(d, [1, zoom_factor, zoom_factor], order=0)
+        self.resampled['data'] = ndimage.interpolation.zoom(d, [1, zoom_factor, zoom_factor],
+                                                            order=0)
         self.resampled.update(kwargs)
         if create_instance:
             obj = self.__class__(self.resampled['data'], **kwargs)
@@ -1001,7 +1015,8 @@ def DLSDS(zl, zs, cosmo=None):
 
 def downsample_model(kappa, extent, shape, pixel_scale=1., sanitize=True, verbose=False):
     """
-    Resample (usually downsample) a model's kappa grid to match the specified scale and size
+    Resample a model's kappa grid (usually downsample to a coarser grid) to match
+    the specified scale and size
 
     Args:
         kappa <np.ndarray> - the model's with (data, hdr)
@@ -1038,7 +1053,8 @@ def downsample_model(kappa, extent, shape, pixel_scale=1., sanitize=True, verbos
 
 def upsample_model(kappa, extent, shape, pixel_scale=1., sanitize=True, verbose=False):
     """
-    Resample (usually upsample) a model's kappa grid to match the specified scales and size
+    Resample a model's kappa grid (usually upsample to a finer grid) to match
+    the specified scales and size
 
     Args:
         gls_model <glass.LensModel object> - GLASS ensemble model
@@ -1361,8 +1377,8 @@ def qpm_abphi(qpm, verbose=False):
     evl = eigvals(qpm)
     evc = eigvecs(qpm)
     a, b = 2*np.sqrt(evl)
-    cosphi = angle(evc[0], [1, 0])
-    sinphi = angle(evc[0], [0, 1])
+    cosphi = angle_between(evc[0], [1, 0])
+    sinphi = angle_between(evc[0], [0, 1])
     if verbose:
         print("Eigen vectors: {}".format(evc))
     phi = np.arctan2(sinphi, cosphi)

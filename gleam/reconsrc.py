@@ -23,6 +23,7 @@ import numpy as np
 import time
 from functools import partial
 from pathos.multiprocessing import ProcessingPool as Pool
+from scipy import ndimage
 from scipy.sparse import lil_matrix as sparse_Lmatrix
 # from scipy.sparse import csc_matrix as sparse_Cmatrix
 from scipy.sparse import csr_matrix as sparse_Rmatrix
@@ -35,7 +36,7 @@ from gleam.skyf import SkyF
 from gleam.lensobject import LensObject
 from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
-from gleam.utils.lensing import LensModel, deflect
+from gleam.utils.lensing import LensModel, deflect, downsample_model
 from gleam.utils.linalg import is_symm2D
 import gleam.utils.optimized as cython_optimized
 import gleam.utils.rgb_map as glmrgb
@@ -73,12 +74,14 @@ class ReconSrc(object):
         if isinstance(self.gleamobject, (SkyPatch, MultiLens)):
             self.lens_objects = self.gleamobject.lens_objects
         elif isinstance(self.gleamobject, (SkyF, LensObject)):
+            self.gleamobject.mag_formula = None  # to enable pickling
             self.lens_objects = [self.gleamobject]
             self.lensobject = self.gleamobject
         else:
             raise TypeError("ReconSrc needs a GLEAM object (LensObject/MultiLens) as input!")
         self.lensobject = self.lens_objects[0]  # grab first lensobject if there are more than one; TODO: make method with more lenses
         self.mask_keys = mask_keys  # sets mask
+        self.rotation = 0
         # load model data
         if isinstance(model, str) and model.endswith('.state'):
             self.model = LensModel(glass.glcmds.loadstate(model))
@@ -109,10 +112,13 @@ class ReconSrc(object):
         self.psf = None
 
         # cache for high demand operations
-        self._cache = {v: {k: {i: None for i in range(-1, self.model.N)}
-                           for k in range(self.model.N_obj)}
-                       for v in ['inv_proj', 'M_fullres', 'r_fullres',
-                                 'M', 'r_max', 'N_nil', 'reproj_d_ij']}
+        self._cache = {}
+        for v in ['inv_proj', 'M_fullres', 'r_fullres', 'M', 'r_max',
+                  'N_nil', 'reproj_d_ij']:
+            self._cache[v] = {k: {i: None for i in range(-1, self.model.N)}
+                              for k in range(self.model.N_obj)}
+        self._cache['rotation'] = {k: {i: [] for i in range(-1, self.model.N)}
+                                   for k in range(self.model.N_obj)}
 
         # some verbosity
         if verbose:
@@ -142,7 +148,7 @@ class ReconSrc(object):
             tests <list(str)> - a list of test variable strings
         """
         return ['lensobject', 'model', 'mask_keys', 'M', 'N', 'r_max',
-                'M_fullres', 'N_fullres', 'r_fullres', 'N_nil']
+                'M_fullres', 'N_fullres', 'r_fullres', 'N_nil', 'rotation']
 
     @property
     def __v__(self):
@@ -156,6 +162,24 @@ class ReconSrc(object):
             <str> - test of ReconSrc attributes
         """
         return "\n".join([t.ljust(20)+"\t{}".format(self.__getattribute__(t)) for t in self.tests])
+
+    @property
+    def rotation(self):
+        """
+        TODO
+        """
+        if not hasattr(self, '_rotation'):
+            self._rotation = 0
+        return self._rotation
+
+    @rotation.setter
+    def rotation(self, angle):
+        """
+        TODO
+        """
+        if hasattr(self, '_cache'):
+            self._cache['rotation'][self.obj_index][self.model_index].append(angle)
+        self._rotation = angle % 360
 
     @property
     def N_fullres(self):
@@ -310,8 +334,8 @@ class ReconSrc(object):
         if index is None:
             index = (self.model_index + 1) % self.model.N
         self.model_index = index
-        self.ploc = self.model.xy_grid(as_complex=True).flatten()
-        self.cell_sizes = self.model.cellsize_grid().flatten()
+        # self.ploc = self.model.xy_grid(as_complex=True).flatten()
+        # self.cell_sizes = self.model.cellsize_grid().flatten()
         
 
     def ensavg_mdl(self, selection=None):
@@ -376,6 +400,8 @@ class ReconSrc(object):
         for v in variables:
             self._cache[v] = {k: {i: None for i in range(-1, self.model.N)}
                               for k in range(self.model.N_obj)}
+        self._cache['rotation'] = {k: {i: [] for i in range(-1, self.model.N)}
+                                   for k in range(self.model.N_obj)}
 
     @staticmethod
     def _psf_f(psf_data, dx, dy, center=None):
@@ -402,12 +428,13 @@ class ReconSrc(object):
             return psf_data[y, x]
         return 0
 
-    def calc_psf(self, psf_file, window_size=6, cy_opt=False, verbose=False):
+    def calc_psf(self, psf_file, window_size=6, cy_opt=False, normalize=True,
+                 verbose=False):
         """
         Calculate the PSF matrix attribute
 
         Args:
-            psf_file <str> - path to the PSF .fits file
+            psf_file <str> - path to the PSF .fits file, or a SkyF object
 
         Kwargs:
             window_size <int> - window size of the PSF which is applied
@@ -417,8 +444,19 @@ class ReconSrc(object):
         Return:
             P_kl <scipy.sparse.csc.csc_matrix> - the PSF matrix as blurring operator
         """
-        psf = SkyF(psf_file, verbose=False)
-        d_psf = psf.data
+        if isinstance(psf_file, str):
+            psf = SkyF(psf_file, verbose=False)
+        elif isinstance(psf_file, SkyF):
+            psf = psf_file
+        if psf.px2arcsec[0] != self.lensobject.px2arcsec[0]:
+            f_zoom = psf.px2arcsec[0]/self.lensobject.px2arcsec[0]
+            shape = [int(f_zoom*s) for s in psf.data.shape]
+            d_psf = downsample_model(psf.data, extent=psf.extent,
+                                     shape=shape, pixel_scale=psf.px2arcsec[0])
+        else:
+            d_psf = psf.data
+        if normalize and abs(np.sum(d_psf) - 1) > 1e-4:
+            d_psf = d_psf / np.sum(d_psf)
         d_psf = d_psf.astype('f8')
         Ny, Nx = self.lensobject.data.shape    # image plane dimensions
         Ypsf, Xpsf = d_psf.shape               # PSF window dimensions
@@ -446,7 +484,7 @@ class ReconSrc(object):
             print("PSF: P_kl{}".format(P_kl.shape))
         return P_kl
 
-    def d_ij(self, flat=True, composite=False):
+    def d_ij(self, flat=True, include_rotation=True, composite=False):
         """
         Lens plane data array
 
@@ -461,16 +499,18 @@ class ReconSrc(object):
             dij <np.ndarray> - the lens plane data array
         """
         LxL = self.lensobject.naxis1*self.lensobject.naxis2
-        data = self.lensobject.data
+        dta = self.lensobject.data
+        if self.rotation != 0 and include_rotation:
+            dta = ndimage.rotate(dta, self.rotation, reshape=False)
         if composite and isinstance(self.gleamobject, MultiLens):
-            data = self.lensobject.composite
+            dta = self.lensobject.composite
         if flat:
-            dij = np.array([data[self.lensobject.idx2yx(i)] for i in range(LxL)])
+            dij = np.array([dta[self.lensobject.idx2yx(i)] for i in range(LxL)])
         else:
-            dij = data
+            dij = dta
         return dij
 
-    def lens_map(self, flat=False, mask=False, composite=False):
+    def lens_map(self, flat=False, include_rotation=True, mask=False, composite=False):
         """
         Lens plane data array
 
@@ -485,7 +525,7 @@ class ReconSrc(object):
         Return:
             dij <np.ndarray> - the lens plane data array
         """
-        dij = self.d_ij(flat=flat, composite=composite)
+        dij = self.d_ij(flat=flat, include_rotation=include_rotation, composite=composite)
         if mask and np.any(self.mask):
             if flat:
                 msk = self.mask.flatten()
@@ -510,7 +550,7 @@ class ReconSrc(object):
         data = self.model.kappa_grid(model_index=self.model_index, refined=False).flatten()
         ploc = self.model.xy_grid(as_complex=True, refined=False).flatten()
         cell_sizes = self.model.cellsize_grid(refined=False).flatten()
-        if isinstance(ang_pos, np.ndarray) and len(ang_pos) > 2:
+        if isinstance(ang_pos, np.ndarray) and ang_pos.shape[-1] == 2:
             theta = np.empty(ang_pos.shape[:-1], dtype=np.complex)
             theta.real = ang_pos[..., 1]
             theta.imag = ang_pos[..., 0]
@@ -522,8 +562,8 @@ class ReconSrc(object):
             theta = ang_pos
             alpha = deflect
         zcap = 1./self.model.dlsds
-        if np.any(self.model.betas[self.obj_index]):
-            beta = self.model.betas[self.obj_index]
+        if np.any(self.model.betas[self.model_index]):
+            beta = self.model.betas[self.model_index]
             if not isinstance(beta, complex):
                 beta = complex(*beta)
         # TODO: add shear
@@ -532,7 +572,7 @@ class ReconSrc(object):
         dbeta = beta - theta + alpha(theta, data, ploc, cell_sizes)  / zcap
         return np.array([dbeta.real, dbeta.imag]).T
 
-    def srcgrid_deflections(self, mask=None):
+    def srcgrid_deflections(self, mask=None, limit=True):
         """
         Calculate the map radius of the source plane for a given model
 
@@ -553,6 +593,8 @@ class ReconSrc(object):
         dbeta = self.delta_beta(theta)  # distance components from center on source plane [arcsec]
         # r_max = np.nanmax(np.abs(dbeta))  # maximal distance [arcsec]
         r_max = np.nanmax(np.sqrt(dbeta[:, 0]**2+dbeta[:, 1]**2))
+        if limit:
+            r_max = max(r_max, self.model.maprad/2.)
         return dbeta, r_max
 
     def srcgrid_mapping(self, dbeta=None, pixrad=None, maprad=None, mask=None):
@@ -672,10 +714,16 @@ class ReconSrc(object):
                 ij_idx = ij[i]
                 Mij_p[ij_idx, p_idx] = 1
             Mij_p = Mij_p.tocsr()
-        self._cache['N_nil'][self.obj_index][self.model_index] = self.N_nil
-        self._cache['M_fullres'][self.obj_index][self.model_index] = self.M_fullres
-        self._cache['r_fullres'][self.obj_index][self.model_index] = self.r_fullres
-        self._cache['r_max'][self.obj_index][self.model_index] = self.r_max
+        if self._cache['inv_proj'][self.obj_index][self.model_index] is None:
+            self._cache['inv_proj'][self.obj_index][self.model_index] = Mij_p.copy()
+        if self._cache['N_nil'][self.obj_index][self.model_index] is None:
+            self._cache['N_nil'][self.obj_index][self.model_index] = self.N_nil
+        if self._cache['M_fullres'][self.obj_index][self.model_index] is None:
+            self._cache['M_fullres'][self.obj_index][self.model_index] = self.M_fullres
+        if self._cache['r_fullres'][self.obj_index][self.model_index] is None:
+            self._cache['r_fullres'][self.obj_index][self.model_index] = self.r_fullres
+        if self._cache['r_max'][self.obj_index][self.model_index] is None:
+            self._cache['r_max'][self.obj_index][self.model_index] = self.r_max
         if asarray:
             return Mij_p.toarray()
         return Mij_p
@@ -698,8 +746,8 @@ class ReconSrc(object):
         Mp_ij = Mij_p.T.to_csr()
         return Mp_ij
 
-    def d_p(self, method='minres', cy_opt=False, use_psf=True, flat=True, cached=False,
-            sigma=1, sigma2=None, sigmaM2=None, use_mask=False, composite=False):
+    def d_p(self, method='minres', iterations=10000, cy_opt=False, use_psf=True, flat=True,
+            cached=False, sigma=1, sigma2=None, sigmaM2=None, use_mask=False, composite=False):
         """
         Recover the source plane data by minimizing
         (M^q_i.T * sigma_i^-2) M^i_p d_p = (M^q_i.T * sigma_i^-2) d_i
@@ -709,6 +757,7 @@ class ReconSrc(object):
 
         Kwargs:
             method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
+            iterations <int> - limit of iterations
             cy_opt <bool> - use optimized cython method to construct inverse projection matrix
             use_psf <bool> - use the PSF to smooth the projection matrix
             flat <bool> - return the flattened array
@@ -757,11 +806,11 @@ class ReconSrc(object):
         if method == 'minres':
             dp = minres(A, b)[0]
         elif method == 'lsqr':
-            dp = lsqr(A, b)[0]
+            dp = lsqr(A, b, iter_lim=iterations)[0]
         elif method == 'lsmr':
             dp = lsmr(A, b)[0]
         elif method == 'spsolve':
-            dp = spsolve(A, b)[0]
+            dp = spsolve(A, b)
         elif method == 'cgs':
             dp = cgs(A, b)[0]
         elif method == 'lgmres':
@@ -805,6 +854,7 @@ class ReconSrc(object):
 
         Kwargs:
             method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
+            iterations <int> - limit of iterations
             cy_opt <bool> - use optimized cython method to construct inverse projection matrix
             use_psf <bool> - use the PSF to smooth the projection matrix
             flat <bool> - return the flattened array
@@ -851,6 +901,7 @@ class ReconSrc(object):
         if use_mask and np.any(self.mask):
             msk = self.mask.flatten()
             dij[msk] = self.d_ij(flat=True, composite=kwargs.get('composite', False))[msk]
+            # dij[msk] = self.d_ij(flat=True, include_rotation=False, composite=kwargs.get('composite', False))[msk]
         if not flat:
             dij = dij.reshape((self.lensobject.naxis1, self.lensobject.naxis2))
         return dij
@@ -864,6 +915,7 @@ class ReconSrc(object):
 
         Kwargs:
             method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
+            iterations <int> - limit of iterations
             cy_opt <bool> - use optimized cython method to construct inverse projection matrix
             use_psf <bool> - use the PSF to smooth the projection matrix
             flat <bool> - return the flattened array
@@ -889,6 +941,7 @@ class ReconSrc(object):
 
         Kwargs:
             method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
+            iterations <int> - limit of iterations
             use_psf <bool> - use the PSF to smooth the projection matrix
             flat <bool> - return the flattened array
             cached <bool> - use a cached inverse projection matrix rather than computing it
@@ -902,6 +955,7 @@ class ReconSrc(object):
             residual <np.ndarray> - reprojection data based on the source reconstruction
         """
         data = self.lens_map(flat=flat, composite=kwargs.get('composite', False))
+        # data = self.lens_map(flat=flat, include_rotation=False, composite=kwargs.get('composite', False))
         reproj = self.reproj_map(flat=flat, **kwargs)
         # set defaults
         sigma = kwargs.pop('sigma', 1)
@@ -926,6 +980,7 @@ class ReconSrc(object):
             reduced <bool> - return the reduced chi^2 (i.e. chi2 divided by the number of pixels)
             nonzero_only <bool> - only sum over pixels which were actually reprojected
             method <str> - option to choose the minimizing method ['lsqr','lsmr','row_norm']
+            iterations <int> - limit of iterations
             use_psf <bool> - use the PSF to smooth the projection matrix
             cy_opt <bool> - use optimized cython method to construct inverse projection matrix
             from_cache <bool> - use the cached reprojected map
@@ -940,6 +995,9 @@ class ReconSrc(object):
 
         Return:
             residual <float> - the residual between data and reprojection
+
+        Note:
+            - if mask is too big, reduced will adjust the degrees-of-freedom
         """
         # set defaults
         if sigma2 is None:
@@ -954,22 +1012,20 @@ class ReconSrc(object):
         # calculate synthetic image and residual map
         reproj = self.reproj_map(sigma=sigma, sigma2=sigma2, sigmaM2=sigmaM2, **kwargs)
         if data is None:
-            composite = kwargs.get('composite', False)
-            data = self.lens_map(flat=False, composite=composite)
-            data = data + noise
+            data = self.lens_map(flat=False, composite=kwargs.get('composite', False))
+            # data = self.lens_map(flat=False, include_rotation=False, composite=kwargs.get('composite', False))
+            # data = data + noise
         residual = data - reproj
         if nonzero_only:
-            msk = reproj == 0
-            residual[msk] = 0
-            # msk = reproj != 0
+            residual[reproj == 0] = 0
             # n_i = sigma2[msk] if hasattr(sigma2, '__len__') else sigma2
             # chi2 = np.sum(residual[msk]**2/n_i)
-        chi2 = np.sum(residual**2/sigma2)
+        chi2 = np.sum(residual**2/sigma2) + noise
         if reduced:
-            N = self.lens_map().size
+            N = data.size - np.sum(reproj == 0)
             chi2 = chi2 / (N - self.N_nil)
         elif output_all:
-            N = self.lens_map().size
+            N = data.size - np.sum(reproj == 0)
             chi2red = chi2 / (N - self.N_nil)
             return chi2, chi2red, self.N_nil
         return chi2
@@ -1002,9 +1058,41 @@ class ReconSrc(object):
         return img
 
 
+def run_model(reconsrc, mdl_index=0, angle=0, dzsrc=0,
+              reduced=False, nonzero_only=True,
+              method='lsqr', use_psf=False, use_mask=True,
+              noise=0, sigma=1, sigma2=None, sigmaM2=None,
+              from_cache=True, cached=True, save_to_cache=True,
+              flush_cache=True, output_maps=False):
+    """
+    TODO
+    """
+    reconsrc.chmdl(mdl_index)
+    if dzsrc:
+        reconsrc.model.rescale(reconsrc.model.zl, reconsrc.model.zs+dzsrc,
+                               zl=reconsrc.model.zl, zs=reconsrc.model.zs,
+                               cosmo=reconsrc.model.cosmo)
+        reconsrc.flush_cache()
+    reconsrc.rotation = angle
+    s2 = None
+    if sigma2 is not None:
+        s2 = ndimage.rotate(sigma2, angle, reshape=False)
+        s2[s2==0] = np.min(sigma2)
+    kw = dict(method=method, use_psf=use_psf, use_mask=use_mask, sigma2=s2)
+    # srcplane = reconsrc.plane_map(cached=cached, **kw)
+    # synth = reconsrc.reproj_map(cached=True, from_cache=False, save_to_cache=save_to_cache, **kw)
+    # resids = reconsrc.residual_map(cached=True, from_cache=False, save_to_cache=save_to_cache, nonzero_only=nonzero_only, **kw)
+    chi2 = reconsrc.reproj_chi2(cached=True, from_cache=False, reduced=reduced, nonzero_only=nonzero_only, noise=noise, **kw)
+    if output_maps:
+        return chi2, (srcplane, synth, resids, s2)
+    if flush_cache:
+        reconsrc.flush_cache(variables=['reproj_dij'])
+    return chi2
+
+
 def synth_filter(statefile=None, gleamobject=None, reconsrc=None, psf_file=None,
                  percentiles=[], cy_opt=False,
-                 reduced=False, nonzero_only=True, method='minres', use_psf=True,
+                 reduced=False, method='minres', use_psf=True,
                  from_cache=True, cached=True, save_to_cache=True,
                  noise=0, sigma=1, sigma2=None, sigmaM2=None,
                  use_mask=False,

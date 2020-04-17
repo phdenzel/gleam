@@ -74,7 +74,7 @@ def eigvecs(q):
     return v[0], v[1]
 
 
-def angle(v1, v2):
+def angle_between(v1, v2):
     """
     Find the angle between two 2D vectors
 
