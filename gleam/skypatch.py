@@ -216,11 +216,14 @@ class SkyPatch(object):
             filename <str> - filename with which the JSON file is saved, if save is True
         """
         import json
-        jsn = json.dumps(self, cls=GLEAMEncoder, sort_keys=True, indent=4)
+        instance = self
+        if self.N == 1:
+            instance = self.fs[0]
+        jsn = json.dumps(instance, cls=GLEAMEncoder, sort_keys=True, indent=4)
         if name:
-            filename = self.json_filename(filename=name, with_hash=with_hash)
+            filename = instance.json_filename(filename=name, with_hash=with_hash)
             with open(filename, 'w') as output:
-                json.dump(self, output, cls=GLEAMEncoder, sort_keys=True, indent=4)
+                json.dump(instance, output, cls=GLEAMEncoder, sort_keys=True, indent=4)
             return filename
         if verbose:
             print(jsn)

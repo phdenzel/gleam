@@ -701,9 +701,10 @@ def roche_potential_plot(model, N=None,
 
 def arrival_time_surface_plot(model, N=None,
                               mdl_index=-1, obj_index=0, src_index=0,
-                              cmap=GLEAMcmaps.phoenix, extent=None, draw_images=True,
-                              contours_only=False, contours=True, levels=30,
-                              min_contour_shift=None,
+                              cmap=GLEAMcmaps.phoenix, maprad=None, extent=None,
+                              draw_images=True, contours_only=False,
+                              contours=True, levels=30,
+                              min_contour_shift=None, sad_contour_shift=None,
                               scalebar=False, label=None, color='black',
                               colorbar=False):
     """
@@ -747,7 +748,8 @@ def arrival_time_surface_plot(model, N=None,
         model = LensModel(grid, maprad=1)
     else:
         pass
-    R, extent = model.maprad, model.extent
+    R = model.maprad if maprad is None else maprad
+    extent = model.extent if extent is None else extent
     # add images
     minima = model.minima
     saddles = model.saddle_points
@@ -765,6 +767,8 @@ def arrival_time_surface_plot(model, N=None,
         plt.plot(0, 0, color=max_clr, marker='o', lw=0)
     # calculate contours
     clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1])
+    if sad_contour_shift is not None:
+        clev = [c-sad_contour_shift for c in clev]
     # general contours
     mi = np.min(grid)
     ma = np.max(grid)
@@ -992,7 +996,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         if fontsize is None else fontsize
     if label_axes:
         plt.xlabel(r'R [arcsec]', fontsize=fontsize)
-        plt.ylabel(r'$\mathsf{\ka ppa}_{<\mathsf{R}}$', fontsize=fontsize+2)
+        plt.ylabel(r'$\mathsf{\kappa}_{<\mathsf{R}}$', fontsize=fontsize+4)
     return plots, profiles, radii
 
 
@@ -1248,7 +1252,7 @@ class IAColorbar(object):
         if self.press is None: return
         if event.inaxes != self.cbar.ax: return
         xprev, yprev = self.press
-        dx = event.x - xprev
+        # dx = event.x - xprev
         dy = event.y - yprev
         self.press = event.x,event.y
         #print 'x0=%f, xpress=%f, event.xdata=%f, dx=%f, x0+dx=%f'%(x0, xpress, event.xdata, dx, x0+dx)

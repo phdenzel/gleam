@@ -155,10 +155,10 @@ class MultiLens(SkyPatch):
         Return:
             fs <super: LensObject object> - the from lens_objects derived instances
         """
-        if hasattr(self, '_fs'):
-            return self._fs
         if hasattr(self, 'lens_objects'):
             return self.lens_objects
+        if hasattr(self, '_fs'):
+            return self._fs
 
     @fs.setter
     def fs(self, fs):

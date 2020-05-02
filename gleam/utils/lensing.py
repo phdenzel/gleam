@@ -313,6 +313,8 @@ class ModelArray(object):
 
     @property
     def obj_idx(self):
+        if not hasattr(self, '_obj_idx'):
+            self._obj_idx = 0
         return self._obj_idx
 
     @obj_idx.setter
@@ -808,8 +810,10 @@ class GLASSModel(ModelArray):
         self._obj_idx = obj_index
         dta = self.all_data['hires'][obj_index]
         obj, data = self.env.models[0]['obj,data'][obj_index]
-        kappa = glass.scales.convert('kappa to Msun/arcsec^2', 1,
-                                     obj.dL, self.env.nu[self.src_idx])
+        kappa = None
+        if self.env.nu is not None:
+            kappa = glass.scales.convert('kappa to Msun/arcsec^2', 1,
+                                         obj.dL, self.env.nu[self.src_idx])
         minima = np.asarray(self.all_data['minima'][obj_index])
         saddle_points = np.asarray(self.all_data['saddle_points'][obj_index])
         maxima = np.asarray(self.all_data['maxima'][obj_index])
