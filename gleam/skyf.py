@@ -16,6 +16,7 @@ from gleam.lensfinder import LensFinder
 from gleam.roiselector import ROISelector
 from gleam.megacam import MEGACAM_FPROPS
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
+from gleam.utils.lensing import xy_grid
 from gleam.utils.rgb_map import richardson_lucy
 
 import sys
@@ -787,7 +788,35 @@ class SkyF(object):
             print(y, x)
         return y, x
 
-    def theta(self, position, offset=1e-12, origin=None, verbose=False):
+    def theta(self, ij, offset=None, origin=None, verbose=False):
+        """
+        Transform pixel coordinates into theta vector coordinates with origin in center
+
+        Args:
+           position <int,int> - the pixel coordinates of the position
+
+        Kwargs:
+           origin <int,int>
+           offset <float> - small offset to avoid having 0 in the center
+
+        Return:
+           theta <float,float> - theta vector coordinates in arcsecs
+        """
+        # position
+        if isinstance(ij, int):  # 1D pixel index position to 2D
+            ij = self.idx2yx(ij)
+        if not hasattr(self, '_theta_mesh'):
+            self._theta_mesh = xy_grid(self.naxis1, 2*self.extent[1]).T
+        t = self._theta_mesh[ij]
+        if origin is not None:
+            t = t - self._theta_mesh[origin]
+        if offset is not None:
+            t += offset
+        if verbose:
+            print(t)
+        return t
+
+    def XXXtheta(self, position, offset=1e-12, origin=None, verbose=False):
         """
         Transform pixel coordinates into theta vector coordinates with origin in center
 
@@ -849,6 +878,24 @@ class SkyF(object):
         """
         self.hdr['PHOTZP'] = photzp
         self.mag_formula = self.mag_formula_from_hdr(self.hdr, photzp=photzp)
+
+    def squarify(self, axis=1):
+        """
+        Cutout square data window if original data is something other than square
+        """
+        if self.data.shape[0] == self.data.shape[1]:
+            return
+        naxis = self.data.shape[axis]
+        self.data = self.data[:naxis, :naxis]
+        self.naxis1 = naxis
+        self.naxis2 = naxis
+        if hasattr(self, '_theta_mesh'):
+            del self._theta_mesh
+        if hasattr(self, 'roi'):
+            self.roi = ROISelector(self.data, shape=self.data.shape,
+                                   _buffer=self.roi._buffer)
+        if hasattr(self, '_light_model'):
+            pass  # TODO
 
     @property
     def field(self):

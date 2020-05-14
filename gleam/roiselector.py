@@ -126,7 +126,7 @@ class ROISelector(object):
         return jsn_dict
 
     @classmethod
-    def from_gleamobj(cls, gleam, **kwargs):
+    def from_gleamobj(cls, gleamobj, **kwargs):
         """
         Initialize from a gleam instance
         gleam.[skyf.SkyF, skypatch.SkyPatch, lensobject.LensObject, multilens.MultiLens]
@@ -140,7 +140,7 @@ class ROISelector(object):
         Return:
            <ROISelector object> - initializer with gleam object
         """
-        return cls(gleam.data, **kwargs)
+        return cls(gleamobj.data, **kwargs)
 
     def __str__(self):
         return "{}{}".format(self.__class__.__name__, self.shape)

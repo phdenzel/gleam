@@ -338,6 +338,32 @@ class ReconSrc(object):
         # self.cell_sizes = self.model.cellsize_grid().flatten()
 
     @property
+    def extent(self):
+        """
+        Physical extent of the lens plane map
+
+        Args/Kwargs:
+            None
+
+        Return:
+            extent <list> - physical map extent
+        """
+        return self.lensobject.extent
+
+    @property
+    def model_extent(self):
+        """
+        Physical extent of the lens model's kappa map
+
+        Args/Kwargs:
+            None
+
+        Return:
+            extent <list> - physical map extent
+        """
+        return self.model.extent
+
+    @property
     def src_extent(self):
         """
         Physical extent of the source plane map
@@ -349,6 +375,20 @@ class ReconSrc(object):
             extent <list> - physical map extent
         """
         return [-1*self.r_max, self.r_max, -1*self.r_max, self.r_max]
+
+    @property
+    def src_pxscale(self):
+        """
+        Physical pixel size of the source plane map
+
+        Args/Kwargs:
+            None
+
+        Return:
+            pxscale <list> - physical pixel scale
+        """
+        pxscale = 2*self.r_max/self.N
+        return pxscale
 
     def ensavg_mdl(self, selection=None):
         """
@@ -441,7 +481,7 @@ class ReconSrc(object):
         return 0
 
     def calc_psf(self, psf_file, window_size=6, cy_opt=False, normalize=True,
-                 verbose=False):
+                 adjust_scale=False, verbose=False):
         """
         Calculate the PSF matrix attribute
 
@@ -460,15 +500,17 @@ class ReconSrc(object):
             psf = SkyF(psf_file, verbose=False)
         elif isinstance(psf_file, SkyF):
             psf = psf_file
-        if psf.px2arcsec[0] != self.lensobject.px2arcsec[0]:
+        if adjust_scale and psf.px2arcsec[0] != self.lensobject.px2arcsec[0]:
             f_zoom = psf.px2arcsec[0]/self.lensobject.px2arcsec[0]
             shape = [int(f_zoom*s) for s in psf.data.shape]
             d_psf = downsample_model(psf.data, extent=psf.extent,
                                      shape=shape, pixel_scale=psf.px2arcsec[0])
         else:
             d_psf = psf.data
-        if normalize and abs(np.sum(d_psf) - 1) > 1e-4:
-            d_psf = d_psf / np.sum(d_psf)
+        if normalize:
+            rmsk = glmrgb.radial_mask(d_psf, radius=window_size+1+window_size//5)
+            rsum = np.sum(d_psf[rmsk])
+            d_psf = d_psf / rsum
         d_psf = d_psf.astype('f8')
         Ny, Nx = self.lensobject.data.shape    # image plane dimensions
         # Ypsf, Xpsf = d_psf.shape               # PSF window dimensions
@@ -489,11 +531,14 @@ class ReconSrc(object):
                     for yl in range(max(yk-window_size, 0), min(yk+window_size+1, Ny)):
                         l = coords[(yl, xl)]
                         dx, dy = xk-xl, yk-yl
-                        P_kl[k, l] = P_kl[l, k] = self._psf_f(psf.data, dx, dy, center=c_psf)
+                        P_kl[k, l] = P_kl[l, k] = self._psf_f(d_psf, dx, dy, center=c_psf)
             P_kl = P_kl.tocsr()
         self.psf = P_kl
         if verbose:
             print("PSF: P_kl{}".format(P_kl.shape))
+            rs = np.sum(d_psf[c_psf[0]-window_size:c_psf[0]+window_size+1,
+                              c_psf[1]-window_size:c_psf[1]+window_size+1])
+            print("Sum: {}".format(rs))
         return P_kl
 
     def d_ij(self, flat=True, include_rotation=True, mask=False, composite=False):
@@ -572,6 +617,8 @@ class ReconSrc(object):
             theta = ang_pos
             alpha = deflect
         zcap = (1. / self.model.dlsds) if zcap is None else 1
+        if self.model.__framework__ == 'GLASS':
+            zcap = 1. #/ self.model.dlsds
         if np.any(self.model.betas[self.model_index]):
             beta = self.model.betas[self.model_index]
             if not isinstance(beta, complex):
@@ -605,9 +652,8 @@ class ReconSrc(object):
         r_max = np.nanmax(np.sqrt(dbeta[:, 0]**2+dbeta[:, 1]**2))
         if limit:
             r_max = max(r_max, self.model.maprad/2.)
-            # if 0.1 < r_max and r_max > 100:
-            #     r_max = self.lensobject.mapr
-            # pass
+            if r_max > 12:
+                r_max = self.model.maprad/2.
         return dbeta, r_max
 
     def srcgrid_mapping(self, dbeta=None, pixrad=None, maprad=None, mask=None):
@@ -641,7 +687,8 @@ class ReconSrc(object):
         xy = np.int16(np.floor(pixrad*(1+dbeta/maprad))+.5)
         return xy
 
-    def inv_proj_matrix(self, cy_opt=False, use_mask=False, r_max=None, r_fullres=None, asarray=False):
+    def inv_proj_matrix(self, cy_opt=False, use_mask=False, r_max=None,
+                        return_props=False, asarray=False):
         """
         The projection matrix to get from the image plane to the source plane
 
@@ -663,16 +710,20 @@ class ReconSrc(object):
             # # lens plane
             LxL = self.lensobject.naxis1*self.lensobject.naxis2
             ij = range(LxL)
-            # calculate optimal mapping resolution
-            # msk = self.mask if use_mask else None
-            msk = self.image_mask()
-            _, self.r_max = self.srcgrid_deflections(mask=msk)
+            # calculate optimal mapping resolution: r_max
+            msk = self.image_mask()   # msk = self.mask if use_mask else None
+            if r_max is None:
+                _, self.r_max = self.srcgrid_deflections(mask=msk)
+            else:
+                self.r_max = float(r_max)
+            # calculate mapping: r_fullres, dbeta
             if use_mask and np.any(self.mask):
                 ij = [self.lensobject.yx2idx(ix, iy) for ix, iy in zip(*np.where(~self.mask))]
                 dbeta, self.r_fullres = self.srcgrid_deflections(mask=~self.mask)
             else:
                 dbeta, self.r_fullres = self.srcgrid_deflections(mask=None, limit=False)
             map2px = self.M/self.r_max
+            self.r_fullres = max(self.r_fullres, self.r_max)
             self.M_fullres = int(self.r_fullres*map2px + .5)
             # get model's source grid mapping
             xy = self.srcgrid_mapping(dbeta=dbeta, pixrad=self.M_fullres, maprad=self.r_fullres)
@@ -713,6 +764,8 @@ class ReconSrc(object):
             self._cache['r_max'][self.obj_index][self.model_index] = self.r_max
         if asarray:
             return Mij_p.toarray()
+        if return_props:
+            return dbeta, xy, self.r_max, self.r_fullres
         return Mij_p
 
     def inv_proj_matrix_cython(self, use_mask=False, r_max=None, r_fullres=None, asarray=False):
@@ -748,7 +801,7 @@ class ReconSrc(object):
         # self.M_fullres = M_fullres
         # self.r_fullres = r_fullres
         # self.r_max = r_max
-        pass
+        return NotImplemented
 
     def proj_matrix(self, **kwargs):
         """
@@ -768,7 +821,7 @@ class ReconSrc(object):
         Mp_ij = Mij_p.T.to_csr()
         return Mp_ij
 
-    def d_p(self, method='minres', iter_lim=100000, cy_opt=False, use_psf=False, flat=True,
+    def d_p(self, method='minres', iter_lim=10000, cy_opt=False, use_psf=False, flat=True,
             cached=False, sigma=1, sigma2=None, sigmaM2=None, use_mask=False, use_filter=False,
             composite=False):
         """
@@ -871,7 +924,7 @@ class ReconSrc(object):
         """
         return self.d_p(flat=flat, **kwargs)
 
-    def reproj_d_ij(self, flat=True, use_mask=False, use_filter=True,
+    def reproj_d_ij(self, flat=True, use_mask=False, use_filter=False,
                     from_cache=False, save_to_cache=False,
                     **kwargs):
         """
@@ -927,6 +980,7 @@ class ReconSrc(object):
                 self._cache['reproj_d_ij'][self.obj_index][self.model_index] = dij.copy()
         if use_filter:
             dij = ndimage.median_filter(dij, size=2)
+            # dij = ndimage.filters.gaussian_filter(dij, sigma=0.5)
         if use_mask and np.any(self.mask):
             msk = self.mask.flatten()
             dij[msk] = self.d_ij(flat=True, composite=kwargs.get('composite', False))[msk]
@@ -961,7 +1015,7 @@ class ReconSrc(object):
         """
         return self.reproj_d_ij(flat=flat, **kwargs)
 
-    def residual_map(self, flat=False, nonzero_only=False, **kwargs):
+    def residual_map(self, flat=False, nonzero_only=False, within_radius=None, **kwargs):
         """
         Evaluate the reprojection by calculating the residual map to the lens map data
 
@@ -995,6 +1049,10 @@ class ReconSrc(object):
         if nonzero_only:
             residuals[reproj == 0] = 0
             residuals[data == 0] = 0
+        if within_radius is not None:
+            rad = int(within_radius * (residuals.shape[-1] // 2))
+            rmsk = glmrgb.radial_mask(residuals, radius=rad)
+            residuals[~rmsk] = 0
         return residuals
 
     def reproj_chi2(self, data=None, reduced=False, output_all=False, nonzero_only=False,
@@ -1068,7 +1126,7 @@ class ReconSrc(object):
 
 def run_model(reconsrc, mdl_index=0, angle=0, dzsrc=0,
               reduced=False, nonzero_only=True, within_radius=None,
-              method='lsqr', use_psf=False, use_mask=True,
+              method='lsqr', use_psf=False, use_mask=True, use_filter=True,
               noise=0, sigma=1, sigma2=None, sigmaM2=None,
               cached=True, from_cache=True, save_to_cache=True,
               flush_cache=True, output_maps=False):
@@ -1089,11 +1147,15 @@ def run_model(reconsrc, mdl_index=0, angle=0, dzsrc=0,
     kw = dict(method=method, use_psf=use_psf, use_mask=use_mask, sigma2=s2)
     chi2 = reconsrc.reproj_chi2(cached=True, from_cache=False, save_to_cache=save_to_cache,
                                 nonzero_only=nonzero_only, within_radius=within_radius,
+                                use_filter=use_filter,
                                 reduced=reduced, noise=noise, **kw)
     if output_maps:
         srcplane = reconsrc.plane_map(cached=cached, **kw)
-        synth = reconsrc.reproj_map(cached=True, from_cache=True, save_to_cache=False, **kw)
-        resids = reconsrc.residual_map(cached=True, from_cache=True, save_to_cache=False, nonzero_only=nonzero_only, **kw)
+        synth = reconsrc.reproj_map(cached=True, from_cache=True, save_to_cache=False,
+                                    use_filter=use_filter, **kw)
+        resids = reconsrc.residual_map(cached=True, from_cache=True, save_to_cache=False,
+                                       nonzero_only=nonzero_only, within_radius=within_radius,
+                                       **kw)
         return chi2, (srcplane, synth, resids, s2)
     if flush_cache:
         reconsrc.flush_cache(variables=['reproj_dij'])

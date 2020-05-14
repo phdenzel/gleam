@@ -6,7 +6,10 @@ Better color module for more beautiful plots
 """
 import numpy as np
 import random
-from matplotlib.colors import LinearSegmentedColormap, ListedColormap, to_hex
+from matplotlib.colors import Colormap, \
+    LinearSegmentedColormap, ListedColormap, \
+    Normalize, to_hex
+from matplotlib.cm import ScalarMappable
 from matplotlib import pyplot as plt
 
 __all__ = ['color_variant', 'GLEAMcolors', 'GLEAMcmaps']
@@ -37,6 +40,41 @@ def color_variant(hex_color, shift=10):
     new_rgb_int = [min([255, max([0, i])]) for i in new_rgb_int]
     # hex() produces "0x88", we want the last two digits
     return "#" + "".join([hex(i)[2:] for i in new_rgb_int])
+
+
+class ReNormColormapAdaptor(Colormap):
+    """
+    Colormap adaptor that uses another Normalize instance
+    for the colormap than applied to the mappable
+    """
+    def __init__(self,base, cmap_norm, orig_norm=None):
+        if orig_norm is None:
+            if isinstance(base, ScalarMappable):
+                orig_norm = base.norm
+                base = base.cmap
+            else:
+                orig_norm = Normalize(0, 1)
+        self._base = base
+        if (isinstance(cmap_norm, type(Normalize))
+            and issubclass(cmap_norm, Normalize)):
+            # a class was provided instead of an instance. create an instance
+            # with the same limits.
+            cmap_norm = cmap_norm(orig_norm.vmin, orig_norm.vmax)
+        self._cmap_norm = cmap_norm
+        self._orig_norm = orig_norm
+
+    def __call__(self, X, **kwargs):
+        """
+        Re-normalise the values before applying the colormap
+        """
+        return self._base(self._cmap_norm(self._orig_norm.inverse(X)), **kwargs)
+
+    def __getattr__(self,attr):
+        """
+        Any other attribute, we simply dispatch to the underlying cmap
+        """
+        return getattr(self._base, attr)
+
 
 
 # #############################################################################
@@ -98,6 +136,10 @@ terrean1, terrean2, terrean3, terrean4, terrean5 = (
     '#E8DDCB', '#CDB380', '#036564', '#033649', '#031634')
 cozytime1, cozytime2, cozytime3, cozytime4, cozytime5 = (
     '#FFEEB2', '#F4CE61', '#FFBF20', '#7D9CA1', '#4D8D97')
+gravic1, gravic2, gravic3, gravic4, gravic5 = (
+    '#0b0b13', '#272e59', '#4d5693', '#ffbf20', '#f8f5ec')
+marsian1, marsian2, marsian3, marsian4, marsian5 = (
+    '#e8ddcb', '#cd967e', '#63031d', '#490303', '#1d0202')
 twofourone1, twofourone2, twofourone3, twofourone4, twofourone5 = (
     '#D1313D', '#E5625C', '#F9BF76', '#8EB2C5', '#615375')
 ioba1, ioba2, ioba3, ioba4, ioba5 = '#FF3366', '#C74066', '#8F4D65', '#575A65', '#1F6764'
@@ -159,6 +201,8 @@ stationary_palette = [stationary1, stationary2, stationary3, stationary4]
 prism_palette = [prism1, prism2, prism3, prism4]
 retro_palette = [retro1, retro2, retro3, retro4]
 cozytime_palette = [cozytime1, cozytime2, cozytime3, cozytime4, cozytime5]
+gravic_palette = [gravic1, gravic2, gravic3, gravic4, gravic5]
+marsian_palette = [marsian1, marsian2, marsian3, marsian4, marsian5]
 terrean_palette = [terrean1, terrean2, terrean3, terrean4, terrean5]
 acryliq_palette = [acryliq1, acryliq2, acryliq3, acryliq4]
 hibokeh_palette = [hibokeh1, hibokeh2, hibokeh3, hibokeh4]
@@ -260,6 +304,15 @@ class GLEAMcolors:
     cozytime1, cozytime2, cozytime3, cozytime4, cozytime5 = (cozytime1, cozytime2,
                                                              cozytime3, cozytime4, cozytime5)
 
+    gravic_palette = gravic_palette
+    gravic1, gravic2, gravic3, gravic4, gravic5 = (gravic1, gravic2, gravic3,
+                                                   gravic4, gravic5)
+
+    marsian_palette = marsian_palette
+    marsian1, marsian2, marsian3, marsian4, marsian5 = (marsian1, marsian2,
+                                                        marsian3, marsian4,
+                                                        marsian5)
+
     acryliq_palette = acryliq_palette
     acryliq1, acryliq2, acryliq3, acryliq4 = (acryliq1, acryliq2,
                                               acryliq3, acryliq4)
@@ -293,13 +346,16 @@ class GLEAMcolors:
     purplerain1, purplerain2, purplerain3, purplerain4 = (purplerain1, purplerain2,
                                                           purplerain3, purplerain4)
     palettes = [arcus_palette, aquaria_palette, geometric_palette, neon_palette,
-                psychedelic_palette, ioba_palette, mintrock_palette, puked_rainbow_palette,
-                twofourone_palette, vivid_palette, abstract_palette, phoenix_palette,
-                cosmicnova_palette, pinkpop_palette, agaveglitch_palette, coralglow_palette,
-                luxuria_palette, luminos_palette, stationary_palette, prism_palette, retro_palette,
-                terrean_palette, cozytime_palette, acryliq_palette, hibokeh_palette,
-                flashy_palette, cyber_palette, cyberfade_palette, zoas_palette, vilux_palette,
-                graphiq_palette, vibes_palette, purplerain_palette]
+                psychedelic_palette, ioba_palette, mintrock_palette,
+                puked_rainbow_palette, twofourone_palette, vivid_palette,
+                abstract_palette, phoenix_palette, cosmicnova_palette,
+                pinkpop_palette, agaveglitch_palette, coralglow_palette,
+                luxuria_palette, luminos_palette, stationary_palette,
+                prism_palette, retro_palette, terrean_palette, cozytime_palette,
+                gravic_palette, acryliq_palette, hibokeh_palette, marsian_palette,
+                flashy_palette, cyber_palette, cyberfade_palette, zoas_palette,
+                vilux_palette, graphiq_palette, vibes_palette,
+                purplerain_palette]
 
     @classmethod
     def cmap_from_color(cls, color_str, secondary_color=None):
@@ -351,6 +407,8 @@ prism = LinearSegmentedColormap.from_list('prism', prism_palette)
 retro = LinearSegmentedColormap.from_list('retro', retro_palette)
 terrean = LinearSegmentedColormap.from_list('terrean', terrean_palette)
 cozytime = LinearSegmentedColormap.from_list('cozytime', cozytime_palette)
+gravic = LinearSegmentedColormap.from_list('gravic', gravic_palette)
+marsian = LinearSegmentedColormap.from_list('marsian', marsian_palette)
 acryliq = LinearSegmentedColormap.from_list('acryliq', acryliq_palette)
 hibokeh = LinearSegmentedColormap.from_list('hibokeh', hibokeh_palette)
 flashy = LinearSegmentedColormap.from_list('flashy', flashy_palette)
@@ -904,6 +962,8 @@ class GLEAMcmaps:
     retro = retro
     terrean = terrean
     cozytime = cozytime
+    gravic = gravic
+    marsian = marsian
     acryliq = acryliq
     hibokeh = hibokeh
     flashy = flashy
@@ -916,9 +976,10 @@ class GLEAMcmaps:
     purplerain = purplerain
     twilight = twilight
 
-    aslist = [arcus, aquaria, geometric, neon, psychedelic, ioba, mintrock, puked_rainbow,
-              twofourone, vivid, abstract, phoenix, cosmicnova, pinkpop, agaveglitch, coralglow,
-              luxuria, luminos, stationary, prism, retro, terrean, cozytime, acryliq, hibokeh,
+    aslist = [arcus, aquaria, geometric, neon, psychedelic, ioba, mintrock,
+              puked_rainbow, twofourone, vivid, abstract, phoenix, cosmicnova,
+              pinkpop, agaveglitch, coralglow, luxuria, luminos, stationary,
+              prism, retro, terrean, cozytime, gravic, marsian, acryliq, hibokeh,
               flashy, cyber, cyberfade, zoas, graphiq, vibes, purplerain, vilux,
               twilight]
     asarray = np.asarray(aslist)

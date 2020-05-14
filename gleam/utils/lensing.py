@@ -214,7 +214,7 @@ class ModelArray(object):
     @property
     def extent(self):
         if self.maprad:
-            return [-self.maprad, self.maprad, -self.maprad, self.maprad]
+            return [-1*self.maprad, self.maprad, -1*self.maprad, self.maprad]
         else:
             return np.array([-1, 1, -1, 1])
 
