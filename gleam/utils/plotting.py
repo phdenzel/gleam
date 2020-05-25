@@ -294,7 +294,7 @@ def plot_annulus_region(center=(0.5, 0.5), radius=0.5, color='white', alpha=0.2,
 
 
 def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, extent=None,
-                     levels=3, delta=0.2, log=True, oversample=True, bg_shift=1e-6):
+                     levels=3, delta=0.2, log=True, oversample=True, shift=1e-6):
     """
     Transform data in preparation for plotting
 
@@ -311,7 +311,7 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
         delta <float> - contour distances
         log <bool> - plot in log scale
         oversample <bool> - oversample the map to show characteristic pixel structure
-        bg_shift <float> - shift outermost contour in order to fill the entire image
+        shift <float> - shift the grid data by some amount
 
     Return:
         grid <np.ndarray> - kappa grid oversampled/transformed/scaled according to input settings
@@ -326,6 +326,7 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
     else:
         model.obj_idx = min(obj_index, model.N_obj-1) if hasattr(model, 'N_obj') else obj_index
     grid = model.kappa_grid(model_index=mdl_index, refined=(subcells > 1))
+    grid += shift
     extent = model.extent if extent is None else extent
     # masking if necessary
     msk = grid != 0
@@ -351,12 +352,11 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
     else:
         kappa1 = 1
         clevels = np.concatenate(((0,), 10**clev2))
-    # clevels[0] -= 1e-6
     return grid, (kappa1, clevels, extent)
 
 
 def kappa_map_plot(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1,
-                   extent=None, origin='upper',
+                   extent=None, origin='upper', shift=0,
                    contours=False, levels=3, delta=0.2, log=True,
                    oversample=True,
                    scalebar=False, label=None, color='white',
@@ -389,8 +389,9 @@ def kappa_map_plot(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1,
         None
     """
     grid, (kappa1, clevels, extent) = kappa_map_transf(
-        model, mdl_index=mdl_index, obj_index=obj_index, src_index=src_index, subcells=subcells,
-        extent=extent, levels=levels, delta=delta, log=log, oversample=oversample)
+        model, mdl_index=mdl_index, obj_index=obj_index, src_index=src_index,
+        shift=shift, subcells=subcells, extent=extent, levels=levels, log=log,
+        delta=delta, oversample=oversample)
     R = max(extent)
     # contours and surface plot
     if contours:
@@ -935,7 +936,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
     radii = []
     ax = plt.gca()
     for m in data:
-        radius, profile = kappa_profile(m, obj_index=obj_index,
+        radius, profile = kappa_profile(m, obj_index=model.obj_idx,
                                         maprad=maprad, pixrad=pixrad)
         if interpolate > 1:
             radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
@@ -960,13 +961,13 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         plots.append(cs)
         ax.set_aspect('auto')
     # radius, profile <- ensemble average
-    radius, profile = kappa_profile(eavg, obj_index=obj_index,
+    radius, profile = kappa_profile(eavg, obj_index=model.obj_idx,
                                     maprad=maprad, pixrad=pixrad)
     if ensemble_average:
         if interpolate > 1:
             radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
         kw = dict(lw=kwargs['lw'], ls=kwargs['ls'], color=hilite_color, alpha=kwargs['alpha'])
-        plot, radius, profile = kappa_profile_plot((radius, profile), obj_index=obj_index,
+        plot, radius, profile = kappa_profile_plot((radius, profile), obj_index=model.obj_idx,
                                                    kappa1_line=False, maprad=maprad, pixrad=pixrad,
                                                    annotation_color=annotation_color, **kw)
         plots.append(plot)
