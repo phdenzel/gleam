@@ -25,6 +25,7 @@ import re
 import copy
 import math
 import numpy as np
+from scipy import ndimage
 from astropy.io import fits
 import matplotlib.pyplot as plt
 
@@ -443,6 +444,17 @@ class SkyF(object):
         else:
             return data
 
+    def reorient(self, angle=None):
+        """
+        Reorient the fits file to have north up
+        """
+        if angle is None:
+            if 'ORIENTAT' in self.hdr:
+                angle = self.hdr['ORIENTAT']
+            else:
+                angle = 0
+        self.data = ndimage.rotate(self.data, angle, reshape=False)
+
     @property
     def band(self):
         """
@@ -491,7 +503,7 @@ class SkyF(object):
         if nax1 in self.data.shape:
             self.hdr['NAXIS1'] = nax1
         else:
-            print("Warning! Setting naxis1 to different value than data.shape")
+            # print("Warning! Setting naxis1 to different value than data.shape")
             self.hdr['NAXIS1'] = nax1
 
     @property
@@ -526,7 +538,7 @@ class SkyF(object):
         if nax2 in self.data.shape:
             self.hdr['NAXIS2'] = int(nax2)
         else:
-            print("Warning! Setting naxis2 to different value than data.shape")
+            # print("Warning! Setting naxis2 to different value than data.shape")
             self.hdr['NAXIS2'] = int(nax2)
 
     @property

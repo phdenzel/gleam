@@ -133,8 +133,8 @@ def square_subplots(fig):
 
 def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
                   position='bottom left', origin='center',
-                  padding=(0.08, 0.06), color='white',
-                  fontsize=16):
+                  padding=(0.08, 0.06), barheight=0.03,
+                  color='white', fontsize=16):
     """
     Add a scalebar to an image plot
 
@@ -161,7 +161,7 @@ def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
         lbl = r"{:1.0f}{}".format(length, unit)
     else:
         lbl = r"{:1.1f}{}".format(length, unit)
-    wh = np.asarray([length, 0.03*R])
+    wh = np.asarray([length, barheight*R])
     w, h = wh
     # positioning scalebar
     position_xy = np.asarray(get_location(position))
