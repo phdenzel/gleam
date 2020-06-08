@@ -36,7 +36,9 @@ from gleam.skyf import SkyF
 from gleam.lensobject import LensObject
 from gleam.skypatch import SkyPatch
 from gleam.multilens import MultiLens
-from gleam.utils.lensing import LensModel, deflect, downsample_model
+from gleam.utils.lensing import LensModel
+from gleam.utils.lensing import deflect, external_shear_grad, external_ptmass_grad
+from gleam.utils.lensing import downsample_model
 from gleam.utils.linalg import is_symm2D
 import gleam.utils.optimized as cython_optimized
 import gleam.utils.rgb_map as glmrgb
@@ -609,13 +611,13 @@ class ReconSrc(object):
             theta = np.empty(ang_pos.shape[:-1], dtype=np.complex)
             theta.real = ang_pos[..., 1]
             theta.imag = ang_pos[..., 0]
-            alpha = np.vectorize(deflect, signature='(),(m),(m),(m)->()')
+            grad_phi = np.vectorize(deflect, signature='(),(m),(m),(m)->()')
         elif isinstance(ang_pos, (list, tuple)) and len(ang_pos) == 2:
             theta = complex(*ang_pos)
-            alpha = deflect
+            grad_phi = deflect
         else:
             theta = ang_pos
-            alpha = deflect
+            grad_phi = deflect
         zcap = (1. / self.model.dlsds) if zcap is None else 1
         if self.model.__framework__ == 'GLASS':
             zcap = 1. #/ self.model.dlsds
@@ -623,10 +625,18 @@ class ReconSrc(object):
             beta = self.model.betas[self.model_index]
             if not isinstance(beta, complex):
                 beta = complex(*beta)
-        # TODO: add shear
-        # if np.any(self.model.shears[self.obj_index]):
-        #     pass
-        dbeta = beta - theta + alpha(theta, data, ploc, cell_sizes) * zcap
+        if hasattr(self.model, 'shears') and np.any(self.model.shears):
+            shear = self.model.shears[self.model_index]
+            s = external_shear_grad(shear, theta)
+        else:
+            s = 0
+        if hasattr(self.model, 'ptmasses') and len(self.model.ptmasses[self.model_index]) > 0:
+            extm = self.model.ptmasses[self.model_index]
+            p = external_ptmass_grad(extm, theta)
+        else:
+            p = 0
+        alpha = grad_phi(theta, data, ploc, cell_sizes) + s + p
+        dbeta = beta - theta + alpha * zcap
         return np.array([dbeta.real, dbeta.imag]).T
 
     def srcgrid_deflections(self, mask=None, limit=True):

@@ -411,7 +411,6 @@ class ModelArray(object):
             obj = self.__class__(self.resampled['data'], **kwargs)
             self.resampled['obj'] = obj
             return obj
-        
 
     def xy_grid(self, N=None, maprad=None, pixel_size=None, as_complex=False, refined=True):
         N = self.kappa_grid(refined=refined).shape[-1] if N is None else N
@@ -451,7 +450,9 @@ class ModelArray(object):
         model = self.kappa_grid(model_index)
         N = model.shape[-1] if N is None else N
         factor = 1./self.dlsds if hasattr(self, 'dlsds') else 1
-        ext = [self.shear_grid(model_index, N)]
+        no_ext = ext is None
+        ext = [self.shear_grid(model_index, N)] if no_ext else ext
+        ext += [g for g in self.extmass_grid(model_index, N)] if no_ext else []
         _, _, grid = potential_grid(model, N, 2*self.maprad, factor=factor, ext=ext)
         return grid
 
@@ -463,7 +464,16 @@ class ModelArray(object):
                     else nil
         else:
             shear = nil
-        gx, gy, grid = shear_grid(shear, N, 2*self.maprad)
+        _, _, grid = shear_grid(shear, N, 2*self.maprad)
+        return grid
+
+    def extmass_grid(self, model_index=-1, N=None):
+        N = self.data.shape[-1] if N is None else N
+        nil = [[np.array([1, 1]), 0]]
+        if model_index >= -1:
+            extm = self.ptmasses[model_index] if hasattr(self, 'ptmasses') and len(self.ptmasses[model_index]) > 0 \
+                else nil
+        _, _, grid = extmass_grid(extm, N, 2*self.maprad)
         return grid
 
     def arrival_grid(self, model_index=-1, N=None, beta=None, factor=None, ext=None):
@@ -475,7 +485,9 @@ class ModelArray(object):
         else:
             beta = nil
         factor = 1./self.dlsds if factor is None and hasattr(self, 'dlsds') else 1
-        ext = [self.shear_grid(model_index, N)] if ext is None else ext
+        no_ext = ext is None
+        ext = [self.shear_grid(model_index, N)] if no_ext else ext
+        ext += [g for g in self.extmass_grid(model_index, N)] if no_ext else []
         _, _, grid = arrival_grid(model, N, 2*self.maprad, beta, factor=factor, ext=ext)
         return grid
 
@@ -483,12 +495,14 @@ class ModelArray(object):
         model = self.kappa_grid(model_index)
         N = self.data.shape[-1] if N is None else N
         # factor = 1./self.dlsds if hasattr(self, 'dlsds') else 1
-        # ext = [self.shear_grid(model_index, N)]
+        no_ext = ext is None
+        ext = [self.shear_grid(model_index, N)] if no_ext else ext
+        ext += [g for g in self.extmass_grid(model_index, N)] if no_ext else []
         _, _, grid = roche_potential_grid(model, N, 2*self.maprad, factor=factor, ext=ext)
         return grid
 
     def saddle_contour_levels(self, model_index=-1, saddle_points=None, N=None, maprad=None,
-                              factor=None, shear=None):
+                              factor=None, shear=None, extm=None):
         model = self.kappa_grid(model_index)
         N = model.shape[-1] if N is None else N
         maprad = self.maprad if maprad is None else maprad
@@ -499,7 +513,10 @@ class ModelArray(object):
         shear = self.shears[model_index] \
             if shear is None and hasattr(self, 'shears') and np.any(self.shears) \
             else shear
-        kwargs = dict(factor=factor, shear=shear)
+        extm = self.ptmasses[model_index] \
+            if extm is None and hasattr(self, 'ptmasses') and len(self.ptmasses[model_index]) > 0 \
+            else extm
+        kwargs = dict(factor=factor, shear=shear, extm=extm)
         return sorted([arrival_time(sad, beta, model, N, L, **kwargs) for sad in saddle_points])
 
 
@@ -593,7 +610,16 @@ class PixeLensModel(ModelArray):
                                     'ENSEM': 'MODEL'},
                     ):
         """
-        TODO
+        Parse through a PixeLensModel text file
+
+        Args:
+            text <list(str)> - text file content
+
+        Kwargs:
+            sections <dict> - sections which to parse by
+
+        Return:
+            TODO
         """
         fields = {}
         for line in text:
@@ -792,6 +818,32 @@ class GLASSModel(ModelArray):
             shears.append(ensdta['shear'])
         shears = np.asarray(shears)
         return shears
+
+    @property
+    def N_ptmasses(self):
+        """
+        Number of point masses in the model
+        """
+        iptm = [i for i, ep in enumerate(self.gcm[0][0].extra_potentials) if ep.name == 'ptmass']
+        return len(iptm)
+
+    @property
+    def ptmasses(self):
+        """
+        All modeled point mass components
+        """
+        has_ptmasses = 'ptmass' in self.gcm[0][1]
+        iptm = [i for i, ep in enumerate(self.gcm[0][0].extra_potentials) if ep.name == 'ptmass']
+        ptms = [[(np.array([m[0].extra_potentials[i].r.real, m[0].extra_potentials[i].r.imag]),
+                 m[1]['ptmass'][n]) for n, i in enumerate(iptm)]
+                for m in self.gcm if has_ptmasses]
+        self.env.make_ensemble_average()
+        ens = self.env.ensemble_average['obj,data'][self.obj_idx]
+        ptms.append([(np.array([ens[0].extra_potentials[i].r.real,
+                                ens[0].extra_potentials[i].r.imag]),
+                      ens[1]['ptmass'][n])
+                     for n, i in enumerate(iptm)])
+        return ptms
 
     @property
     def ext_potentials(self):
@@ -1393,7 +1445,7 @@ def qpm_abphi(qpm, verbose=False):
     return a, b, phi
 
 
-def xy_grid(N, grid_size, a=None):
+def xy_grid(N, grid_size, a=None, as_complex=False):
     """
     Coordinate grid of x and y given a particular pixel range and length
 
@@ -1416,7 +1468,13 @@ def xy_grid(N, grid_size, a=None):
     x = np.linspace(-R+pixel_size/2., R-pixel_size/2., N)
     y = np.linspace(-R+pixel_size/2., R-pixel_size/2., N)
     gx, gy = np.meshgrid(x, y[::-1])
-    return np.array([gx, gy])
+    xy = np.array([gx, gy])
+    if as_complex:
+        xy_compl = np.empty((N, N), dtype=np.complex)
+        xy_compl.real = xy[0, ...]
+        xy_compl.imag = xy[1, ...]
+        return xy_compl
+    return xy
 
 
 def lnr_indef(x, y, x2=None, y2=None):
@@ -1525,15 +1583,32 @@ def grad(W, r0, r, a, threads=1, use_omp=False):
 
 def external_shear_grad(shear, theta):
     """
-    Returns external shear (as complex two-component point) for given point
+    Returns potential gradient of external shear (as complex two-component point)
     """
     shear = np.asarray(shear)
-    dx = np.array([theta.real, theta.imag])
-    dy = np.array([-theta.imag, theta.real])
-    return complex(sum(shear * dx), sum(shear * dy))
+    theta = np.asarray(theta)
+    sheargrad = theta.copy()
+    sheargrad.real = shear[0]*theta.real + shear[1]*theta.imag
+    sheargrad.imag = shear[1]*theta.real - shear[0]*theta.imag
+    return sheargrad
 
 
-def deflect(theta, kappa, ploc, cell_size, shear=None):
+def external_ptmass_grad(extmass, theta):
+    """
+    Returns potential gradient of external mass (point mass)
+    """
+    # extmass = 2*extmass
+    r, m = [complex(*e[0]) for e in extmass], [e[1] for e in extmass]
+    r = np.asarray(r)
+    m = np.asarray(m)
+    theta = np.asarray(theta)
+    d = theta[np.newaxis, ...] - r[..., np.newaxis]
+    d2 = np.abs(d)**2
+    gradptm = np.sum(m[..., np.newaxis]*d/d2, axis=0)
+    return gradptm
+
+
+def deflect(theta, kappa, ploc, cell_size):
     """
     Returns the deflection, i.e. potential gradient
 
@@ -1544,13 +1619,11 @@ def deflect(theta, kappa, ploc, cell_size, shear=None):
         cell_size <> - array of pixel sizes
     """
     s = grad(kappa, theta, ploc, cell_size)
-    if shear is not None:
-        extp = external_shear_grad(shear, theta)
-        s += extp
     return s
 
 
-def arrival_time(theta, beta, kappa, N, grid_size, factor=1, shear=None, verbose=False):
+def arrival_time(theta, beta, kappa, N, grid_size, factor=1,
+                 shear=None, extm=None, verbose=False):
     """
     Calculate the arrival time for a given kappa map and beta at position theta
     """
@@ -1560,7 +1633,11 @@ def arrival_time(theta, beta, kappa, N, grid_size, factor=1, shear=None, verbose
     Q = lnr(theta[0], theta[1], xn, yn, pixel_size)
     pot = -np.sum(kappa*Q) / (2*np.pi) * factor
     if shear is not None:
-        pot -= external_shear_grid(shear, theta)
+        extshear = external_shear(shear, theta)
+        pot -= extshear
+    if extm is not None:
+        extmass = external_ptmass(extm, theta)
+        pot -= extmass
     return geom + pot
 
 
@@ -1604,18 +1681,19 @@ def potential_grid(kappa, N, grid_size, factor=1, ext=None, verbose=False):
     return gx, gy, psi
 
 
-def external_shear_grid(shear, theta):
+def external_shear(shear, theta):
     """
     Shear value at theta
 
     Args:
+        shear <tuple/list/np.ndarray> - two-component shear parameter value(s)
         theta <tuple/list/np.ndarray> - angular position on the lens plane, i.e. theta
 
     Kwargs:
         None
 
     Return:
-        shear <np.ndarray> - two-component shear
+        shear <np.ndarray> - potential contribution of two-component shear at theta
     """
     shear = np.asarray(shear)
     x, y = theta
@@ -1647,6 +1725,49 @@ def shear_grid(gamma, N, grid_size, a=None):
     N = np.asarray([n0, n1])
     p = np.sum(gamma*N.T, axis=-1).T
     return xy[0], xy[1], p
+
+
+def external_ptmass(extmass, theta):
+    """
+    External mass value at theta
+
+    Args:
+        extmass <list/tuple> - (r:np.ndarray, m:float) parameters of ext. masses
+        theta <tuple/list/np.ndarray> - angular position on the lens plane, i.e. theta
+
+    Kwargs:
+        None
+    """
+    r, m = [e[0] for e in extmass], [e[1] for e in extmass]
+    r = np.asarray(r)
+    m = np.asarray(m)
+    if isinstance(theta, complex):
+        theta = np.array([theta.real, theta.imag])
+    elif isinstance(theta, (list, tuple)):
+        theta = np.asarray(theta)
+    d = theta - r
+    dx, dy = d[..., 0], d[..., 1]
+    return m * np.log(np.sqrt(dx**2 + dy**2)) / np.pi
+
+
+def extmass_grid(extmass, N, grid_size, a=None):
+    """
+    External mass potential map
+
+    Args:
+        extmass <list/tuple> - (r:np.ndarray, m:float) parameters of ext. mass
+        N <int> - number of grid points along the axes of the potential grid
+        grid_size <float> - the length of the grid along the axes of the kappa grid
+    """
+    r, m = [e[0] for e in extmass], [e[1] for e in extmass]
+    r = np.asarray(r)
+    m = np.asarray(m)
+    xy = xy_grid(N, grid_size)
+    d = np.stack(r.shape[0]*[xy])
+    d = d - r[..., np.newaxis, np.newaxis]
+    dists = np.log(np.sqrt(d[:, 0, ...]**2 + d[:, 1, ...]**2))
+    extm_grids = m[..., np.newaxis, np.newaxis] * dists / np.pi
+    return xy[0], xy[1], extm_grids
 
 
 def arrival_grid(kappa, N, grid_size, beta, factor=1, ext=None, verbose=False):
