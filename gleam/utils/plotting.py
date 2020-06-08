@@ -357,7 +357,7 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
 
 def kappa_map_plot(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1,
                    extent=None, origin='upper', shift=0,
-                   contours=False, levels=3, delta=0.2, log=True,
+                   contours=False, levels=7, delta=0.1, log=True,
                    oversample=True,
                    scalebar=False, label=None, color='white',
                    cmap=GLEAMcmaps.agaveglitch, colorbar=False):
@@ -704,7 +704,7 @@ def arrival_time_surface_plot(model, N=None,
                               mdl_index=-1, obj_index=0, src_index=0,
                               cmap=GLEAMcmaps.phoenix, maprad=None, extent=None,
                               draw_images=True, contours_only=False,
-                              contours=True, levels=30,
+                              contours=True, levels=60,
                               min_contour_shift=None, sad_contour_shift=None,
                               scalebar=False, label=None, color='black',
                               colorbar=False):
