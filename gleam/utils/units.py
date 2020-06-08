@@ -43,6 +43,7 @@ class units(object):
 
 
 localvars = vars()
-for name in localvars.keys():
+allkeys = list(localvars.keys())
+for name in allkeys:
     if not name == 'units' and not name.startswith('__'):
         setattr(units, name, localvars[name])
