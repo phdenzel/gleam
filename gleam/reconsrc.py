@@ -618,9 +618,7 @@ class ReconSrc(object):
         else:
             theta = ang_pos
             grad_phi = deflect
-        zcap = (1. / self.model.dlsds) if zcap is None else 1
-        if self.model.__framework__ == 'GLASS':
-            zcap = 1. #/ self.model.dlsds
+        zcap = 1.  # if the model's have been rescaled to kappa_inf use 1./dlsds
         if np.any(self.model.betas[self.model_index]):
             beta = self.model.betas[self.model_index]
             if not isinstance(beta, complex):
@@ -1153,8 +1151,8 @@ def run_model(reconsrc, mdl_index=0, angle=0, dzsrc=0,
     s2 = None
     if sigma2 is not None:
         s2 = ndimage.rotate(sigma2, angle, reshape=False)
-        s2[s2==0] = np.min(sigma2)
-    kw = dict(method=method, use_psf=use_psf, use_mask=use_mask, sigma2=s2)
+        s2[s2 <= 0] = np.min(sigma2[sigma2 > 0])
+    kw = dict(method=method, use_psf=use_psf, use_mask=use_mask, sigma2=s2.copy())
     chi2 = reconsrc.reproj_chi2(cached=True, from_cache=False, save_to_cache=save_to_cache,
                                 nonzero_only=nonzero_only, within_radius=within_radius,
                                 use_filter=use_filter,
