@@ -31,4 +31,9 @@ if __name__ == "__main__":
 
     for mdl in models:
         print("Processing lens model {}...".format(mdl))
-        h0hist_plot(mdl, units='km/s/Mpc', savefig=False, verbose=True)
+        # h0hist_plot(mdl, units='km/s/Mpc', savefig=True, verbose=True)
+        fig, axes = h0hist_plot(mdl, units='aHz', result_label=True, label_pos='right',
+                                showfig=False, savefig=False, verbose=True)
+        savename = os.path.splitext(mdl.filename)[0]
+        plt.savefig('h0hist_{}.pdf'.format(savename))
+        

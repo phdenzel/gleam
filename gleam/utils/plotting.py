@@ -10,17 +10,20 @@ Lensing utility functions for calculating various analytics from lensing observa
 import os
 import numpy as np
 import scipy.ndimage as ndimage
+from scipy.optimize import curve_fit
 from matplotlib import patches
 from matplotlib import pyplot as plt
 from matplotlib.colors import to_rgba
 from gleam.utils.lensing import LensModel
 from gleam.utils.lensing import DLSDS, kappa_profile, \
     interpolate_profile, find_einstein_radius
+from gleam.utils.pdfs import lorentzian, gaussian, pseudovoigt, tukeygh
 from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
 from gleam.utils.rgb_map import radial_mask
+from gleam.utils import units as glu
 from gleam.glass_interface import glass_renv
 glass = glass_renv()
-
+GLEAMcmaps.register_all()
 
 ###############################################################################
 def plot_connection(graph, **kwargs):
@@ -208,6 +211,7 @@ def plot_labelbox(label, position='bottom left', padding=(0.05, 0.05), color='wh
         facealpha = 0.05
     # defaults
     kwargs.setdefault('family', 'sans-serif')
+    kwargs.setdefault('fontname', 'Computer Modern')
     kwargs.setdefault('fontsize', 14)
     kwargs.setdefault('zorder', 1000)
     kwargs.setdefault('bbox', {})
@@ -1194,6 +1198,93 @@ def viewstate_plots(model, obj_index=None, refined=True,
             plt.savefig('viewstate_{}.pdf'.format(savename))
         if showfig:
             plt.show()
+
+
+def h0hist_plot(model, units='km/s/Mpc', nbins=30,
+                result_label=False, label_pos='left',
+                title=None, savefig=False, showfig=True, verbose=True):
+    """
+    TODO
+    """
+    if not isinstance(model, LensModel):
+        try:
+            model = LensModel(model)
+        except:
+            print("Input must be a LensModel object from <gleam.utils.lensing>")
+            return
+    if verbose:
+        print(model.__v__)
+    fig, ax = plt.subplots()
+    axc = None
+    h0arr = model.H0
+    # unit conversions
+    if units == 'km/s/Mpc' or units == 'km s^{-1} Mpc^{-1}':
+        h0arr = np.array(h0arr)
+        hlbl = 'H$_0$'
+    elif units == 'aHz':
+        h0arr = glu.H02aHz(np.array(h0arr))
+        hlbl = 'H$_0$'
+        axc = ax.twiny()
+        # second unit axis
+        def convertaxc(ax):
+            x1, x2 = ax.get_xlim()
+            axc.set_xlim(glu.aHz2H0(x1), glu.aHz2H0(x2))
+            axc.figure.canvas.draw()
+        ax.callbacks.connect("xlim_changed", convertaxc)
+    elif units == 'Gyrs':
+        h0arr = glu.H02Gyrs(np.array(h0arr))
+        hlbl = 'H$_0^{{-1}}$'
+    elif units == 'GeV/m^3':
+        h0arr = glu.H02critdens(np.array(h0arr))
+        hlbl = r"$\rho_{{\mathrm{{c}}}}$"
+    # calculate/plot statistics and histogram
+    q = np.percentile(h0arr, [16, 50, 84])
+    n, bins, patches = ax.hist(h0arr, bins=nbins, density=True, rwidth=0.901)
+    cm = plt.cm.get_cmap('phoenix')
+    ax.axvline(q[1], color=GLEAMcolors.pink, zorder=0, alpha=0.6)
+    ax.axvline(q[0], color=GLEAMcolors.red, zorder=0, alpha=0.6)
+    ax.axvline(q[2], color=GLEAMcolors.red, zorder=0, alpha=0.6)
+    # decide on the coloring of the histogram bars
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+    # xdata = bin_centers
+    # ydata = n
+    # lpopt, lpcov = curve_fit(lorentzian, xdata, ydata)
+    # ldist = lorentzian(xdata, lpopt[0], lpopt[1], lpopt[2])
+    # gpopt, gpcov = curve_fit(gaussian, xdata, ydata)
+    # gdist = gaussian(xdata, gpopt[0], gpopt[1], gpopt[2])
+    # vpopt, vpcov = curve_fit(pseudovoigt, xdata, ydata)
+    # vdist = pseudovoigt(xdata, vpopt[0], vpopt[1], vpopt[2], vpopt[3], vpopt[4])
+    # tpopt, tpcov = curve_fit(tukeygh, xdata, ydata)
+    # tdist = tukeygh(xdata, vpopt[0], vpopt[1], vpopt[2], vpopt[3])
+    cpf = np.cumsum(n * abs(bins[0]-bins[-1]) / nbins) * 2
+    cpf[cpf > 1] = -(cpf[cpf > 1] - 1) + 1
+    for c, p in zip(cpf, patches):
+        plt.setp(p, 'facecolor', cm(c))
+    # add annotations
+    plt.rcParams['mathtext.fontset'] = 'stixsans'
+    if result_label:
+        Hstr = 'H$_0$ = ${:5.1f}^{{{:+4.1f}}}_{{{:+4.1f}}}$'
+        q = np.percentile(model.H0, [16, 50, 84])
+        if label_pos == 'left':
+            lblp = 0.02, 0.85
+        elif label_pos == 'right':
+            lblp = 0.68, 0.85
+        plt.text(lblp[0], lblp[1], Hstr.format(q[1], np.diff(q)[1], -np.diff(q)[0]),
+                 fontsize=19, color='black', transform=plt.gca().transAxes)
+    # plot styling
+    fig.axes[0].get_yaxis().set_visible(False)
+    ax.set_xlabel('{} [{}]'.format(hlbl, units))
+    if axc is not None:
+        axc.set_xlabel('H$_0$ [km/s/Mpc]', fontsize=12)
+        plt.setp(axc.get_xticklabels(), fontsize=12)
+    plt.tight_layout()
+    if savefig:
+        savename = os.path.splitext(model.filename)[0]
+        plt.savefig('h0hist_{}.pdf'.format(savename))
+    if showfig:
+        plt.show()
+    return fig, (ax, axc)
+
 
 
 # INTERACTIVE ##################################################################
