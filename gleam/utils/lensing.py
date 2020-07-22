@@ -12,7 +12,7 @@ import numpy as np
 from functools import partial
 from scipy import interpolate
 from scipy import optimize
-from scipy.integrate import odeint
+from scipy.integrate import quad, odeint
 from scipy import ndimage
 from astropy.io import fits
 from gleam.utils.linalg import eigvals, eigvecs, angle_between
@@ -114,7 +114,7 @@ class ModelArray(object):
                 hdu = fits.open(f, memmap=False)
                 dta, hdr = hdu[0].data, hdu[0].header
             hdu.close()
-            if np.sum(dta) == 0:
+            if np.sum(np.abs(dta)) == 0:
                 if data is not None:
                     data = data[:-1]
                 continue
@@ -138,7 +138,7 @@ class ModelArray(object):
         kwargs.setdefault('filename', 'lensmodels.fits')
         return cls(data, **kwargs)
 
-    def subset(self, indices=None, mask=None, **kwargs):
+    def subset(self, indices=None, mask=None, axis=0, **kwargs):
         kw = [('filepath', 'filename'),
               ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
               ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
@@ -151,7 +151,7 @@ class ModelArray(object):
         if mask is not None:
             data = self.data[mask]
         elif indices is not None:
-            data = np.select(self.data, indices)
+            data = np.take(self.data, indices, axis=axis)
         else:
             data = self.data
         return self.__class__(data, **kwargs)
@@ -214,7 +214,7 @@ class ModelArray(object):
     @property
     def extent(self):
         if self.maprad:
-            return [-1*self.maprad, self.maprad, -1*self.maprad, self.maprad]
+            return np.array([-1*self.maprad, self.maprad, -1*self.maprad, self.maprad])
         else:
             return np.array([-1, 1, -1, 1])
 
@@ -476,7 +476,8 @@ class ModelArray(object):
         _, _, grid = extmass_grid(extm, N, 2*self.maprad)
         return grid
 
-    def arrival_grid(self, model_index=-1, N=None, beta=None, factor=None, ext=None):
+    def arrival_grid(self, model_index=-1, N=None, beta=None,
+                     geofactor=1, psifactor=1., ext=None):
         model = self.kappa_grid(model_index)
         N = model.shape[-1] if N is None else N
         nil = np.array([0, 0])
@@ -484,11 +485,12 @@ class ModelArray(object):
             beta = self.betas[model_index] if hasattr(self, 'betas') else nil
         else:
             beta = nil
-        factor = 1./self.dlsds if factor is None and hasattr(self, 'dlsds') else 1
+        psifactor = 1./self.dlsds if psifactor is None and hasattr(self, 'dlsds') else psifactor
         no_ext = ext is None
         ext = [self.shear_grid(model_index, N)] if no_ext else ext
         ext += [g for g in self.extmass_grid(model_index, N)] if no_ext else []
-        _, _, grid = arrival_grid(model, N, 2*self.maprad, beta, factor=factor, ext=ext)
+        _, _, grid = arrival_grid(model, N, 2*self.maprad, beta,
+                                  geofactor=geofactor, psifactor=psifactor, ext=ext)
         return grid
 
     def roche_potential_grid(self, model_index=-1, N=None, factor=1, ext=None):
@@ -502,14 +504,14 @@ class ModelArray(object):
         return grid
 
     def saddle_contour_levels(self, model_index=-1, saddle_points=None, N=None, maprad=None,
-                              factor=None, shear=None, extm=None):
+                              factor=1, shear=None, extm=None):
         model = self.kappa_grid(model_index)
         N = model.shape[-1] if N is None else N
         maprad = self.maprad if maprad is None else maprad
         L = 2*maprad
         saddle_points = self.saddle_points if saddle_points is None else saddle_points
         beta = self.betas[model_index] if hasattr(self, 'betas') else np.array([0, 0])
-        factor = 1./self.dlsds if factor is None and hasattr(self, 'dlsds') else 1
+        factor = 1./self.dlsds if factor is None and hasattr(self, 'dlsds') else factor
         shear = self.shears[model_index] \
             if shear is None and hasattr(self, 'shears') and np.any(self.shears) \
             else shear
@@ -1013,6 +1015,33 @@ def DL(zl, zs, cosmo=None):
     Dl = alens * (r[2] - r[1])
     return Dl
 
+def DS(zl, zs, cosmo=None):
+    """
+    Distance D_L (for scaling kpc distances)
+
+    Args:
+        zl <float> - lens redshift
+        zs <float> - source redshift
+
+    Kwargs:
+        None
+
+    Return:
+        Dl <float> - distance D_L
+
+    Note:
+        - only if wrong or no redshift has been used
+        - * DL(zl_actual,zs_actual)/DL(zl_used,zs_used)
+    """
+    global Dcomov
+    comov = partial(Dcomov, cosmo=cosmo)
+    alens = 1./(1+zl)
+    asrc = 1./(1+zs)
+    a = [asrc, alens, 1]
+    r = odeint(comov, [0], a)[:, 0]
+    Ds = asrc * r[2]
+    return Ds
+
 
 def DLDSDLS(zl, zs, cosmo=None):
     """
@@ -1042,6 +1071,7 @@ def DLDSDLS(zl, zs, cosmo=None):
     Ds = asrc * r[2]
     Dls = asrc * r[1]
     return Dl*Ds/Dls
+
 
 
 def DLSDS(zl, zs, cosmo=None):
@@ -1189,7 +1219,7 @@ def radial_profile(data, center=None, bins=None):
     return encavg
 
 
-def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, refined=True, factor=1):
+def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, refined=True, factor=1.):
     """
     Calculate radial kappa profiles for GLASS models or (for other models) by
     simply radially binning a generally kappa grid
@@ -1214,7 +1244,7 @@ def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, re
         kappa_grid = model.data
     else:
         model = LensModel(model)
-    kappa_grid = model.kappa_grid(model_index=mdl_index, refined=refined)*factor
+    kappa_grid = model.kappa_grid(model_index=mdl_index, refined=refined) * factor
     maprad = model.maprad if maprad is None else maprad
     pixrad = model.pixrad if pixrad is None else pixrad
     profile = radial_profile(kappa_grid, bins=pixrad)
@@ -1445,6 +1475,33 @@ def qpm_abphi(qpm, verbose=False):
     return a, b, phi
 
 
+def find_saddles(x, y, surface, n_saddles=2, border=3):
+    from scipy.signal import  argrelextrema, find_peaks
+    import matplotlib.pyplot as plt
+    from gleam.utils.colors import GLEAMcmaps as glc
+    relmin = argrelextrema(surface, np.less, order=3)
+    # # filter out zeros
+    # # relmin = (np.array([ix for ix, iy in zip(relmin[0], relmin[1])
+    # #                     if ix > border and iy > border]),
+    # #           np.array([iy for ix, iy in zip(relmin[0], relmin[1])
+    # #                     if ix > border and iy > border]))
+    # for i in range(len(relmin[0])):
+    #     ix, iy = relmin[0][i], relmin[1][i]
+    #     color = glc.phoenix(float(i)/len(relmin[0]))
+    #     plt.scatter(x[ix, iy], y[ix, iy], color=color)
+    values = np.array([surface[ix, iy] for ix, iy in zip(relmin[0], relmin[1])])
+    maxima = argrelextrema(values, np.greater, order=12)[0]
+    # print(len(maxima))
+    maxima = [im for im in maxima if relmin[0][im] > border and relmin[1][im] > border]
+    # filter according to distance
+    dst = [(x[relmin[0][im], relmin[1][im]]+y[relmin[0][im], relmin[1][im]])**2 for im in maxima]
+    dst = np.argsort(dst)[:n_saddles]
+    maxima = [maxima[d] for d in dst]
+    idx_sad = [(relmin[0][im], relmin[1][im]) for im in maxima]
+    saddles =  [(x[ix, iy], y[ix, iy]) for (ix, iy) in idx_sad]
+    return np.array(saddles), np.array(idx_sad)
+
+
 def xy_grid(N, grid_size, a=None, as_complex=False):
     """
     Coordinate grid of x and y given a particular pixel range and length
@@ -1627,7 +1684,7 @@ def arrival_time(theta, beta, kappa, N, grid_size, factor=1,
     """
     Calculate the arrival time for a given kappa map and beta at position theta
     """
-    geom = sum(abs(theta - beta)**2) / 2 * factor
+    geom = sum(abs(theta - beta)**2) / 2  # * factor
     xn, yn = xy_grid(N, grid_size)
     pixel_size = (xn[0, 1] - xn[0, 0])*float(N)/kappa.shape[0]
     Q = lnr(theta[0], theta[1], xn, yn, pixel_size)
@@ -1638,6 +1695,7 @@ def arrival_time(theta, beta, kappa, N, grid_size, factor=1,
     if extm is not None:
         extmass = external_ptmass(extm, theta)
         pot -= extmass
+    print("Geom, pot: ", geom, pot)
     return geom + pot
 
 
@@ -1660,12 +1718,13 @@ def potential_grid(kappa, N, grid_size, factor=1, ext=None, verbose=False):
     """
     gx, gy = xy_grid(N, grid_size)
     N = gx.shape[-1]
-    pixel_size = (gx[0, 1] - gx[0, 0])*float(N)/kappa.shape[0]
+    pixel_size = (gx[0, 1] - gx[0, 0])*float(N) / kappa.shape[0]
     R = gx[0, -1] + 0.5*(gx[0, 1] - gx[0, 0])
 
     psi = np.zeros((N, N))
     xkappa = np.linspace(-R+pixel_size/2., R-pixel_size/2., kappa.shape[0])
     ykappa = xkappa[::-1]
+    # kappa *= factor
     for m, ym in enumerate(ykappa):
         for n, xn in enumerate(xkappa):
             psi += kappa[m, n]*lnr(gx, gy, xn, ym, pixel_size)
@@ -1770,7 +1829,7 @@ def extmass_grid(extmass, N, grid_size, a=None):
     return xy[0], xy[1], extm_grids
 
 
-def arrival_grid(kappa, N, grid_size, beta, factor=1, ext=None, verbose=False):
+def arrival_grid(kappa, N, grid_size, beta, geofactor=1, psifactor=1, ext=None, verbose=False):
     """
     The entire arrival-time surface map
 
@@ -1781,17 +1840,20 @@ def arrival_grid(kappa, N, grid_size, beta, factor=1, ext=None, verbose=False):
         beta <list/np.ndarray> - source position
 
     Kwargs:
-        factor <float> - arbitrary scaling factor (e.g. redshift correction for kappa map)
+        geofactor <float> - arbitrary scaling factor of geometric part 
+        psifactor <float> - arbitrary scaling factor of potential part (e.g. redshift correction for kappa map)
         ext <list/np.ndarray> - external potential maps to be added
         verbose <bool> - verbose mode; print command line statements
 
     Return:
         gx, gy, psi <np.ndarray> - the x and y grid coordinates and the arrival-time grid
     """
-    gx, gy, psi = potential_grid(kappa, N, grid_size, factor=factor, ext=ext, verbose=verbose)
+    gx, gy, psi = potential_grid(kappa, N, grid_size, factor=psifactor, ext=ext, verbose=verbose)
     xy = np.vectorize(complex)(gx, gy)
     beta = np.vectorize(complex)(beta[0], beta[1])
-    return gx, gy, 0.5*abs(xy - beta)**2*factor + psi
+    # return gx, gy, factor*0.5*abs(xy - beta)**2 + psi
+    geom = 0.5*abs(xy - beta)**2
+    return gx, gy, geom*geofactor + psi
 
 
 def roche_potential_grid(*args, **kwargs):

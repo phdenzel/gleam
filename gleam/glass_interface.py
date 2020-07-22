@@ -154,7 +154,10 @@ def glass_renv(**kwargs):
     Return:
         glass <module> - the glass environment as a module
     """
-    _, arglist = getopt.getopt(sys.argv[1:], 't:h:f', ['nw'])
+    try:
+        _, arglist = getopt.getopt(sys.argv[1:], 't:h:f', ['nw'])
+    except getopt.GetoptError:
+        arglist = []
     Environment.global_opts['ncpus_detected'] = _detect_cpus()
     Environment.global_opts['ncpus'] = 1
     Environment.global_opts['omp_opts'] = _detect_omp()

@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import to_rgba
 from gleam.utils.lensing import LensModel
 from gleam.utils.lensing import DLSDS, kappa_profile, \
-    interpolate_profile, find_einstein_radius
+    interpolate_profile, find_einstein_radius, find_saddles
 from gleam.utils.pdfs import lorentzian, gaussian, pseudovoigt, tukeygh
 from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
 from gleam.utils.rgb_map import radial_mask
@@ -137,6 +137,7 @@ def square_subplots(fig):
 def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
                   position='bottom left', origin='center',
                   padding=(0.08, 0.06), barheight=0.03,
+                  length_scale=1.,
                   color='white', fontsize=16):
     """
     Add a scalebar to an image plot
@@ -164,7 +165,7 @@ def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
         lbl = r"{:1.0f}{}".format(length, unit)
     else:
         lbl = r"{:1.1f}{}".format(length, unit)
-    wh = np.asarray([length, barheight*R])
+    wh = np.asarray([length_scale*length, barheight*R])
     w, h = wh
     # positioning scalebar
     position_xy = np.asarray(get_location(position))
@@ -298,7 +299,7 @@ def plot_annulus_region(center=(0.5, 0.5), radius=0.5, color='white', alpha=0.2,
 
 
 def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, extent=None,
-                     levels=3, delta=0.2, log=True, oversample=True, shift=1e-6):
+                     levels=3, delta=0.2, log=True, oversample=True, shift=1e-6, factor=1.):
     """
     Transform data in preparation for plotting
 
@@ -330,7 +331,8 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
     else:
         model.obj_idx = min(obj_index, model.N_obj-1) if hasattr(model, 'N_obj') else obj_index
     grid = model.kappa_grid(model_index=mdl_index, refined=(subcells > 1))
-    grid += shift
+    grid = grid[:] * factor
+    grid = grid[:] + shift
     extent = model.extent if extent is None else extent
     # masking if necessary
     msk = grid != 0
@@ -349,12 +351,12 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
     clev2 = np.arange(delta, levels*delta, delta)
     clevels = np.concatenate((-clev2[::-1], (0,), clev2))
     if log:
-        kappa1 = 0
+        kappa1 = 0.
         grid = np.log10(grid)
         grid[grid <= clevels[0]] = clevels[0]
         grid[np.isnan(grid)] = np.nanmin(grid)
     else:
-        kappa1 = 1
+        kappa1 = 1.
         clevels = np.concatenate(((0,), 10**clev2))
     return grid, (kappa1, clevels, extent)
 
@@ -362,7 +364,7 @@ def kappa_map_transf(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1, 
 def kappa_map_plot(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1,
                    extent=None, origin='upper', shift=0,
                    contours=False, levels=7, delta=0.1, log=True,
-                   oversample=True,
+                   oversample=True, factor=1.,
                    scalebar=False, label=None, color='white',
                    cmap=GLEAMcmaps.agaveglitch, colorbar=False):
     """
@@ -395,7 +397,7 @@ def kappa_map_plot(model, mdl_index=-1, obj_index=0, src_index=0, subcells=1,
     grid, (kappa1, clevels, extent) = kappa_map_transf(
         model, mdl_index=mdl_index, obj_index=obj_index, src_index=src_index,
         shift=shift, subcells=subcells, extent=extent, levels=levels, log=log,
-        delta=delta, oversample=oversample)
+        delta=delta, oversample=oversample, factor=factor)
     R = max(extent)
     # contours and surface plot
     if contours:
@@ -704,13 +706,14 @@ def roche_potential_plot(model, N=None,
     plt.gca().set_aspect('equal')
 
 
-def arrival_time_surface_plot(model, N=None,
+def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
                               mdl_index=-1, obj_index=0, src_index=0,
                               cmap=GLEAMcmaps.phoenix, maprad=None, extent=None,
                               draw_images=True, contours_only=False,
                               contours=True, levels=60,
                               min_contour_shift=None, sad_contour_shift=None,
                               scalebar=False, label=None, color='black',
+                              origin='upper',
                               colorbar=False):
     """
     Plot the arrival-time surface of a GLASS model with auto-adjusted contour levels
@@ -742,7 +745,8 @@ def arrival_time_surface_plot(model, N=None,
         model.obj_idx = min(obj_index, model.N_obj-1) if hasattr(model, 'N_obj') else obj_index
         N = max(model.data.shape[-1], 36) if N is None else N
         x, y = model.xy_grid(N=N)
-        grid = model.arrival_grid(model_index=mdl_index, N=N)
+        grid = model.arrival_grid(model_index=mdl_index, N=N,
+                                  geofactor=geofactor, psifactor=psifactor)
     elif isinstance(model, (tuple, list)):
         x, y, grid = model
         R = np.max(np.abs(np.concatenate([x, y])))*(1. + 1./(grid.shape[-1]-1))
@@ -762,6 +766,19 @@ def arrival_time_surface_plot(model, N=None,
     cmap = plt.get_cmap(cmap) if isinstance(cmap, str) else GLEAMcmaps.reverse(cmap)
     min_clr, sad_clr, max_clr = cmap(.2), cmap(.5), cmap(.8)
     draw_images = 'min, sad, max' if draw_images else ''
+    # some saddle point contours
+    if not saddles:
+        saddles, isaddles = find_saddles(x, y, grid, n_saddles=0)
+        # clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
+        #                                    factor=factor)
+        saddles = np.array([(s[0], -s[1]) for s in saddles])
+        clev = sorted([grid[ix, iy] for (ix, iy) in isaddles])
+    else:
+        clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
+                                           factor=factor)
+    if sad_contour_shift is not None:
+        clev = [c-sad_contour_shift for c in clev]
+    # plot extremal image points
     if 'min' in draw_images and len(minima) > 0:
         plt.plot(minima.T[0], minima.T[1], color=min_clr, marker='o', lw=0)
     if 'sad' in draw_images and len(saddles) > 0:
@@ -770,10 +787,6 @@ def arrival_time_surface_plot(model, N=None,
         plt.plot(maxima.T[0], maxima.T[1], color=max_clr, marker='o', lw=0)
     if 'center' in draw_images or 'origin' in draw_images:
         plt.plot(0, 0, color=max_clr, marker='o', lw=0)
-    # calculate contours
-    clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1])
-    if sad_contour_shift is not None:
-        clev = [c-sad_contour_shift for c in clev]
     # general contours
     mi = np.min(grid)
     ma = np.max(grid)
@@ -783,17 +796,17 @@ def arrival_time_surface_plot(model, N=None,
         ma = clev[-1] + cshift
     if contours:
         plt.contour(grid, np.linspace(mi, ma, levels),
-                    extent=extent, origin='upper', cmap=cmap)
+                    extent=extent, origin=origin, cmap=cmap)
     # surface plot
     if not contours_only:
         a = 0.2 if contours else 0.8
         plt.contourf(grid, levels=np.linspace(mi, ma, levels),
-                     extent=extent, origin='upper',
+                     extent=extent, origin=origin,
                      cmap=cmap, alpha=a, vmin=mi, vmax=ma)
     if colorbar:
         plt.colorbar()
     # critical contours
-    plt.contour(grid, clev, extent=extent, origin='upper',
+    plt.contour(grid, clev, extent=extent, origin=origin,
                 colors=['k']*max(1, len(clev)), linestyles='-')
     # annotations and amendments
     if scalebar:
@@ -810,7 +823,7 @@ def arrival_time_surface_plot(model, N=None,
 
 def kappa_profile_plot(model, refined=True,
                        obj_index=-1, maprad=None, pixrad=None,
-                       r_shift=0, kappa_factor=1,
+                       r_shift=0, kappa_factor=1.,
                        kappa1_line=True, einstein_radius_indicator=False,
                        annotation_color='black', label=None,
                        **kwargs):
@@ -853,7 +866,7 @@ def kappa_profile_plot(model, refined=True,
                                        maprad=model.maprad, pixrad=model.pixrad, refined=refined)
     else:  # otherwise assume profile and radii were inputted
         radii, profile = model
-        profile = profile * kappa_factor
+        profile = profile[:] * kappa_factor
     radii = radii + r_shift
     plot, = plt.plot(radii, profile, **kwargs)
     if kappa1_line:
@@ -871,7 +884,7 @@ def kappa_profile_plot(model, refined=True,
 
 
 def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, refined=True,
-                        interpolate=None, extent=None,
+                        interpolate=None, extent=None, kfactor=1., rfactor=1.,
                         as_range=False, kappa1_line=True, einstein_radius_indicator=True,
                         maprad=None, pixrad=None,
                         hilite_color=GLEAMcolors.red, annotation_color='black',
@@ -928,25 +941,29 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         data = model.data
     elif hasattr(model, 'data_toplevel'):
         data = model.data_toplevel
-        eavg = np.average(data, axis=0)
     else:
         data = model.data
     eavg = np.average(data, axis=0)
     maprad = model.maprad if maprad is None else maprad
     pixrad = model.pixrad if pixrad is None else pixrad
+    # # setting units (if necessary)
+    data = data[:] * kfactor
+    eavg = eavg[:] * kfactor
+    maprad = maprad * rfactor
+    kfactor = 1.
     # # output containers
     plots = []
     profiles = []
     radii = []
     ax = plt.gca()
     for m in data:
-        radius, profile = kappa_profile(m, obj_index=model.obj_idx,
+        radius, profile = kappa_profile(m, obj_index=model.obj_idx, factor=kfactor,
                                         maprad=maprad, pixrad=pixrad)
+        radius = radius[:] * rfactor
         if interpolate > 1:
             radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
         if not as_range:
-            plot, radius, profile = kappa_profile_plot((radius, profile),
-                                                       kappa1_line=False,
+            plot, radius, profile = kappa_profile_plot((radius, profile), kappa1_line=False,
                                                        annotation_color=annotation_color, **kwargs)
             plots.append(plot)
         profiles.append(profile)
@@ -965,8 +982,9 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         plots.append(cs)
         ax.set_aspect('auto')
     # radius, profile <- ensemble average
-    radius, profile = kappa_profile(eavg, obj_index=model.obj_idx,
+    radius, profile = kappa_profile(eavg, obj_index=model.obj_idx, factor=kfactor,
                                     maprad=maprad, pixrad=pixrad)
+    radius = radius[:] * rfactor
     if ensemble_average:
         if interpolate > 1:
             radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
