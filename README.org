@@ -24,7 +24,7 @@ This will unpack, compile, and install all the necessary dependencies. It might 
 ** Content
 
 *** gleam.reconsrc
-The synthetic imager. The ~ReconSrc~ class provides complete functionality of the synthetic imager and can be initiated with a mass maps and observations loaded as a ~LensModel~ (~gleam.utils.lensing~) and ~LensObject~ (gleam.lensobject) object respectively.
+The synthetic imager. The ~ReconSrc~ class provides complete functionality of the synthetic imager and can be initiated with a mass maps and observations loaded as a ~LensModel~ (~gleam.utils.lensing~) and ~LensObject~ (~gleam.lensobject~) object respectively.
 
 *** gleam.skycoords
 Framework for reading astronomical coordinates such as /J2000/, /RA/Dec/, etc.
