@@ -1,6 +1,6 @@
 * GLEAM
 
-#+HTML: <b>G</b>ravitational <b>LE</b>ns <b>A</b>nalysis <b>M</b>odule
+#+HTML: <b>G</b>ravitational <b>L</b>ens <b>E</b>xtended <b>A</b>nalysis <b>M</b>odule
 
 ** Binaries
 
