@@ -4,8 +4,8 @@
 
 ** Binaries
 
-GLEAM is avaiable as a standalone app for macOS.
-Simply download the lates release and double-click to run...
+GLEAM is avaiable as a python module and is on its way to be implemented as a standalone app for macOS.
+In future, simply download the lates release and double-click to run...
 To use the full framework however, clone the repository and add it to your ~PYTHONPATH~ (e.g. in your ~.bashrc~ file).
 
 
@@ -18,44 +18,41 @@ To install GLEAM manually, simply open the terminal and run
 ./install
 #+END_SRC
   
-This will unpack, compile, and install all the necessary dependencies.
+This will unpack, compile, and install all the necessary dependencies. It might need some tinkering, so if any problems arise feel free to contact me.
 
     
 ** Content
+
+*** gleam.reconsrc
+The synthetic imager. The ReconSrc class provides complete functionality of the synthetic imager and can be initiated with a mass maps and observations loaded as a LensModel (gleam.utils.lensing) and LensObject (gleam.lensobject) respectively.
 
 *** gleam.skycoords
 Framework for reading astronomical coordinates such as /J2000/, /RA/Dec/, etc.
 Is able to convert between different coordinate systems, and interfaces particularly well with
 the CFHTLS MegaPipe pixel coordinate system.
-- TODO: 
 
 *** gleam.skyf
 Reads in a single ~.fits~ file and extracts general information on the observation.
 Also contains several plotting procedures which visualize the data.
-- TODO: add test for extent
 
 *** gleam.skypatch
 Reads in a set of ~.fits~ files and extracts general information on the observation in different bands,
-analogously to ~skyf.py~ (importing ~skyf.py~). Visualizes data as stacked or palette image.
-- TODO: 
+analogously to ~skyf.py~ (importing ~skyf.py~). Visualizes data as stacked or palette image. 
 
 *** gleam.lensobject
 Inherits from ~SkyF~. Additionally extracts properties important for gravitational lenses
 and lensed sources.
 Visualizes these properties on top of inherited plotting procedures.
-- TODO: complete docstrings, add light_model, stel_mass, lens_map to tests
 
 *** gleam.multilens
 Inherits from ~SkyPatch~. Additionally extracts properties important for gravitational lenses
 and lensed sources, analogously to ~lensobject.py~.
 Visualizes these properties on top of inherited plotting procedures as stacked or palette image.
-- TODO: Figure out a way to unify all lens properties amongst bands!
 
 *** gleam.lensfinder
 A simple peak finder to extract lens and source image positions.
 Uses very crude procedures, whose parameters have to be fine-tuned.
 Provides an automatic lens detection feature to the ~LensObject~ class.
-- TODO: Write a main method for usage as script!
 
 *** gleam.glscfactory
 GLASS config-file generator.
@@ -64,7 +61,7 @@ Can be used to write config files for ~LensObject~ class instances, or to extrac
 - TODO: Write a main method for usage as script!
 
 *** gleam.gui
-- TODO
+- To be implemented
 
 *** gleam.app
 Components of ~gleam.gui~
@@ -88,16 +85,13 @@ Two dimensional, softened power-law elliptical mass distribution mapper. Calcula
 
 
 *** gleam.utils
-- TODO
-
-** TODO
-  + standardize docstrings and use sphinx to auto-generate documentation page
+Several utility features such as custom color maps, basic lensing computations, plotting functions, etc.
 
 
 * Libraries
 
 ** GLASS
-   GLEAM interfaces with GLASS heavily, which is why GLASS is included in as a package in ~src~.
+   GLEAM interfaces with GLASS, which is why GLASS is included in as a package in ~src~.
    To install it on macOS simply use the ~compile~ and ~install~ scripts.
    On linux, glpk sometimes installs its build library in ~src/glass/build/glpk_build/lib64~ which needs
    to be renamed to ~src/glass/build/glpk_build/lib~.
