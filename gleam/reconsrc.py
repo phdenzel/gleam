@@ -1023,7 +1023,8 @@ class ReconSrc(object):
         """
         return self.reproj_d_ij(flat=flat, **kwargs)
 
-    def residual_map(self, flat=False, nonzero_only=False, within_radius=None, **kwargs):
+    def residual_map(self, flat=False, nonzero_only=False, within_radius=None,
+                     norm=True, verbose=False, **kwargs):
         """
         Evaluate the reprojection by calculating the residual map to the lens map data
 
@@ -1057,15 +1058,25 @@ class ReconSrc(object):
         if nonzero_only:
             residuals[reproj == 0] = 0
             residuals[data == 0] = 0
+        # within_radius = 0.8
         if within_radius is not None:
             rad = int(within_radius * (residuals.shape[-1] // 2))
             rmsk = glmrgb.radial_mask(residuals, radius=rad)
             residuals[~rmsk] = 0
+        if norm:
+            if isinstance(norm, bool):
+                N = residuals.size # - np.sum(residuals == 0)
+                if verbose: 
+                    print(residuals.size, np.sum(residuals == 0), N, self.N_nil)
+                residuals = residuals*(N-self.N_nil)  # * np.sqrt(N - self.N_nil)
+            else:
+                residuals = residuals / norm
+            residuals = residuals**(1./2)
         return residuals
 
     def reproj_chi2(self, data=None, reduced=False, output_all=False, nonzero_only=False,
                     noise=0, sigma=1, sigma2=None, sigmaM2=None, within_radius=None,
-                    **kwargs):
+                    norm=True, **kwargs):
         """
         Evaluate the reprojection by calculating the absolute squared residuals to the data
 
@@ -1134,7 +1145,7 @@ class ReconSrc(object):
 
 def run_model(reconsrc, mdl_index=0, angle=0, dzsrc=0,
               reduced=False, nonzero_only=True, within_radius=None,
-              method='lsqr', use_psf=False, use_mask=True, use_filter=True,
+              method='lsqr', use_psf=False, use_mask=True, use_filter=False,
               noise=0, sigma=1, sigma2=None, sigmaM2=None,
               cached=True, from_cache=True, save_to_cache=True,
               flush_cache=True, output_maps=False):
@@ -1152,6 +1163,7 @@ def run_model(reconsrc, mdl_index=0, angle=0, dzsrc=0,
     if sigma2 is not None:
         s2 = ndimage.rotate(sigma2, angle, reshape=False)
         s2[s2 <= 0] = np.min(sigma2[sigma2 > 0])
+
     kw = dict(method=method, use_psf=use_psf, use_mask=use_mask, sigma2=s2.copy())
     chi2 = reconsrc.reproj_chi2(cached=True, from_cache=False, save_to_cache=save_to_cache,
                                 nonzero_only=nonzero_only, within_radius=within_radius,

@@ -377,7 +377,7 @@ class LightSampler(object):
         """
         self.parameters = params
         return -1 * np.sum((self.model.map2D[self.mask]-self.data[self.mask])**2
-                           / (self.gain*self.data[self.mask]))
+                           / (self.gain*np.abs(self.data[self.mask])))
 
     def postpdf(self, params):
         """
@@ -515,7 +515,7 @@ class LightSampler(object):
         model_norm = self.model.map2D / tot_model
         self.model.map2D = model_norm * tot_data
 
-    def parspace_plot(self, show=False, **kwargs):
+    def parspace_plot(self, **kwargs):
         """
         Plots the positions of MCMC walkers in parameter space
 
@@ -534,12 +534,29 @@ class LightSampler(object):
         labels = [k for k in self.model.parameter_keys if k not in self.fixed]
         fig = corner.corner(self.mcmc_pos, color=glmc.purpleblue, labels=labels, **kwargs)
         # logger.disabled = False
-        if show:
-            plt.show()
         return fig
 
-    def plot_residuals(self, log=False, colorbar=True, scalebar=None,
-                       mask=None, contours=None, show=False, **kwargs):
+    def residual_map(self, squared=False, average=False):
+        """
+        Calculate a residual map
+
+        Args:
+            None
+
+        Kwargs:
+            chi2 <bool> - calculat chi2 instead of chi map
+        """
+        if average:
+            self.ensemble_average()
+        resid = (self.data - self.model.get_map())**2 \
+            / np.abs(self.gain*self.data)
+        if not squared:
+            resid = np.sqrt(resid)
+        return resid
+
+
+    def plot_residuals(self, squared=False, log=False, mask=None,
+                       colorbar=True, scalebar=None, **kwargs):
         """
         Plot the residuals of the model and data map once the MCMC sampler was run
 
@@ -561,52 +578,17 @@ class LightSampler(object):
             fig <mpl.figure.Figure object> - the figure on which the residual plot was made
         """
         # data
-        resid = self.data - self.model.get_map()
+        resid = self.residual_map(squared=squared)
         if log:
-            np.log10(resid)
+            resid = np.log10(1 + resid - resid.min())
         if mask:
             np.place(resid, ~self.mask, -np.inf)
-        # keywords
-        fig, ax = plt.subplots()
-        kwargs.setdefault('alpha', 0.4)
-        kwargs.setdefault('interpolation', 'none')
-        kwargs.setdefault('origin', 'lower')
-        kwargs.setdefault('aspect', 'equal')
-        kwargs.setdefault('linestyles', 'solid')
-        kwargs.setdefault('clevels', 30)
-        kwargs.setdefault('levels', np.linspace(np.min(resid), np.max(resid), kwargs['clevels']))
-        # kwargs.setdefault('extent', [(-self.data.shape[0]-1)//2, self.data.shape[0]//2,
-        #                              (-self.data.shape[1]-1)//2, self.data.shape[1]//2])
-        # plotting
-        if contours:
-            img = ax.contourf(resid, **kwargs)
-            kwargs.pop('alpha')
-            ax.contour(img, **kwargs)
-        else:
-            kwargs.pop('levels')
-            kwargs.pop('clevels')
-            kwargs.pop('linestyles')
-            img = ax.imshow(resid, **kwargs)
+        kwargs.setdefault('cmap', glmc.GLEAMcmaps.vilux)
+        img = plt.imshow(resid, **kwargs)
         if colorbar:
-            clrbar = fig.colorbar(img)
+            clrbar = plt.colorbar(img)
             clrbar.outline.set_visible(False)
-        if scalebar is not None:
-            from matplotlib import patches
-            barpos = (0.05*self.data.shape[0], 0.025*self.data.shape[1])
-            w = self.data.shape[0]*0.15  # 15% of the range in x
-            h = self.data.shape[1]*0.01
-            rect = patches.Rectangle(barpos, w, h,
-                                     facecolor='white', edgecolor=None,
-                                     alpha=0.85)
-            ax.add_patch(rect)
-            ax.text(barpos[0]+w/4, barpos[1]+self.data.shape[1]*0.02,
-                    r"$\mathrm{{{:.1f}''}}$".format(scalebar*w),
-                    color='white', fontsize=16)
-        ax.axis('off')
-        ax.set_aspect('equal')
-        if show:
-            plt.show()
-        return fig
+        return img
 
 
 if __name__ == "__main__":

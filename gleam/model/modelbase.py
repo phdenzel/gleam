@@ -475,25 +475,25 @@ class _BaseModel(object):
                 n_subsamples = min(100, int(2*r_sample/r))
         return n_subsamples
 
-    # @staticmethod
-    # def integrate(data, mask=None):
-    #     """
-    #     Integrate a data map
+    @staticmethod
+    def integrate(data, mask=None):
+        """
+        Integrate a data map
 
-    #     Args:
-    #         data <np.ndarray> - data to be normalized
+        Args:
+            data <np.ndarray> - data to be normalized
 
-    #     Kwargs:
-    #         mask <np.ndarray(bool)> - boolean mask used for integration
+        Kwargs:
+            mask <np.ndarray(bool)> - boolean mask used for integration
 
-    #     Return:
-    #         tot <float> - the integrated data map
-    #     # TODO: remove and replace with ROISelector.r_integrate and ROISelector.cumr_profile
-    #     """
-    #     data = np.asarray(data)
-    #     if mask is None:
-    #         mask = np.full(data.shape, True)
-    #     return np.sum(data[mask])
+        Return:
+            tot <float> - the integrated data map
+        # TODO: remove and replace with ROISelector.r_integrate and ROISelector.cumr_profile
+        """
+        data = np.asarray(data)
+        if mask is None:
+            mask = np.full(data.shape, True)
+        return np.sum(data[mask])
 
     @staticmethod
     def normalize(data, mask=None):
@@ -514,7 +514,7 @@ class _BaseModel(object):
         if mask is None:
             mask = np.full(data.shape, True)
         tot = np.sum(data[mask])
-        return data/tot
+        return data / tot
 
     def plot_map(self, log=False, colorbar=True, scalebar=None,
                  mask=None, contours=None, show=False, **kwargs):

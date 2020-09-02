@@ -29,7 +29,7 @@ class ModelArray(object):
     __framework__ = 'array'
 
     def __init__(self, data, filename=None,
-                 grid_size=None, pixrad=None, maprad=None, kappa=None,
+                 grid_size=None, pixrad=None, maprad=None,
                  obj_index=None, src_index=None,
                  minima=[], saddle_points=[], maxima=[],
                  betas=[], shears=[],
@@ -44,7 +44,6 @@ class ModelArray(object):
             filename <str> - filename containing the lens data
             pixrad <int> - pixel radius of the grid
             maprad <float> - map radius of the grid in arcsec
-            kappa <float> - kappa conversion factor in Msol/arcsec^2
             obj_index <int> - only for GLASSModel instances
             src_index <int> - only for GLASSModel instances
         """
@@ -56,7 +55,6 @@ class ModelArray(object):
         if pixrad is not None:
             self.pixrad = int(pixrad) if pixrad else self.pixrad
         self.maprad = maprad
-        self.kappa = kappa
         self.minima = minima
         self.saddle_points = saddle_points
         self.maxima = maxima
@@ -141,7 +139,7 @@ class ModelArray(object):
     def subset(self, indices=None, mask=None, axis=0, **kwargs):
         kw = [('filepath', 'filename'),
               ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
-              ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
+              ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
               ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima'),
               ('zl', 'zl'), ('zs', 'zs'), ('cosmo', 'cosmo')]
         for key in kw:
@@ -160,7 +158,7 @@ class ModelArray(object):
         import cPickle as pickle
         kw = [('filepath', 'filename'),
               ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
-              ('kappa', 'kappa'), ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
+              ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
               ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima'),
               ('_zl', 'zl'), ('_zs', 'zs')]
         for key in kw:
@@ -228,8 +226,16 @@ class ModelArray(object):
             self.pixrad = int(grid_size//2)
 
     @property
+    def toplevel(self):
+        return 2*self.maprad / (2*self.pixrad+1)
+
+    @property
     def pixel_size(self):
         return 2*self.maprad / self.data.shape[-1]
+
+    @property
+    def refinement(self):
+        return self.toplevel/self.pixel_size
 
     @property
     def minima(self):
@@ -275,6 +281,20 @@ class ModelArray(object):
             self._dlsds = DLSDS(self.zl, self.zs, cosmo=self._cosmo)
 
     @property
+    def H0(self):
+        if not hasattr(self, '_H0'):
+            self._H0 = [71.37]*self.N
+        return self._H0
+
+    @H0.setter
+    def H0(self, H0):
+        self._H0 = self.H0
+
+    @property
+    def nu(self):
+        return [h * gu.arcsec_rad**2 / gu.inv_km_s_Mpc for h in self.H0]
+
+    @property
     def zl(self):
         if not hasattr(self, '_zl'):
             self._zl = None
@@ -310,6 +330,65 @@ class ModelArray(object):
     @dlsds.setter
     def dlsds(self, dlsds):
         self._dslds = dlsds
+
+    @property
+    def dl(self):
+        if not hasattr(self, '_dl'):
+            if not (self.zl is None and self.zs is None):
+                self._dl = DL(self.zl, self.zs, cosmo=self.cosmo)
+            else:
+                self._dl = 1
+        return self._dl
+
+    @dl.setter
+    def dl(self, dl):
+        self._dl = dl
+
+    @property
+    def kappa(self):
+        if not hasattr(self, '_kappa'):
+            # for c = 1 and 4*pi*G = (206265 arcsec/rad)^2
+            # a mass unit is 11.988 M_sol
+            # \Sigma_crit = 4*pi*G/c * d_L/H0
+            self._kappa = 11.988/self.dl*self.nu[-1] / (self.nu[-1]/self.dl/gu.arcsec_rad)**2
+        return self._kappa  # M_sol / arcsec^2
+
+    def calc_kappa(self, index=None, kappa=None):
+        """
+        Recalculate kappa (in case not every model has the same H0)
+        """
+        if index is not None:
+            self._kappa = 11.988/self.dl*self.nu[index] / (self.nu[index]/self.dl/gu.arcsec_rad)**2
+        elif kappa is not None:
+            self._kappa = kappa
+
+    @property
+    def arcsec2kpc(self):
+        dl = self.dl
+        H0 = self.H0
+        nuf = gu.inv_km_s_Mpc / gu.arcsec_rad
+        scaling = [1./h * dl * gu.inv_km_s_Mpc / gu.arcsec_rad / gu.kpc2lyr
+                   for h in H0]
+        return scaling
+
+    @property
+    def arcsec2lyr(self):
+        dl = self.dl
+        H0 = self.H0
+        nuf = gu.inv_km_s_Mpc / gu.arcsec_rad
+        scaling = [1./h * dl * gu.inv_km_s_Mpc / gu.arcsec_rad
+                   for h in H0]
+        return scaling
+
+    @property
+    def kappa2Msol_kpc2(self):
+        print(self.kappa)
+        # convert('kappa to Msun/ly^2', v, *args) / convert('ly to kpc', 1.)**2
+
+    @property
+    def kappa2Msol_arcsec2(self):
+        print(self.kappa)
+        # convert('kappa to Msun/ly^2', v, *args) / convert('ly to arcsec', 1., dL, nu)**2
 
     @property
     def obj_idx(self):
@@ -355,7 +434,6 @@ class ModelArray(object):
         # delta = dl_new / dl
         self.data = self.data * sigma
         self.models = [m * sigma for m in self.models]
-        self.kappa = self.kappa * sigma if self.kappa is not None else None
         self.zl = zl_new
         self.zs = zs_new
         # self.maprad = self.maprad * delta if self.maprad is not None else None
@@ -443,8 +521,23 @@ class ModelArray(object):
                 else np.average(self.data_toplevel, axis=0)
         return self[model_index] if model_index >= 0 else self.ensemble_average
 
-    def sigma_grid(self, model_index=-1):
-        return self.kappa*self.kappa_grid(model_index=model_index)
+    def sigma_grid(self, model_index=-1, refined=True):
+        return self.kappa*self.kappa_grid(model_index=model_index, refined=refined)
+
+    def variance_grid(self, refined=True, factor=1., normalize=False,
+                      percentiles=[0, 50, 100]):
+        if refined and hasattr(self, 'data_hires'):
+            ensemble = self.data_hires
+        elif refined:
+            ensemble = np.asarray(self.models)
+        elif hasattr(self, 'data_toplevel'):
+            ensemble = self.data_toplevel
+        else:
+            ensemble = np.asarray(self.models)
+        variances = np.percentile(ensemble, percentiles, axis=0)
+        var_grid = factor * np.average(np.diff(variances, axis=0), axis=0)
+        var_grid = var_grid / np.nanmax(var_grid)
+        return var_grid
 
     def potential_grid(self, model_index=-1, N=None, factor=1, ext=None):
         model = self.kappa_grid(model_index)
@@ -504,22 +597,106 @@ class ModelArray(object):
         return grid
 
     def saddle_contour_levels(self, model_index=-1, saddle_points=None, N=None, maprad=None,
-                              factor=1, shear=None, extm=None):
+                              geofactor=1, psifactor=1., shear=None, extm=None):
         model = self.kappa_grid(model_index)
         N = model.shape[-1] if N is None else N
         maprad = self.maprad if maprad is None else maprad
         L = 2*maprad
         saddle_points = self.saddle_points if saddle_points is None else saddle_points
         beta = self.betas[model_index] if hasattr(self, 'betas') else np.array([0, 0])
-        factor = 1./self.dlsds if factor is None and hasattr(self, 'dlsds') else factor
+        psifactor = 1./self.dlsds if psifactor is None and hasattr(self, 'dlsds') else psifactor
         shear = self.shears[model_index] \
             if shear is None and hasattr(self, 'shears') and np.any(self.shears) \
             else shear
         extm = self.ptmasses[model_index] \
             if extm is None and hasattr(self, 'ptmasses') and len(self.ptmasses[model_index]) > 0 \
             else extm
-        kwargs = dict(factor=factor, shear=shear, extm=extm)
+        print(geofactor, psifactor)
+        kwargs = dict(geofactor=geofactor, psifactor=psifactor, shear=shear, extm=extm)
         return sorted([arrival_time(sad, beta, model, N, L, **kwargs) for sad in saddle_points])
+
+    def kappa_profile(self, model_index=-1, pixrad=None, refined=True, runit='arcsec', factor=1):
+        kappa_grid = self.kappa_grid(model_index=model_index, refined=refined) 
+        kappa_grid = kappa_grid[:] * factor
+        pixrad = kappa_grid.shape[0]//2+1 if pixrad is None else pixrad
+        pxls = self.pixel_size if refined else self.toplevel
+        radii, profile = radial_profile(kappa_grid, bins=pixrad)
+        if runit == 'arcsec':
+            radii = radii * pxls
+        elif runit == 'kpc':
+            radii = radii * pxls * self.arcsec2kpc[model_index]
+        elif runit == 'lyr':
+            radii = radii * pxls * self.arcsec2lyr[model_index]
+        return radii, profile
+
+    def kappa_profiles(self, pixrad=None, refined=True, runit='arcsec',
+                       factor=1):
+        pxls = self.pixel_size if refined else self.toplevel
+        profs = []
+        mdlidcs = range(self.N) 
+        for i in mdlidcs + [-1]:
+            kappa_grid = self.kappa_grid(model_index=i, refined=refined)
+            kappa_grid = kappa_grid[:] * factor
+            pixrad = kappa_grid.shape[0]//2+1 if pixrad is None else pixrad
+            radii, p = radial_profile(kappa_grid, bins=pixrad)
+            profs.append(p)
+        profiles = np.asarray(profs)
+        if runit == 'arcsec':
+            radii = radii * pxls
+        elif runit == 'kpc':
+            radii = radii * pxls * self.arcsec2kpc[-1]
+        elif runit == 'lyr':
+            radii = radii * pxls * self.arcsec2lyr[-1]
+        return radii, profiles
+
+    def kappa_profile_range(self, pixrad=None, refined=True, runit='arcsec', factor=1):
+        radii, profs = self.kappa_profiles(pixrad=pixrad, refined=refined,
+                                           runit=runit, factor=factor)
+        pavg = profs[-1]
+        pmin = np.min(profs[:], axis=0)
+        pmax = np.max(profs[:], axis=0)
+        return radii, pavg, pmin, pmax
+
+    def encmass_profile(self, model_index=-1, refined=True, runit='arcsec',
+                        factor=1):
+        sigma_grid = self.sigma_grid(model_index=model_index, refined=refined)
+        sigma_grid = sigma_grid[:] * factor
+        pxls = self.pixel_size if refined else self.toplevel
+        radii, profile = enc_profile(sigma_grid)
+        profile = profile * pxls**2
+        if runit == 'arcsec':
+            radii = radii * pxls
+        elif runit == 'kpc':
+            radii = radii * pxls * self.arcsec2kpc[model_index]
+        elif runit == 'lyr':
+            radii = radii * pxls * self.arcsec2lyr[model_index]
+        return radii, profile
+
+    def encmass_profiles(self, refined=True, runit='arcsec', factor=1):
+        pxls = self.pixel_size if refined else self.toplevel
+        profs = []
+        mdlidcs = range(self.N) 
+        for i in mdlidcs + [-1]:
+            sigma_grid = self.sigma_grid(model_index=i, refined=refined)
+            sigma_grid = sigma_grid[:] * factor
+            radii, p = enc_profile(sigma_grid)
+            profs.append(p.copy())
+        profiles = np.asarray(profs) * pxls**2
+        if runit == 'arcsec':
+            radii = radii * pxls
+        elif runit == 'kpc':
+            radii = radii * pxls * self.arcsec2kpc[-1]
+        elif runit == 'lyr':
+            radii = radii * pxls * self.arcsec2lyr[-1]
+        return radii, profiles
+
+    def encmass_profile_range(self, refined=True, runit='arcsec', factor=1):
+        radii, profs = self.encmass_profiles(refined=refined, runit=runit,
+                                             factor=factor)
+        pavg = profs[-1]
+        pmin = np.min(profs[:], axis=0)
+        pmax = np.max(profs[:], axis=0)
+        return radii, pavg, pmin, pmax
 
 
 class PixeLensStateList(type):
@@ -733,8 +910,8 @@ class GLASSModel(ModelArray):
                     src = obj.sources[src_index]
                     zl, zs = obj.z, src.z
                     dlsds = DLSDS(zl, zs, cosmo=cosmo)
-                    mdta['toplevel'].append(dlsds * obj.basis._to_grid(data['kappa'], 1))
-                    mdta['hires'].append(dlsds * obj.basis.kappa_grid(data))
+                    mdta['toplevel'].append(obj.basis._to_grid(data['kappa'], 1))
+                    mdta['hires'].append(obj.basis.kappa_grid(data))
                     mdta['H0'].append(data['H0'])
                 imgs = src.images
                 mdta['dlsds'] = dlsds
@@ -864,10 +1041,6 @@ class GLASSModel(ModelArray):
         self._obj_idx = obj_index
         dta = self.all_data['hires'][obj_index]
         obj, data = self.env.models[0]['obj,data'][obj_index]
-        kappa = None
-        if self.env.nu is not None:
-            kappa = glass.scales.convert('kappa to Msun/arcsec^2', 1,
-                                         obj.dL, self.env.nu[self.src_idx])
         minima = np.asarray(self.all_data['minima'][obj_index])
         saddle_points = np.asarray(self.all_data['saddle_points'][obj_index])
         maxima = np.asarray(self.all_data['maxima'][obj_index])
@@ -875,8 +1048,9 @@ class GLASSModel(ModelArray):
         zs = self.all_data['zs'][obj_index]
         cosmo = self.all_data['cosmology']
         super(GLASSModel, self).__init__(
-            dta, filename=self.filepath, pixrad=obj.basis.pixrad, maprad=obj.basis.mapextent,
-            kappa=kappa, minima=minima, maxima=maxima, saddle_points=saddle_points,
+            dta, filename=self.filepath,
+            pixrad=obj.basis.pixrad, maprad=obj.basis.mapextent,
+            minima=minima, maxima=maxima, saddle_points=saddle_points,
             zl=zl, zs=zs, cosmo=cosmo)
 
     @property
@@ -1187,6 +1361,93 @@ def upsample_model(kappa, extent, shape, pixel_scale=1., sanitize=True, verbose=
     return kappa_resmap
 
 
+def integrate_map(data, radius, center=None):
+    """
+    Return integrated surface upto radius
+
+    Args:
+        data <np.ndarray> - picture (cut-out) to be integrated
+        radius  <float> -  radius upto which is integrated in pixels
+
+    Kwargs:
+        center <tuple/list/np.ndarray> - center from which the integration
+                                         starts if center is None the center of
+                                         <data> is used
+    """
+    data = np.asarray(data)
+    if center is None:
+        center = [data.shape[0]//2, data.shape[1]//2]
+    msk = np.indices(data.shape)  # indices
+    msk[0] -= center[0]  # shift to center
+    msk[1] -= center[1]  # shift to center
+    msk = np.square(msk)  # square for distance calculation
+    msk = msk[0, :, :] + msk[1, :, :] <= radius*radius
+    # data[~msk] = 0
+    return np.sum(data[msk])
+
+def enc_profile(data, **kwargs):
+    """
+    Calculate enclosed profiles of some data maps
+
+    Args:
+        data <np.ndarray> - 2D data array
+
+    Kwarg:
+        center <tuple/list> - center indices of profile
+
+    Return:
+        radii, mass_profile <np.ndarray> - 1D profile
+    """
+    data = np.array(data)  # just to be safe
+    r = np.arange(data.shape[0]//2+1) + 0.5
+    profile = np.array([integrate_map(data, ri, **kwargs)
+                        for ri in range(data.shape[0]//2+1)])
+    # if profile[0] == 0:
+    #     profile[0] = data[data.shape[0]//2, data.shape[1]//2]
+    return r, profile
+
+
+def encmass_profile(model, obj_index=0, mdl_index=-1, maprad=None,
+                    refined=True, factor=1.):
+    """
+    Calculate enclosed mass profiles for models by simply cumulatively binning
+    a sigma grid in units of M_sol/arcsec^2
+
+    Args:
+        model <LensModel object/np.ndarray> - LensModel object or a raw kappa grid array
+
+    Kwargs:
+        obj_index <int> - object index for the LensModel object
+        maprad <float> - map radius or physical scale of the profile
+        pixrad <int> - pixel radius of the grid; used to estimate number of bins
+        refinement <bool> - use refined grid
+        rfactor <float> - factor for transforming radii
+        pfactor <float> - factor for transforming profile
+        sfactor <float> - factor for transforming sigma
+
+    Return:
+        radii, profile <np.ndarrays> - radii [arcsec] and profiles ready to be plotted
+    """
+    if isinstance(model, LensModel):
+        model.obj_idx = min(obj_index, model.N_obj-1)
+    elif isinstance(model, np.ndarray):  # kappa grid was directly input
+        pixrad = model.shape[-1]
+        maprad = 1 if maprad is None else maprad
+        model = LensModel(model, maprad=maprad, pixrad=pixrad)
+        # sigma_grid = model.data
+    else:
+        model = LensModel(model)
+    sigma_grid = model.sigma_grid(model_index=mdl_index, refined=refined)
+    sigma_grid = sigma_grid * factor
+    maprad = model.maprad if maprad is None else maprad
+    radii, profile = enc_profile(sigma_grid)
+    pxls = model.pixel_size if refined else model.toplevel
+    radii = radii * pxls
+    profile = profile * pxls**2
+    
+    return radii, profile
+
+
 def radial_profile(data, center=None, bins=None):
     """
     Calculate radial profiles of some data maps
@@ -1213,10 +1474,10 @@ def radial_profile(data, center=None, bins=None):
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
     r = r.reshape(r.size)
     data = data.reshape(data.size)
-    rbins = np.linspace(0, N//2, bins)
-    encavg = [np.sum(data[r < ri])/len(data[r < ri])
-              if len(data[r < ri]) else dta_cent for ri in rbins]
-    return encavg
+    rbins = np.arange(bins) + 0.5
+    encavg = np.array([np.sum(data[r < ri])/len(data[r < ri])
+                       if len(data[r < ri]) else dta_cent for ri in rbins])
+    return rbins, encavg
 
 
 def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, refined=True, factor=1.):
@@ -1246,9 +1507,10 @@ def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, re
         model = LensModel(model)
     kappa_grid = model.kappa_grid(model_index=mdl_index, refined=refined) * factor
     maprad = model.maprad if maprad is None else maprad
-    pixrad = model.pixrad if pixrad is None else pixrad
-    profile = radial_profile(kappa_grid, bins=pixrad)
-    radii = np.linspace(0, maprad, len(profile))
+    pixrad = kappa_grid.shape[0]//2+1 if pixrad is None else pixrad
+    pxls = self.pixel_size if refined else self.toplevel
+    radii, profile = radial_profile(kappa_grid, bins=pixrad) 
+    radii = radii * pxls
     return radii, profile
 
 
@@ -1271,17 +1533,16 @@ def dispersion_profile(model, obj_index=0, units=None):
     """
     units = {'mass': 'Msun', 'M': 'Msun',
              'R': 'kpc', 'length': 'kpc', 'L': 'kpc'} if units is None else units
-    if isinstance(model, dict) and 'obj,data' in model:  # a glass model
-        obj, dta = model['obj,data'][obj_index]
-        MltR = dta['M(<R)'][units['M']]
-        R = dta['R'][units['R']]
+    if isinstance(model, LensModel):
+        print(True)
     else:
-        MltR = model[0, :]
-        R = model[1, :]
+        R = model[0]
+        MltR = model[1]
     if units['M'] == 'Msun' and units['R'] == 'kpc':
-        MltR = MltR*gu.M_sol/gu.marb*gu.tick  # convert M_sol to seconds
-        R = R*1e3*gu.parsec                   # convert to seconds
-        disp = np.sqrt(2./3/gu.pi*MltR/R)     # dispersion in light units
+        MltR = MltR*gu.G*gu.M_sol*1e-9       # convert M_sol to seconds
+        # kpc2km = 3.085677581e16  # gu.c*gu.parsec
+        R = R * gu.c*gu.parsec               # convert to seconds
+        disp = np.sqrt(2./3/gu.pi * MltR/R)  # dispersion in light units
     elif units['M'] == 'Msun' and units['R'] == 'arcsec':
         NotImplemented
     elif units['M'] == 'kg' and units['R'] == 'arcsec':
@@ -1679,23 +1940,23 @@ def deflect(theta, kappa, ploc, cell_size):
     return s
 
 
-def arrival_time(theta, beta, kappa, N, grid_size, factor=1,
+def arrival_time(theta, beta, kappa, N, grid_size, geofactor=1., psifactor=1.,
                  shear=None, extm=None, verbose=False):
     """
     Calculate the arrival time for a given kappa map and beta at position theta
     """
-    geom = sum(abs(theta - beta)**2) / 2  # * factor
+    geom = 0.5 * sum(abs(theta - beta)**2) * geofactor
     xn, yn = xy_grid(N, grid_size)
     pixel_size = (xn[0, 1] - xn[0, 0])*float(N)/kappa.shape[0]
     Q = lnr(theta[0], theta[1], xn, yn, pixel_size)
-    pot = -np.sum(kappa*Q) / (2*np.pi) * factor
+    pot = -np.sum(kappa*Q) / (2*np.pi) * psifactor
     if shear is not None:
         extshear = external_shear(shear, theta)
-        pot -= extshear
+        pot -= extshear # / (2*np.pi)
     if extm is not None:
         extmass = external_ptmass(extm, theta)
-        pot -= extmass
-    print("Geom, pot: ", geom, pot)
+        pot -= extmass # / (2*np.pi)
+    # print("Geom, pot: ", geom, pot)
     return geom + pot
 
 
@@ -1875,29 +2136,3 @@ def roche_potential_grid(*args, **kwargs):
     """
     gx, gy, psi = potential_grid(*args, **kwargs)
     return gx, gy, 0.5*(gx*gx + gy*gy) + psi
-
-
-# TODO: remove when it is not needed anymore
-def roche_potential(model, obj_index=0, N=85, src_index=0,
-                    correct_distances=True, verbose=False):
-    """
-    The Roche potential (degenerate arrival time surface without source shift): theta^2/2 - psi
-    from a GLASS model
-    Args:
-        model <GLASS model dict/np.ndarray> - GLASS model dictionary
-    Kwargs:
-        obj_index <int> - object index of the GLASS object within the model
-        N <int> - number of grid points along the axes of the potential grid
-        correct_distances <bool> - correct with distance ratios and redshifts
-        verbose <bool> - verbose mode; print command line statements
-    Return:
-        gx, gy, psi <np.ndarray> - the x and y grid coordinates and the potential grid
-    """
-    obj, dta = model['obj,data'][obj_index]
-    dlsds = DLSDS(obj.z, obj.sources[src_index].z) if correct_distances else 1
-    maprad = obj.basis.top_level_cell_size * obj.basis.pixrad
-    kappa = obj.basis._to_grid(dta['kappa'], 1)
-    kappa = dlsds * kappa
-    grid_size = 2 * maprad
-    gx, gy, degarr = roche_potential_grid(kappa, N, grid_size, verbose=verbose)
-    return gx, gy, degarr

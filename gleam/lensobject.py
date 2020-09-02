@@ -12,7 +12,7 @@ from gleam.skycoords import SkyCoords
 from gleam.skyf import SkyF
 from gleam.lensfinder import LensFinder
 from gleam.glscfactory import GLSCFactory
-from gleam.utils import colors as glmc
+from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
 
 import sys
 import os
@@ -366,15 +366,16 @@ class LensObject(SkyF):
         light_model.Ny, light_model.Nx = self.data.shape
         light_model.y, light_model.x = light_model.Ny//2, light_model.Nx//2
         light_model.calc_map()
-        if not self.roi._buffer['circle']:
-            self.roi.select['circle']((light_model.x, light_model.y), 10)
-        else:
-            r = self.roi._buffer['circle'][0].radius
-            self.roi.select['circle']((light_model.x, light_model.y), r)
-        lens_mask = self.roi._masks['circle'][-1]
-        mask = lens_mask
+        # if not self.roi._buffer['circle']:
+        #     self.roi.select['circle']((light_model.x, light_model.y), 10)
+        # else:
+        #     r = self.roi._buffer['circle'][0].radius
+        #     self.roi.select['circle']((light_model.x, light_model.y), r)
+        # lens_mask = self.roi._masks['circle'][-1]
+        # mask = lens_mask
+        mask = None
         light_norm = light_model.normalize(light_model.map2D, mask=mask)
-        return light_norm * self.stel_mass / (self.px2arcsec[0]*self.px2arcsec[1])
+        return light_norm * self.stel_mass
 
     def image_f(self, draw_lens=False, draw_srcimgs=False, **kwargs):
         """
@@ -422,9 +423,9 @@ class LensObject(SkyF):
         if self.lens is None:
             return img
         if fill is None:
-            fill = glmc.blue
+            fill = GLEAMcolors.blue
         if outline is None:
-            outline = glmc.black
+            outline = GLEAMcolors.black
         draw = ImageDraw.Draw(img)
         p = (self.lens.x-point_size, self.lens.y-point_size,
              self.lens.x+point_size, self.lens.y+point_size)
@@ -451,9 +452,9 @@ class LensObject(SkyF):
         if len(self.srcimgs) < 1:
             return img
         if fill is None:
-            fill = glmc.pink
+            fill = GLEAMcolors.pink
         if outline is None:
-            outline = glmc.black
+            outline = GLEAMcolors.black
         draw = ImageDraw.Draw(img)
         pts = [(p.x-point_size, p.y-point_size, p.x+point_size, p.y+point_size)
                for p in self.srcimgs]
@@ -462,42 +463,56 @@ class LensObject(SkyF):
         del draw
         return img
 
-    def plot_f(self, fig, ax=None, as_magnitudes=False, deconv=False,
+    def plot_f(self, fig=None, ax=None, as_magnitudes=False, log=False,
                lens=False, source_images=False, label_images=False, sequence=None,
-               scalebar=True, colorbar=False, cmap='magma',
+               cmap=GLEAMcmaps.gravic, reverse_map=False,
+               scalebar=True, label=None, colorbar=False,
+               flip=True, filter_nan=True, deconv=False,
                verbose=False, **kwargs):
         """
         Plot the image on an axis
 
         Args:
-            fig <matplotlib.figure.Figure object> - figure in which the image is to be plotted
+            None
 
         Kwargs:
+            fig <matplotlib.figure.Figure object> - figure in which the image is to be plotted
             ax <matplotlib.axes.Axes object> - option to control on which axis the image is plotted
             as_magnitudes <bool> - if True, plot data as magnitudes
+            log <bool> - plot data in log-scale
             lens <bool> - indicate the lens position as scatter point
             source_images <bool> - indicate the source image positions as scatter points
             label_images <bool> - label the source image positions in sequence
             sequence <str> - sequence of labels for image_labels
-            scalebar <bool> - if True, add scalebar plot (15% of the image's width)
-            colorbar <bool> - if True, add colorbar plot
+            cmap <str/mpl.colors.Colormap> - color map name or object
+            reverse_map <bool> - revert the colormap if adding '_r' doesn't work
+            scalebar <bool> - add scalebar to the plot (sets axis off)
+            label <str> - add a labelbox to the plot
+            colorbar <bool> - add colorbar to the plot
+            flip <bool> - flip the data before plotting
+            filter_nan <bool> - convert NaNs in the image data to small numbers
+            deconv <bool> - perform a Richardson-Lucy deconvolution
             verbose <bool> -  verbose mode; print command line statements
             kwargs **<dict> - keywords for the imshow function
 
         Return:
             fig <matplotlib.figure.Figure object> - figure in which the image was plotted
             ax <matplotlib.axes.Axes object> - axis on which the image was plotted
+            plt_out <list> - list of plotting outputs
         """
         if sequence is None:
             sequence = 'ABCDE'
         fig, ax, plt_out = super(LensObject, self).plot_f(
-            fig, ax, as_magnitudes=as_magnitudes, deconv=deconv, verbose=False,
-            scalebar=scalebar, colorbar=colorbar, cmap=cmap, **kwargs)
+            fig=fig, ax=ax, as_magnitudes=as_magnitudes, log=log,
+            cmap=cmap, reverse_map=reverse_map,
+            scalebar=scalebar, label=label, colorbar=colorbar,
+            flip=flip, filter_nan=filter_nan, deconv=deconv,
+            verbose=False, **kwargs)
         if lens and self.lens is not None:
-            ax.scatter(*self.lens.xy, marker='o', s=3**2*math.pi, c=glmc.purpleblue)
+            ax.scatter(*self.lens.xy, marker='o', s=3**2*math.pi, c=GLEAMcolors.purpleblue)
         if source_images and self.srcimgs:
             for i, c in enumerate(self.srcimgs):
-                ax.scatter(*c.xy, marker='o', s=3**2*math.pi, c=glmc.green)
+                ax.scatter(*c.xy, marker='o', s=3**2*math.pi, c=GLEAMcolors.green)
                 if label_images:
                     ax.text(c.x+self.naxis1*0.02, c.y-self.naxis2*0.04,
                             sequence[i],

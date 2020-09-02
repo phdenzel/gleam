@@ -57,13 +57,13 @@ class StarSampler(object):
             print(self.__v__)
 
     @classmethod
-    def from_gleamobj(cls, gleam, band='i', lens_mask=None, image_mask=None, model='sersic',
+    def from_gleamobj(cls, glm_obj, band='i', lens_mask=None, image_mask=None, model='sersic',
                       **kwargs):
         """
         Initialize from gleamobj
 
         Args:
-            gleam <gleam object> - contains data of a or more than one .fits files
+            glm_obj <gleam object> - contains data of a or more than one .fits files
 
         Kwargs:
             band <str/int> - the band to use the model on (if multiple data maps are passed)
@@ -75,36 +75,36 @@ class StarSampler(object):
         Return:
             <StarSampler object> - initialized with gleam object
         """
-        if not isinstance(gleam, (SkyF, SkyPatch, LensObject, MultiLens)):
+        if not isinstance(glm_obj, (SkyF, SkyPatch, LensObject, MultiLens)):
             return
-        if len(gleam.data.shape) > 2:
-            if band in gleam.bands:
-                gleam = gleam[band]
+        if len(glm_obj.data.shape) > 2:
+            if band in glm_obj.bands:
+                glm_obj = glm_obj[band]
             else:
-                gleam = gleam[0]
-        data = gleam.data
-        if hasattr(gleam, 'light_model'):
-            if 'sersic' in gleam.light_model:
-                kwargs.setdefault('light_model', gleam.light_model['sersic'])
+                glm_obj = glm_obj[0]
+        data = glm_obj.data
+        if hasattr(glm_obj, 'light_model'):
+            if 'sersic' in glm_obj.light_model:
+                kwargs.setdefault('light_model', glm_obj.light_model['sersic'])
             else:
-                model_name = list(gleam.light_model.keys())[0]
-                kwargs.setdefault('light_model', gleam.light_model[model_name])
-        if hasattr(gleam, 'mag_formula'):
-            kwargs.setdefault('mag_transf', gleam.mag_formula)
-        if hasattr(gleam, 'zl'):
-            kwargs.setdefault('zl', gleam.zl)
-        if hasattr(gleam, 'zs'):
-            kwargs.setdefault('zs', gleam.zs)
+                model_name = list(glm_obj.light_model.keys())[0]
+                kwargs.setdefault('light_model', glm_obj.light_model[model_name])
+        if hasattr(glm_obj, 'mag_formula'):
+            kwargs.setdefault('mag_transf', glm_obj.mag_formula)
+        if hasattr(glm_obj, 'zl'):
+            kwargs.setdefault('zl', glm_obj.zl)
+        if hasattr(glm_obj, 'zs'):
+            kwargs.setdefault('zs', glm_obj.zs)
         if lens_mask:
             lens_mask = lens_mask
-        elif hasattr(gleam, 'roi') and gleam.roi:
-            lens_mask = np.logical_or.reduce(gleam.roi._masks['circle'])
+        elif hasattr(glm_obj, 'roi') and glm_obj.roi:
+            lens_mask = np.logical_or.reduce(glm_obj.roi._masks['circle'])
         else:
             lens_mask = np.full(data.shape, True)
         if image_mask:
             image_mask = image_mask
-        elif hasattr(gleam, 'roi') and gleam.roi:
-            image_mask = np.logical_or.reduce(gleam.roi._masks['polygon'])
+        elif hasattr(glm_obj, 'roi') and glm_obj.roi:
+            image_mask = np.logical_or.reduce(glm_obj.roi._masks['polygon'])
         else:
             image_mask = np.full(data.shape, False)
         kwargs.setdefault('mask', np.logical_and(lens_mask, ~image_mask))
@@ -267,13 +267,169 @@ class StarSampler(object):
         Kwargs:
             shape <> - None
         """
-        x = np.linspace(extent[0], extent[2], data_map.shape[0]),
-        y = np.linspace(extent[1], extent[3], data_map.shape[1])
-        newx = np.linspace(new_extent[0], new_extent[2], new_shape[0])
-        newy = np.linspace(new_extent[1], new_extent[3], new_shape[1])
+        x = np.linspace(extent[0], extent[1], data_map.shape[0]),
+        y = np.linspace(extent[2], extent[3], data_map.shape[1])
+        newx = np.linspace(new_extent[0], new_extent[1], new_shape[0])
+        newy = np.linspace(new_extent[2], new_extent[3], new_shape[1])
         rescale = interpolate.interp2d(x, y, data_map)
         stel_map = rescale(newx, newy)
         return stel_map
+
+    # def lnprior(self, params):
+    #     """
+    #     Prior function (log) for the emcee sampling
+    #     """
+    #     f12 = 1. - np.sum(params[:-1])
+    #     if np.all(0. < params[:-1]) and np.all(-0.001 < params[-1]) \
+    #         and np.all(params < 1.) and (0.0 < f12 < 1.0):
+    #         return 0
+    #     return -np.inf
+
+    # def lnlike(self, params, mag0, err_mag0, filters, basemodels):
+    #     """
+    #     Likelihood function (log) for the emcee sampling
+    #     """
+    #     # eval SED flux
+    #     phi = basemodels['sed'][:] * np.power(
+    #         10.0, -0.4*params[-1]*basemodels['k_wl'])
+    #     sed = np.dot(params[:-1], phi[:-1, :])
+    #     # the twelveth spectrum
+    #     sed += basemodels['sed'][-1] * (1. - np.sum(params[:-1]))
+    #     mag = ABfromFilters(basemodels['w'], sed, basemodels['redshift'], filters)
+    #     # anchor to i band magnitude
+    #     dmag = mag0[3] - mag[3]
+    #     mag += dmag
+    #     aux = (mag - mag0) / err_mag0
+    #     chi2 = np.sum(aux*aux)
+    #     return -0.5*chi2
+
+    # def lnprob(theta, mag0, err_mag0, filters, basemodels):
+    #     """
+    #     Posterior PDF (log) for the emcee sampling
+    #     """
+    #     lp = lnprior(theta)
+    #     if not np.isfinite(lp):
+    #         return -np.inf
+    #     return lp + lnlike(theta, mag0, err_mag0, filters, basemodels)
+
+    # def _read_basemodels(redshift, directory="glfits/stelmass/"):
+    #     """
+    #     Read in base model spectra
+    #     """
+    #     from glfits.magnitudes import _dust_CCM89
+    #     basemodels = {}
+    #     prefix = [s for s in sys.path if s.endswith('/glfits')][0]+"/"
+    #     w = np.loadtxt(prefix+directory+"BaseModels.dat", unpack=True,
+    #                    usecols=(0,))
+    #     sed = np.loadtxt(prefix+directory+"BaseModels.dat", unpack=True,
+    #                      usecols=range(1, 13))
+    #     # hardcoded spectral masses
+    #     mbm = [0.680202, 0.655672, 0.639551, 0.636833, 0.685852, 0.661167,
+    #            0.643791, 0.637741, 0.682438, 0.659906, 0.642867, 0.637433]
+    #     k_wl = _dust_CCM89(w)
+    #     # fill dictionary
+    #     basemodels['w'] = w
+    #     basemodels['sed'] = sed
+    #     basemodels['mass'] = mbm
+    #     basemodels['k_wl'] = k_wl
+    #     basemodels['redshift'] = redshift
+    #     return basemodels
+
+    # def stelmass(mag0, err_mag0, filters, basemodels,
+    #          init_pos=np.array([0.05]*11+[0.1]), nwalkers=100, nsteps=400,
+    #          verbose=False):
+    #     """
+    #     Run MCMC sampling on basemodel spectra and filters
+    #     """
+    #     import cPickle
+    #     ndim = len(init_pos)
+    #     pos = np.array([init_pos + 5e-2*np.random.rand(ndim)
+    #                     for i in xrange(nwalkers)])
+    #     sampler = emcee.EnsembleSampler(
+    #         nwalkers, ndim, lnprob, args=(mag0, err_mag0, filters, basemodels),
+    #         threads=2)
+    #     pos, prob, mcstate = sampler.run_mcmc(pos, 400)
+    #     samples = sampler.chain[:, 100:, :].reshape((-1, ndim))
+    #     # Parameters
+    #     smpls_mean = np.median(samples, axis=0)
+    #     logM, chi2 = eval_sample(smpls_mean, mag0, err_mag0, basemodels, filters)
+    #     Mstel = np.power(10, logM)
+    #     # mensemble = make_mass_ensemble(samples, mag0, err_mag0,
+    #     #                                basemodels, filters)
+    #     a = np.array(range(0, 30000, 300))
+    #     mensemble = make_mass_subensemble(samples[a], mag0, err_mag0,
+    #                                       basemodels, filters)
+    #     Mstel = np.median(mensemble)
+    #     Mstel_min = np.min(mensemble)
+    #     Mstel_max = np.max(mensemble)
+    #     return Mstel, Mstel_min, Mstel_max
+
+    # def eval_sample(sample, mag0, err_mag0, basemodels, filters):
+    #     """
+    #     Evaluate a sample to a mass with a chi2
+    #     """
+    #     # get parameters
+    #     theta = 1*sample
+    #     theta[-1] = 1 - np.sum(sample[:-1])
+    #     Ebv = sample[-1]
+    #     # get spectra
+    #     phi = basemodels['sed'][:]*np.power(10.0, -0.4*Ebv*basemodels['k_wl'])
+    #     sed = np.dot(theta[:], phi[:, :])
+    #     # anchor to i band magnitude
+    #     mag = ABfromFilters(basemodels['w'], sed, basemodels['redshift'], filters)
+    #     dmag = mag0[3] - mag[3]
+    #     # base model mass
+    #     mbm = np.dot(basemodels['mass'], theta)
+    #     logM = np.log10(mbm) - dmag/2.5
+    #     # chi2
+    #     mag += dmag
+    #     aux = (mag-mag0)/err_mag0
+    #     chi2 = np.sum(aux*aux)
+    #     return logM, chi2
+
+    # def make_mass_ensemble(samples, mag0, err_mag0, basemodels, filters):
+    #     """
+    #     Convert a ensemble of samples to an ensemble of masses
+    #     """
+    #     # masses and chi2
+    #     masses = []
+    #     chi2s = []
+    #     # get parameters
+    #     theta = 1*samples
+    #     print
+    #     print "samples shape: ", samples.shape
+    #     theta[:, -1] = 1 - np.sum(samples[:, :-1])
+    #     Ebv = samples[:, -1]
+    #     print "theta shape: ", theta.shape
+    #     print "Ebv shape: ", Ebv.shape
+    #     print "k_wl shape: ", basemodels['k_wl'].shape
+    #     print "bm sed shape: ", basemodels['sed'].shape
+    #     print "ebvkwl product: ", np.outer(Ebv, basemodels['k_wl']).shape
+    #     # get spectra
+    #     phi = basemodels['sed'][:] * np.power(
+    #         10.0, -0.4*np.outer(Ebv, basemodels['k_wl']))
+    #     sed = np.dot(theta[:], phi[:, :])
+    #     print "phi shape: ", phi.shape
+    #     print "sed shape: ", sed.shape
+    #     # anchor to i band magnitude
+    #     mag = ABfromFilters(basemodels['w'], sed, basemodels['redshift'], filters)
+    #     dmag = mag0[3] - mag[3]
+    #     for t in theta:
+    #         print t.shape
+    #         logM, chi2 = eval_samples(s, mag0, err_mag0, basemodels, filters)
+    #         masses.append(logM)
+    #         chi2s.append(chi2)
+    #     return masses, chi2s
+
+    # def make_mass_subensemble(samples, mag0, err_mag0, basemodels, filters):
+    #     """
+    #     Convert a sub-ensemble of samples to an ensemble of masses
+    #     """
+    #     masses = []
+    #     for s in samples:
+    #         logM, _ = eval_sample(s, mag0, err_mag0, basemodels, filters)
+    #         masses.append(logM)
+    #     return np.power(10, np.array(masses))
 
 
 if __name__ == "__main__":

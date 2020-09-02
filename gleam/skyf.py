@@ -18,6 +18,8 @@ from gleam.megacam import MEGACAM_FPROPS
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
 from gleam.utils.lensing import xy_grid
 from gleam.utils.rgb_map import richardson_lucy
+from gleam.utils.plotting import plot_scalebar, plot_labelbox
+from gleam.utils.colors import GLEAMcolors, GLEAMcmaps
 
 import sys
 import os
@@ -817,10 +819,13 @@ class SkyF(object):
         # position
         if isinstance(ij, int):  # 1D pixel index position to 2D
             ij = self.idx2yx(ij)
+        elif isinstance(ij, (list, np.ndarray)):
+            ij = tuple(ij)
         if not hasattr(self, '_theta_mesh'):
             self._theta_mesh = xy_grid(self.naxis1, 2*self.extent[1]).T
         t = self._theta_mesh[ij]
-        if origin is not None:
+        if origin is not None or self.center != self.origin:
+            origin = tuple(np.array(self.origin.xy, dtype=int))
             t = t - self._theta_mesh[origin]
         if offset is not None:
             t += offset
@@ -969,6 +974,30 @@ class SkyF(object):
                                          reference_pixel=self.refpx, reference_value=self.refval)
         else:
             return SkyCoords.empty()
+
+    @property
+    def origin(self):
+        """
+        The approximate center of the .fits file's image
+
+        Args/Kwargs:
+            None
+
+        Return:
+            center <Skycoords object> - center coordinate of the .fits file's image
+        """
+        if not hasattr(self, '_origin'):
+            self._origin = self.naxis1/2, self.naxis2/2
+        if self.hdr:
+            return SkyCoords.from_pixels(self._origin[0], self._origin[1],
+                                         px2arcsec_scale=self.px2arcsec,
+                                         reference_pixel=self.refpx, reference_value=self.refval)
+        else:
+            return SkyCoords.empty()
+
+    @origin.setter
+    def origin(self, origin):
+        self._origin = origin
 
     @property
     def indices(self):
@@ -1388,75 +1417,93 @@ class SkyF(object):
         formula.__name__ = "mag_formula"
         return formula
 
-    def plot_f(self, fig, ax=None, as_magnitudes=False, scalebar=True,
-               flip=False, filter_nan=True, colorbar=False, deconv=False,
-               verbose=False, cmap='magma', reverse_map=False, **kwargs):
+    def plot_f(self, fig=None, ax=None, as_magnitudes=False, log=False,
+               cmap=GLEAMcmaps.gravic, reverse_map=False,
+               scalebar=True, label=None, colorbar=False,
+               flip=True, filter_nan=True, deconv=False,
+               verbose=False,
+               **kwargs):
         """
         Plot the image on an axis
 
         Args:
-            fig <matplotlib.figure.Figure object> - figure in which the image is to be plotted
+            None
 
         Kwargs:
+            fig <matplotlib.figure.Figure object> - figure in which the image is to be plotted
             ax <matplotlib.axes.Axes object> - option to control on which axis the image is plotted
             as_magnitudes <bool> - if True, plot data as magnitudes
-            scalebar <bool> - if True, add scalebar plot (15% of the image's width)
-            colorbar <bool> - if True, add colorbar plot
+            log <bool> - plot data in log-scale
+            cmap <str/mpl.colors.Colormap> - color map name or object
+            reverse_map <bool> - revert the colormap if adding '_r' doesn't work
+            scalebar <bool> - add scalebar to the plot (sets axis off)
+            label <str> - add a labelbox to the plot
+            colorbar <bool> - add colorbar to the plot
+            flip <bool> - flip the data before plotting
+            filter_nan <bool> - convert NaNs in the image data to small numbers
+            deconv <bool> - perform a Richardson-Lucy deconvolution
             verbose <bool> -  verbose mode; print command line statements
             kwargs **<dict> - keywords for the imshow function
 
         Return:
             fig <matplotlib.figure.Figure object> - figure in which the image was plotted
             ax <matplotlib.axes.Axes object> - axis on which the image was plotted
+            plt_out <list> - list of plotting outputs
         """
-        # check axes
+        # check figures/axes
+        if fig is None:
+            fig = plt.figure()
         if ax is None or len(fig.get_axes()) < 1:
             ax = fig.add_subplot(111)
-        # handle bad pixels
+        # get colormap
         cmap = plt.get_cmap(cmap)
-        cmap.set_bad('black', alpha=1)
-        cmap.set_under('black', alpha=1)
-        # plot data
+        if reverse_map:
+            cmap = GLEAMcmaps.reverse(cmap)
+        # extract scalebar/labelbox properties
+        kw = {}
+        maprad = self.extent[1]
+        kw['length'] = kwargs.pop('length', 1.)
+        kw['position'] = kwargs.pop('position', 'bottom left')
+        kw['color'] = kwargs.pop('color', 'white')
+        kw['fontsize'] = kwargs.pop('fontsize', 18)
+        # get data
         plt_out = []
         if as_magnitudes:
             if self.naxis_plus is not None and len(self.data.shape) > 2:
-                d = np.sum(self.magnitudes, axis=0)
+                d = np.sum(self.magnitudes[:], axis=0)
             else:
-                d = self.magnitudes
+                d = self.magnitudes[:]
         else:
             if self.naxis_plus is not None and len(self.data.shape) > 2:
-                d = np.sum(self.data, axis=0)
+                d = np.sum(self.data[:], axis=0)
             else:
-                d = self.data
+                d = self.data[:]
+            if log:
+                d = np.log10(d-d.min()+1)
+        if flip:
+            d = np.flipud(d[:])
         psf = kwargs.pop('psf', np.ones((5, 5))/25.)
         iterations = kwargs.pop('iterations', 30)
         if deconv:
             d = richardson_lucy(d, psf=psf, iterations=iterations)
-        if flip:
-            d = np.flipud(d)
         if filter_nan:
             d = np.nan_to_num(d)
-        img = ax.imshow(d, cmap=cmap, **kwargs)
+        # plot data
+        img = ax.imshow(d, cmap=cmap, extent=self.extent, **kwargs)
         plt_out.append(img)
         if colorbar:  # plot colorbar
             clrbar = fig.colorbar(img)
             clrbar.outline.set_visible(False)
             plt_out.append(clrbar)
-        if scalebar and self.px2arcsec[0] is not None:  # plot scalebar
-            from matplotlib import patches
-            barpos = (0.05*self.naxis1, 0.025*self.naxis2)
-            w, h = 0.15*self.naxis1, 0.01*self.naxis2
-            scale = self.px2arcsec[0]*w
-            rect = patches.Rectangle(barpos, w, h, facecolor='white', edgecolor=None, alpha=0.85)
-            ax.add_patch(rect)
-            ax.text(barpos[0]+w/4, barpos[1]+2*h, r"$\mathrm{{{:.1f}''}}$".format(scale),
-                    color='white', fontsize=16)
-            # flip axes
-        # ax.set_xlim(left=0, right=self.naxis1)
-        # ax.set_ylim(bottom=0, top=self.naxis2)
+        if scalebar and self.px2arcsec[0] is not None:
+            plot_scalebar(maprad, origin='center', **kw)
+            plt.axis('off')
+            fig.axes[0].get_xaxis().set_visible(False)
+            fig.axes[0].get_yaxis().set_visible(False)
+        if label is not None:
+            plot_labelbox(label, position='top right', padding=(0.03, 0.03),
+                          **kw)
         ax.set_aspect('equal')
-        # no axis tick labels
-        plt.axis('off')
         # plt.tight_layout()
         # some verbosity
         if verbose:

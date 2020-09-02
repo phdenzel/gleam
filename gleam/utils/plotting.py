@@ -709,7 +709,8 @@ def roche_potential_plot(model, N=None,
 def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
                               mdl_index=-1, obj_index=0, src_index=0,
                               cmap=GLEAMcmaps.phoenix, maprad=None, extent=None,
-                              draw_images=True, contours_only=False,
+                              draw_images=True, search_saddles=0,
+                              contours_only=False,
                               contours=True, levels=60,
                               min_contour_shift=None, sad_contour_shift=None,
                               scalebar=False, label=None, color='black',
@@ -729,6 +730,7 @@ def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
         cmap <str/mpl.cm.ColorMap object> - color map for plotting
         extent <tuple/list> - map extent
         draw_images <bool> - do/do not plot image
+        search_saddles <int> - number of saddle-points to look for if unknown
         contours_only <bool> - only plot contours
         contours <bool> - plot contours onto map
         levels <int> - number of contours
@@ -767,15 +769,15 @@ def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
     min_clr, sad_clr, max_clr = cmap(.2), cmap(.5), cmap(.8)
     draw_images = 'min, sad, max' if draw_images else ''
     # some saddle point contours
-    if not saddles:
-        saddles, isaddles = find_saddles(x, y, grid, n_saddles=0)
-        # clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
-        #                                    factor=factor)
+    if not np.any(saddles):
+        saddles, isaddles = find_saddles(x, y, grid, n_saddles=search_saddles)
+        clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
+                                           psifactor=psifactor)
         saddles = np.array([(s[0], -s[1]) for s in saddles])
         clev = sorted([grid[ix, iy] for (ix, iy) in isaddles])
     else:
         clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
-                                           factor=factor)
+                                           psifactor=psifactor)
     if sad_contour_shift is not None:
         clev = [c-sad_contour_shift for c in clev]
     # plot extremal image points
@@ -866,6 +868,8 @@ def kappa_profile_plot(model, refined=True,
                                        maprad=model.maprad, pixrad=model.pixrad, refined=refined)
     else:  # otherwise assume profile and radii were inputted
         radii, profile = model
+        radii = np.asarray(radii)
+        profile = np.asarray(profile)
         profile = profile[:] * kappa_factor
     radii = radii + r_shift
     plot, = plt.plot(radii, profile, **kwargs)
@@ -960,6 +964,8 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         radius, profile = kappa_profile(m, obj_index=model.obj_idx, factor=kfactor,
                                         maprad=maprad, pixrad=pixrad)
         radius = radius[:] * rfactor
+        if profile[0] <= 0.2:
+            continue
         if interpolate > 1:
             radius, profile = interpolate_profile(radius, profile, Nx=interpolate*len(radius))
         if not as_range:
@@ -970,6 +976,8 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         radii.append(radius)
         ax.set_aspect('auto')
     if as_range:
+        radii = [r for r, k in zip(radii, profiles) if k[0] > 0.2]
+        profiles = [k for k in profiles if k[0] > 0.2]
         dist = np.asarray([[ri, ki] for r, k in zip(radii, profiles) for ri, ki in zip(r, k)]).T
         H, xedges, yedges = np.histogram2d(dist[0], dist[1],
                                            bins=(interpolate or int(0.1*len(profiles))))

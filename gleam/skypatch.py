@@ -8,6 +8,7 @@ Phase through a region in the sky with SkyPatch
 # Imports
 ###############################################################################
 from gleam.skyf import SkyF
+from gleam.utils.plotting import plot_scalebar, plot_labelbox
 from gleam.utils.rgb_map import lupton_like
 from gleam.utils.encode import GLEAMEncoder, GLEAMDecoder
 
@@ -611,8 +612,9 @@ class SkyPatch(object):
         else:
             raise ValueError("New sequence has the wrong length")
 
-    def plot_composite(self, fig, ax=None, method='standard', colorbar=False, scalebar=True,
-                       plain=False, verbose=False, **kwargs):
+    def plot_composite(self, fig=None, ax=None, method='standard',
+                       scalebar=True, label=None,
+                       verbose=False, **kwargs):
         """
         Plot a composite image using the i, r, and g band
 
@@ -634,34 +636,31 @@ class SkyPatch(object):
         # stack the bands
         if 'i' in self.bands and 'r' in self.bands and 'g' in self.bands:
             stack = lupton_like(self['i'].data, self['r'].data, self['g'].data, method=method)
+            stack = np.flipud(stack)
         else:
             return fig, ax
-        # check axes
+        # check figures/axes
+        if fig is None:
+            fig = plt.figure()
         if ax is None or len(fig.get_axes()) < 1:
             ax = fig.add_subplot(111)
-        # add axes if plain
-        if plain:
-            fig.clear()
-            ax = plt.Axes(fig, [0, 0, 1, 1])
-            ax.set_axis_off()
-            fig.add_axes(ax)
+        # extract scalebar/labelbox properties
+        kw = {}
+        maprad = self['i'].extent[1]
+        kw['length'] = kwargs.pop('length', 1.)
+        kw['position'] = kwargs.pop('position', 'bottom left')
+        kw['color'] = kwargs.pop('color', 'white')
+        kw['fontsize'] = kwargs.pop('fontsize', 18)
         # plot the stacked image
-        ax.imshow(stack, **kwargs)
-        if scalebar:  # plot scalebar
-            from matplotlib import patches
-            barpos = (0.05*self['i'].naxis1, 0.025*self['i'].naxis2)
-            w, h = 0.15*self['i'].naxis1, 0.01*self['i'].naxis2
-            scale = self['i'].px2arcsec[0]*w
-            rect = patches.Rectangle(barpos, w, h, facecolor='white', edgecolor=None, alpha=0.85)
-            ax.add_patch(rect)
-            ax.text(barpos[0]+w/4, barpos[1]+2*h, r"$\mathrm{{{:.1f}''}}$".format(scale),
-                    color='white', fontsize=16)
-        # flip axes
-        ax.set_xlim(left=0, right=self['i'].naxis1)
-        ax.set_ylim(bottom=0, top=self['i'].naxis2)
-        ax.set_aspect('equal')
-        # no axis tick labels
-        plt.axis('off')
+        ax.imshow(stack, extent=self['i'].extent, **kwargs)
+        if scalebar:
+            plot_scalebar(maprad, origin='center', **kw)
+            plt.axis('off')
+            fig.axes[0].get_xaxis().set_visible(False)
+            fig.axes[0].get_yaxis().set_visible(False)
+        if label is not None:
+            plot_labelbox(label, position='top right', padding=(0.03, 0.03),
+                          **kw)
         # plt.tight_layout()
         # some verbosity
         if verbose:

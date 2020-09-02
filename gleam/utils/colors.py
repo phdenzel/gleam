@@ -114,6 +114,24 @@ cyan_light = '#A0DED2'
 cyan_dark = '#24A38B'
 blue_marguerite = '#756BB1'
 
+# plotting platte
+pl5_1 = '#ffa600'
+pl5_2 = '#ff6361'
+pl5_3 = '#bc5090'
+pl5_4 = '#58508d'
+pl5_5 = '#668B9d'
+pl5 = [pl5_1, pl5_2, pl5_3, pl5_4, pl5_5]
+
+pl8_1 = '#006999'
+pl8_2 = '#4d6db1'
+pl8_3 = '#8b6bbb'
+pl8_4 = '#c464b2'
+pl8_5 = '#f15e99'
+pl8_6 = '#ff6773'
+pl8_7 = '#ff8246'
+pl8_8 = '#ffa600'
+pl8 = [pl8_1, pl8_2, pl8_3, pl8_4, pl8_5, pl8_6, pl8_7, pl8_8]
+
 # scheme colors
 arcus1, arcus2, arcus3, arcus4, arcus5 = '#FC354C', '#29221F', '#13747D', '#0ABFBC', '#FCF7C5'
 aquaria1, aquaria2, aquaria3, aquaria4 = '#00207F', '#A992FA', '#EA55B1', '#FEC763'
@@ -226,6 +244,8 @@ class GLEAMcolors:
     cyan_light = (cyan_light, )
     cyan_dark, = (cyan_dark, )
     blue_marguerite, = (blue_marguerite, )
+    pl5 = pl5
+    pl8 = pl8
     primary_colors = colors
     light_colors = light_colors
     dark_colors = dark_colors

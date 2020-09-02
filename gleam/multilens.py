@@ -356,8 +356,9 @@ class MultiLens(SkyPatch):
         if verbose:
             print(self.__v__)
 
-    def plot_composite(self, fig, ax=None, method='standard', lens=False, source_images=False,
-                       colorbar=False, scalebar=True, verbose=False, **kwargs):
+    def plot_composite(self, fig=None, ax=None, method='standard',
+                       lens=False, source_images=False,
+                       scalebar=True, label=None, verbose=False, **kwargs):
         """
         Plot a composite image using the i, r, and g band
 
@@ -377,9 +378,8 @@ class MultiLens(SkyPatch):
             fig <matplotlib.figure.Figure object> - figure in which the image was plotted
             ax <matplotlib.axes.Axes object> - axis on which the image was plotted
         """
-        fig, ax = super(MultiLens, self).plot_composite(fig, ax, method=method,
-                                                        colorbar=colorbar, scalebar=scalebar,
-                                                        **kwargs)
+        fig, ax = super(MultiLens, self).plot_composite(
+            fig, ax, method=method, scalebar=scalebar, label=label, **kwargs)
         if 'i' not in self.bands and 'r' not in self.bands and 'g' not in self.bands:
             return fig, ax
         if lens:
