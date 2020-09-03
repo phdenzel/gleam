@@ -9,6 +9,7 @@ Miror quaenam sis tam bella.
 # Imports
 ###############################################################################
 import os
+import sys
 import numpy as np
 from scipy import interpolate
 
@@ -17,6 +18,7 @@ from gleam.skypatch import SkyPatch
 from gleam.lensobject import LensObject
 from gleam.multilens import MultiLens
 from gleam.megacam import ADU2Mag, MegaCam2SDSS
+from gleam.utils.magnitudes import _dust_CCM89
 
 
 ###############################################################################
@@ -255,10 +257,10 @@ class StarSampler(object):
             mag = table[mag_key][z]
         return M * np.power(10, 0.4*(mag-magnitude))
 
-    @classmethod
+    @staticmethod
     def resample_map(self, data_map, extent, new_shape, new_extent):
         """
-        Resample and interpolate a map to new extent
+        Resample and interpolate a map to new extent (preferentially of lower resolution)
 
         Args:
             data_map <np.ndarray> - the map to be extended
@@ -274,6 +276,49 @@ class StarSampler(object):
         rescale = interpolate.interp2d(x, y, data_map)
         stel_map = rescale(newx, newy)
         return stel_map
+
+    @staticmethod
+    def read_basemodels(directory='tables/', basemodels='BaseModels.dat', n_models=13):
+        """
+        """
+        bm = {}
+        path = os.path.dirname(__file__)
+        filename = os.path.join(path, directory, basemodels)
+        if not os.path.exists(filename):
+            return
+        w = np.loadtxt(filename, unpack=True, usecols=(0,))
+        sed = np.loadtxt(filename, unpack=True, usecols=range(1, n_models))
+        bm['w'] = w
+        bm['sed'] = sed
+        bm['mass'] = [0.680202, 0.655672, 0.639551, 0.636833, 0.685852, 0.661167,
+                      0.643791, 0.637741, 0.682438, 0.659906, 0.642867, 0.637433]
+        bm['k_wl'] = _dust_CCM89(w)
+        return bm
+        
+
+
+    # def _read_basemodels(redshift, directory="glfits/stelmass/"):
+    #     """
+    #     Read in base model spectra
+    #     """
+    #     from glfits.magnitudes import _dust_CCM89
+    #     basemodels = {}
+    #     prefix = [s for s in sys.path if s.endswith('/glfits')][0]+"/"
+    #     w = np.loadtxt(prefix+directory+"BaseModels.dat", unpack=True,
+    #                    usecols=(0,))
+    #      sed = np.loadtxt(prefix+directory+"BaseModels.dat", unpack=True,
+    #                       usecols=range(1, 13))
+    #     # hardcoded spectral masses
+         # mbm = [0.680202, 0.655672, 0.639551, 0.636833, 0.685852, 0.661167,
+         #        0.643791, 0.637741, 0.682438, 0.659906, 0.642867, 0.637433]
+    # #     k_wl = _dust_CCM89(w)
+    #     # fill dictionary
+    #     basemodels['w'] = w
+    #     basemodels['sed'] = sed
+    #     basemodels['mass'] = mbm
+    #     basemodels['k_wl'] = k_wl
+    #     basemodels['redshift'] = redshift
+    #     return basemodels
 
     # def lnprior(self, params):
     #     """
@@ -312,28 +357,7 @@ class StarSampler(object):
     #         return -np.inf
     #     return lp + lnlike(theta, mag0, err_mag0, filters, basemodels)
 
-    # def _read_basemodels(redshift, directory="glfits/stelmass/"):
-    #     """
-    #     Read in base model spectra
-    #     """
-    #     from glfits.magnitudes import _dust_CCM89
-    #     basemodels = {}
-    #     prefix = [s for s in sys.path if s.endswith('/glfits')][0]+"/"
-    #     w = np.loadtxt(prefix+directory+"BaseModels.dat", unpack=True,
-    #                    usecols=(0,))
-    #     sed = np.loadtxt(prefix+directory+"BaseModels.dat", unpack=True,
-    #                      usecols=range(1, 13))
-    #     # hardcoded spectral masses
-    #     mbm = [0.680202, 0.655672, 0.639551, 0.636833, 0.685852, 0.661167,
-    #            0.643791, 0.637741, 0.682438, 0.659906, 0.642867, 0.637433]
-    #     k_wl = _dust_CCM89(w)
-    #     # fill dictionary
-    #     basemodels['w'] = w
-    #     basemodels['sed'] = sed
-    #     basemodels['mass'] = mbm
-    #     basemodels['k_wl'] = k_wl
-    #     basemodels['redshift'] = redshift
-    #     return basemodels
+    
 
     # def stelmass(mag0, err_mag0, filters, basemodels,
     #          init_pos=np.array([0.05]*11+[0.1]), nwalkers=100, nsteps=400,

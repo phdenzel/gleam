@@ -772,12 +772,13 @@ def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
     if not np.any(saddles):
         saddles, isaddles = find_saddles(x, y, grid, n_saddles=search_saddles)
         clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
+                                           geofactor=geofactor,
                                            psifactor=psifactor)
         saddles = np.array([(s[0], -s[1]) for s in saddles])
         clev = sorted([grid[ix, iy] for (ix, iy) in isaddles])
     else:
         clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
-                                           psifactor=psifactor)
+                                           geofactor=geofactor,psifactor=psifactor)
     if sad_contour_shift is not None:
         clev = [c-sad_contour_shift for c in clev]
     # plot extremal image points

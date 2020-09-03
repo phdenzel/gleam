@@ -611,7 +611,6 @@ class ModelArray(object):
         extm = self.ptmasses[model_index] \
             if extm is None and hasattr(self, 'ptmasses') and len(self.ptmasses[model_index]) > 0 \
             else extm
-        print(geofactor, psifactor)
         kwargs = dict(geofactor=geofactor, psifactor=psifactor, shear=shear, extm=extm)
         return sorted([arrival_time(sad, beta, model, N, L, **kwargs) for sad in saddle_points])
 
