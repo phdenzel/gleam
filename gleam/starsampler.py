@@ -258,7 +258,7 @@ class StarSampler(object):
         return M * np.power(10, 0.4*(mag-magnitude))
 
     @staticmethod
-    def resample_map(self, data_map, extent, new_shape, new_extent):
+    def resample_map(data_map, extent, new_shape, new_extent):
         """
         Resample and interpolate a map to new extent (preferentially of lower resolution)
 
