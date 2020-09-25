@@ -15,12 +15,10 @@ import numpy as np
 # from ctypes import cdll
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
-print(root)
 # libglpk = os.path.join(root, 'include/glpk/libglpk.so.0')
 # if os.path.exists(libglpk):
 #     glpk = cdll.LoadLibrary(libglpk)
 libspath = os.path.join(root, 'lib')
-print(libspath)
 if os.path.exists(libspath):
     libs = os.listdir(libspath)[::-1]
     for l in libs:

@@ -8,8 +8,8 @@ find gleam -type f -name "*.pyc" -delete;
 find gleam -type d -name "__pycache__" -delete;
 
 [ -e "$ROOT/activate" ] && rm $ROOT/activate;
-for f in $ROOT/{build,dist,include,lib,venv}; do
-    [ -d "$f" ] && rm -r "$f"
+for f in $ROOT/{build,dist,include,lib}; do
+    [ -d "$f" ] && rm -rf "$f"
 done;
 
 set +x;
