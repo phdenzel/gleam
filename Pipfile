@@ -1,0 +1,25 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+jupyter = "*"
+numpy = "*"
+scipy = "*"
+scikit-learn = "*"
+scikit-image = "*"
+matplotlib = "*"
+pillow = "*"
+pathos = "*"
+astropy = "*"
+emcee = "*"
+weave = "*"
+cython = "*"
+cymem = "*"
+
+[dev-packages]
+pylint = "*"
+
+[requires]
+python_version = "2.7"

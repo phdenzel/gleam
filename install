@@ -3,15 +3,18 @@ ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo "Currently in $ROOT";
 set -x;
 
-# Enter the virtual environment
-if [ -d "$ROOT/venv" ]; then
-    source $ROOT/venv/bin/activate;
-fi;
+pipenv install --skip-lock;
+
 
 # Build glass
 if [ ! -d "$ROOT/src/glass/build" ]; then
-    cd $ROOT/src/glass && make && make
+    cd $ROOT/src/glass && pipenv run make && pipenv run make
 fi;
+
+if [ ! -e "$ROOT/gleam/utils/optimized.so" ]; then
+    cd $ROOT/gleam/utils/ && pipenv run make
+fi;
+
 
 # Move builds into glass/libs & glass/includes
 mkdir -p $ROOT/include/glpk;
