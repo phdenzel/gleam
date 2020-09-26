@@ -2,13 +2,15 @@
 
 #+HTML: <b>G</b>ravitational <b>L</b>ens <b>E</b>xtended <b>A</b>nalysis <b>M</b>odule
 
+** Future
+Migration to Python3 in progress...
+
 ** Binaries
 GLEAM is avaiable as a python module and is on its way to be
 implemented as a standalone app for macOS.  In future, simply download
 the lates release and double-click to run...  To use the full
 framework however, clone the repository and add it to your
 ~PYTHONPATH~ (e.g. in your ~.bashrc~ file).
-
 
 ** Requirements
 GLEAM inherits a requirement from GLASS ~swig~.  On linux, also make
