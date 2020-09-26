@@ -4,13 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+future = "*"
 jupyter = "*"
 numpy = "*"
 scipy = "*"
-scikit-learn = "*"
-scikit-image = "*"
 matplotlib = "*"
 pillow = "*"
+scikit-learn = "<0.20"
+scikit-image = "<0.15"
 pathos = "*"
 astropy = "*"
 emcee = "*"
@@ -23,3 +24,6 @@ pylint = "*"
 
 [requires]
 python_version = "2.7"
+
+[pipenv]
+allow_prereleases = true
