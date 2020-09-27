@@ -1228,7 +1228,7 @@ def viewstate_plots(model, obj_index=None, refined=True,
 
 
 def h0hist_plot(model, units='km/s/Mpc', nbins=30,
-                result_label=False, label_pos='left',
+                result_label=False, label_pos='left', topxax=False,
                 title=None, savefig=False, showfig=True, verbose=True):
     """
     TODO
@@ -1248,16 +1248,27 @@ def h0hist_plot(model, units='km/s/Mpc', nbins=30,
     if units == 'km/s/Mpc' or units == 'km s^{-1} Mpc^{-1}':
         h0arr = np.array(h0arr)
         hlbl = 'H$_0$'
+        if topxax:
+            axc = ax.twiny()
+            # second unit axis
+            def convertaxc(ax):
+                x1, x2 = ax.get_xlim()
+                axc.set_xlim(glu.H02aHz(x1), glu.H02aHz(x2))
+                axc.figure.canvas.draw()
+            ax.callbacks.connect("xlim_changed", convertaxc)
+            hunitlbl = '[aHz]'
     elif units == 'aHz':
         h0arr = glu.H02aHz(np.array(h0arr))
         hlbl = 'H$_0$'
-        axc = ax.twiny()
-        # second unit axis
-        def convertaxc(ax):
-            x1, x2 = ax.get_xlim()
-            axc.set_xlim(glu.aHz2H0(x1), glu.aHz2H0(x2))
-            axc.figure.canvas.draw()
-        ax.callbacks.connect("xlim_changed", convertaxc)
+        if topxax:
+            axc = ax.twiny()
+            # second unit axis
+            def convertaxc(ax):
+                x1, x2 = ax.get_xlim()
+                axc.set_xlim(glu.aHz2H0(x1), glu.aHz2H0(x2))
+                axc.figure.canvas.draw()
+            ax.callbacks.connect("xlim_changed", convertaxc)
+            hunitlbl = '[km/s/Mpc]'
     elif units == 'Gyrs':
         h0arr = glu.H02Gyrs(np.array(h0arr))
         hlbl = 'H$_0^{{-1}}$'
@@ -1268,21 +1279,11 @@ def h0hist_plot(model, units='km/s/Mpc', nbins=30,
     q = np.percentile(h0arr, [16, 50, 84])
     n, bins, patches = ax.hist(h0arr, bins=nbins, density=True, rwidth=0.901)
     cm = plt.cm.get_cmap('phoenix')
-    ax.axvline(q[1], color=GLEAMcolors.pink, zorder=0, alpha=0.6)
-    ax.axvline(q[0], color=GLEAMcolors.red, zorder=0, alpha=0.6)
-    ax.axvline(q[2], color=GLEAMcolors.red, zorder=0, alpha=0.6)
+    ax.axvline(q[1], color=cm(0.20), zorder=0, alpha=0.6)
+    ax.axvline(q[0], color=cm(0.05), zorder=0, alpha=0.3)
+    ax.axvline(q[2], color=cm(0.05), zorder=0, alpha=0.3)
     # decide on the coloring of the histogram bars
     bin_centers = 0.5 * (bins[:-1] + bins[1:])
-    # xdata = bin_centers
-    # ydata = n
-    # lpopt, lpcov = curve_fit(lorentzian, xdata, ydata)
-    # ldist = lorentzian(xdata, lpopt[0], lpopt[1], lpopt[2])
-    # gpopt, gpcov = curve_fit(gaussian, xdata, ydata)
-    # gdist = gaussian(xdata, gpopt[0], gpopt[1], gpopt[2])
-    # vpopt, vpcov = curve_fit(pseudovoigt, xdata, ydata)
-    # vdist = pseudovoigt(xdata, vpopt[0], vpopt[1], vpopt[2], vpopt[3], vpopt[4])
-    # tpopt, tpcov = curve_fit(tukeygh, xdata, ydata)
-    # tdist = tukeygh(xdata, vpopt[0], vpopt[1], vpopt[2], vpopt[3])
     cpf = np.cumsum(n * abs(bins[0]-bins[-1]) / nbins) * 2
     cpf[cpf > 1] = -(cpf[cpf > 1] - 1) + 1
     for c, p in zip(cpf, patches):
@@ -1302,7 +1303,7 @@ def h0hist_plot(model, units='km/s/Mpc', nbins=30,
     fig.axes[0].get_yaxis().set_visible(False)
     ax.set_xlabel('{} [{}]'.format(hlbl, units))
     if axc is not None:
-        axc.set_xlabel('H$_0$ [km/s/Mpc]', fontsize=12)
+        axc.set_xlabel('H$_0$ '+hunitlbl, fontsize=12)
         plt.setp(axc.get_xticklabels(), fontsize=12)
     plt.tight_layout()
     if savefig:
