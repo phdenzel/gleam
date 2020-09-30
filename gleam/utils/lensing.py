@@ -1070,6 +1070,20 @@ class GLASSModel(ModelArray):
     def N_src(self):
         return len(self.env.models[0]['obj,data'][self.obj_idx][0].sources)
 
+    @ModelArray.minima.setter
+    def minima(self, minima):
+        ModelArray.minima.fset(self, minima)
+        self.all_data['minima'][self.obj_idx] = minima
+
+    @ModelArray.saddle_points.setter
+    def saddle_points(self, saddle_points):
+        ModelArray.saddle_points.fset(self, saddle_points)
+        self.all_data['saddle_points'][self.obj_idx] = saddle_points
+
+    @ModelArray.maxima.setter
+    def maxima(self, maxima):
+        ModelArray.maxima.fset(self, maxima)
+        self.all_data['maxima'][self.obj_idx] = maxima
 
 class MetaModel(type):
     def __new__(mcls, name, bases, cdict):
@@ -1507,7 +1521,7 @@ def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, re
     kappa_grid = model.kappa_grid(model_index=mdl_index, refined=refined) * factor
     maprad = model.maprad if maprad is None else maprad
     pixrad = kappa_grid.shape[0]//2+1 if pixrad is None else pixrad
-    pxls = self.pixel_size if refined else self.toplevel
+    pxls = model.pixel_size if refined else model.toplevel
     radii, profile = radial_profile(kappa_grid, bins=pixrad) 
     radii = radii * pxls
     return radii, profile

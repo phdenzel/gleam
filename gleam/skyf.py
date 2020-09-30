@@ -1418,6 +1418,7 @@ class SkyF(object):
         return formula
 
     def plot_f(self, fig=None, ax=None, as_magnitudes=False, log=False,
+               extent=True,
                cmap=GLEAMcmaps.gravic, reverse_map=False,
                scalebar=True, label=None, colorbar=False,
                flip=True, filter_nan=True, deconv=False,
@@ -1459,6 +1460,11 @@ class SkyF(object):
         cmap = plt.get_cmap(cmap)
         if reverse_map:
             cmap = GLEAMcmaps.reverse(cmap)
+        # get extent
+        if extent is not False:
+            extent = self.extent
+        else:
+            extent = None
         # extract scalebar/labelbox properties
         kw = {}
         maprad = self.extent[1]
@@ -1489,7 +1495,7 @@ class SkyF(object):
         if filter_nan:
             d = np.nan_to_num(d)
         # plot data
-        img = ax.imshow(d, cmap=cmap, extent=self.extent, **kwargs)
+        img = ax.imshow(d, cmap=cmap, extent=extent, **kwargs)
         plt_out.append(img)
         if colorbar:  # plot colorbar
             clrbar = fig.colorbar(img)

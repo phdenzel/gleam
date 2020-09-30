@@ -710,7 +710,7 @@ def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
                               mdl_index=-1, obj_index=0, src_index=0,
                               cmap=GLEAMcmaps.phoenix, maprad=None, extent=None,
                               draw_images=True, search_saddles=0,
-                              contours_only=False,
+                              contours_only=False, sad_contour_saddles=None,
                               contours=True, levels=60,
                               min_contour_shift=None, sad_contour_shift=None,
                               scalebar=False, label=None, color='black',
@@ -765,19 +765,20 @@ def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
     minima = model.minima
     saddles = model.saddle_points
     maxima = model.maxima
+    sad_contour_saddles = saddles if sad_contour_saddles is None else sad_contour_saddles
     cmap = plt.get_cmap(cmap) if isinstance(cmap, str) else GLEAMcmaps.reverse(cmap)
     min_clr, sad_clr, max_clr = cmap(.2), cmap(.5), cmap(.8)
     draw_images = 'min, sad, max' if draw_images else ''
     # some saddle point contours
     if not np.any(saddles):
         saddles, isaddles = find_saddles(x, y, grid, n_saddles=search_saddles)
-        clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
+        clev = model.saddle_contour_levels(saddle_points=sad_contour_saddles, maprad=R, N=grid.shape[-1],
                                            geofactor=geofactor,
                                            psifactor=psifactor)
         saddles = np.array([(s[0], -s[1]) for s in saddles])
         clev = sorted([grid[ix, iy] for (ix, iy) in isaddles])
     else:
-        clev = model.saddle_contour_levels(saddle_points=saddles, maprad=R, N=grid.shape[-1],
+        clev = model.saddle_contour_levels(saddle_points=sad_contour_saddles, maprad=R, N=grid.shape[-1],
                                            geofactor=geofactor,psifactor=psifactor)
     if sad_contour_shift is not None:
         clev = [c-sad_contour_shift for c in clev]

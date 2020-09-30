@@ -57,7 +57,8 @@ class ReconSrc(object):
     """
     Framework for source reconstruction
     """
-    def __init__(self, gleamobject, model, M=40, M_fullres=None, mask_keys=[], verbose=False):
+    def __init__(self, gleamobject, model, M=40, M_fullres=None, mask_keys=[],
+                 zfactor=1., verbose=False):
         """
         Initialize
 
@@ -67,6 +68,9 @@ class ReconSrc(object):
 
         Kwargs:
             M <int> - source plane pixel radius; the total source plane will be (2*M+1)x(2*M+1)
+            M_fullres <int> - true resolution pixel plane radius
+            mask_keys <list(str)> - choose ROI mask keys, e.g.'circle'
+            zfactor <float> - if the models are in kappa_inf use model.dlsds
 
         Return:
             <ReconSrc object> - standard initializer for ReconSrc
@@ -81,7 +85,9 @@ class ReconSrc(object):
             self.lensobject = self.gleamobject
         else:
             raise TypeError("ReconSrc needs a GLEAM object (LensObject/MultiLens) as input!")
-        self.lensobject = self.lens_objects[0]  # grab first lensobject if there are more than one; TODO: make method with more lenses
+        # grab first lensobject if there are more than one
+        # for multiband analysis use several ReconSrc objects
+        self.lensobject = self.lens_objects[0]
         self.mask_keys = mask_keys  # sets mask
         self.rotation = 0
         # load model data
@@ -97,6 +103,7 @@ class ReconSrc(object):
             self.model = LensModel(model)
         self.model_index = -1
         self.obj_index = self.model.obj_idx
+        self.zfactor = zfactor
 
         # source plane
         # projection happens full resolution and is antialiased afterwards
@@ -168,7 +175,13 @@ class ReconSrc(object):
     @property
     def rotation(self):
         """
-        TODO
+        Rotation of the observation relative to the mass map
+
+        Args/Kwargs:
+            None
+
+        Return:
+            rotation <float> - rotation angle in degrees
         """
         if not hasattr(self, '_rotation'):
             self._rotation = 0
@@ -177,7 +190,13 @@ class ReconSrc(object):
     @rotation.setter
     def rotation(self, angle):
         """
-        TODO
+        Rotation of the observation relative to the mass map
+
+        Args:
+            rotation <float> - rotation angle in degrees
+
+        Kwargs/Return:
+            None
         """
         if hasattr(self, '_cache'):
             self._cache['rotation'][self.obj_index][self.model_index].append(angle)
@@ -618,7 +637,6 @@ class ReconSrc(object):
         else:
             theta = ang_pos
             grad_phi = deflect
-        zcap = 1.  # if the model's have been rescaled to kappa_inf use 1./dlsds
         if np.any(self.model.betas[self.model_index]):
             beta = self.model.betas[self.model_index]
             if not isinstance(beta, complex):
@@ -634,7 +652,7 @@ class ReconSrc(object):
         else:
             p = 0
         alpha = grad_phi(theta, data, ploc, cell_sizes) + s + p
-        dbeta = beta - theta + alpha * zcap
+        dbeta = beta - theta + alpha * self.zfactor
         return np.array([dbeta.real, dbeta.imag]).T
 
     def srcgrid_deflections(self, mask=None, limit=True):
@@ -712,8 +730,9 @@ class ReconSrc(object):
             Mij_p <scipy.sparse.lil.lil_matrix> - inverse projection map from image to source plane
         """
         if cy_opt:
+            # TODO: optimize for autonomous use
             return self.inv_proj_matrix_cython(use_mask=use_mask, r_max=r_max,
-                                               r_fullres=r_fullres, asarray=asarray)
+                                               r_fullres=4*r_max, asarray=asarray)
         else:
             # # lens plane
             LxL = self.lensobject.naxis1*self.lensobject.naxis2
