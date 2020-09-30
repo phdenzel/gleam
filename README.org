@@ -2,66 +2,92 @@
 
 #+HTML: <b>G</b>ravitational <b>L</b>ens <b>E</b>xtended <b>A</b>nalysis <b>M</b>odule
 
+** Future
+Migration to Python3 in progress...
+
 ** Binaries
+GLEAM is avaiable as a python module and is on its way to be
+implemented as a standalone app for macOS.  In future, simply download
+the lates release and double-click to run...  To use the full
+framework however, clone the repository and add it to your
+~PYTHONPATH~ (e.g. in your ~.bashrc~ file).
 
-GLEAM is avaiable as a python module and is on its way to be implemented as a standalone app for macOS.
-In future, simply download the lates release and double-click to run...
-To use the full framework however, clone the repository and add it to your ~PYTHONPATH~ (e.g. in your ~.bashrc~ file).
-
+** Requirements
+GLEAM inherits a requirement from GLASS ~swig~.  On linux, also make
+sure that ~python2-dev~ (or similar) and ~python-tk~ is installed.
+For example,
+#+BEGIN_SRC bash
+sudo apt install swig python-tk python2-dev
+#+END_SRC
 
 ** Install
-
 To install GLEAM manually, simply open the terminal and run
-
 #+BEGIN_SRC bash
 ./configure
 ./install
 #+END_SRC
-  
-This will unpack, compile, and install all the necessary dependencies. It might need some tinkering, so if any problems arise feel free to contact me.
+This will unpack, compile, and install all the necessary
+dependencies. It might need some tinkering, so if any problems arise
+feel free to contact me.
 
     
 ** Content
-
 *** gleam.reconsrc
-The synthetic imager. The ~ReconSrc~ class provides complete functionality of the synthetic imager and can be initiated with a mass maps and observations loaded as a ~LensModel~ (~gleam.utils.lensing~) and ~LensObject~ (~gleam.lensobject~) object respectively.
+The synthetic imager. The ~ReconSrc~ class provides complete
+functionality of the synthetic imager and can be initiated with a mass
+maps and observations loaded as a ~LensModel~ (~gleam.utils.lensing~)
+and ~LensObject~ (~gleam.lensobject~) object respectively.
 
 *** gleam.skycoords
-Framework for reading astronomical coordinates such as /J2000/, /RA/Dec/, etc.
-Is able to convert between different coordinate systems, and interfaces particularly well with
-the CFHTLS MegaPipe pixel coordinate system.
+Framework for reading astronomical coordinates such as /J2000/,
+/RA/Dec/, etc.  Is able to convert between different coordinate
+systems, and interfaces particularly well with the CFHTLS MegaPipe
+pixel coordinate system.
 
 *** gleam.skyf
-Reads in a single ~.fits~ file and extracts general information on the observation.
-Also contains several plotting procedures which visualize the data.
+Reads in a single ~.fits~ file and extracts general information on the
+observation.  Also contains several plotting procedures which
+visualize the data.
 
 *** gleam.skypatch
-Reads in a set of ~.fits~ files and extracts general information on the observation in different bands,
-analogously to ~skyf.py~ (importing ~skyf.py~). Visualizes data as stacked or palette image. 
+Reads in a set of ~.fits~ files and extracts general information on
+the observation in different bands, analogously to ~skyf.py~
+(importing ~skyf.py~). Visualizes data as stacked or palette image.
 
 *** gleam.lensobject
-Inherits from ~SkyF~. Additionally extracts properties important for gravitational lenses
-and lensed sources.
-Visualizes these properties on top of inherited plotting procedures.
+Inherits from ~SkyF~. Additionally extracts properties important for
+gravitational lenses and lensed sources.  Visualizes these properties
+on top of inherited plotting procedures.
 
 *** gleam.multilens
-Inherits from ~SkyPatch~. Additionally extracts properties important for gravitational lenses
-and lensed sources, analogously to ~lensobject.py~.
-Visualizes these properties on top of inherited plotting procedures as stacked or palette image.
+Inherits from ~SkyPatch~. Additionally extracts properties important
+for gravitational lenses and lensed sources, analogously to
+~lensobject.py~.  Visualizes these properties on top of inherited
+plotting procedures as stacked or palette image.
 
 *** gleam.lensfinder
-A simple peak finder to extract lens and source image positions.
-Uses very crude procedures, whose parameters have to be fine-tuned.
-Provides an automatic lens detection feature to the ~LensObject~ class.
+A simple peak finder to extract lens and source image positions.  Uses
+very crude procedures, whose parameters have to be fine-tuned.
+Provides an automatic lens detection feature to the ~LensObject~
+class.
 
 *** gleam.glscfactory
-GLASS config-file generator.
-Features a sync and config reading feature with ~LensObject~ class.
-Can be used to write config files for ~LensObject~ class instances, or to extract config files from ~LensObject~ class instances.
+GLASS config-file generator.  Features a sync and config reading
+feature with ~LensObject~ class.  Can be used to write config files
+for ~LensObject~ class instances, or to extract config files from
+~LensObject~ class instances.
 - TODO: Write a main method for usage as script!
 
+*** gleam.utils
+Several utility features such as custom color maps, basic lensing
+computations, plotting functions, etc. A general LensModel object is
+included as well with which a GLASS state or any kappa map can be read
+in.
+
 *** gleam.gui
-- To be implemented
+- Still in work...
+- Implemented features: reading in .fits files, applying masks of
+  several shapes, and saving as ~.json~ files.
 
 *** gleam.app
 Components of ~gleam.gui~
@@ -73,27 +99,26 @@ Components of ~gleam.gui~
 - ~gleam.app.window~
 
 *** gleam.model
-
 **** gleam.model.sersic
-Two dimensional, Sersic mapper. Calculates and visualizes profiles and maps.
+Two dimensional, Sersic mapper. Calculates and visualizes profiles and
+maps.
 
 **** gleam.model.spep
-Two dimensional, softened power-law elliptical potential SPEP mapper. Calculates and visualizes profiles and maps.
+Two dimensional, softened power-law elliptical potential SPEP
+mapper. Calculates and visualizes profiles and maps.
 
 **** gleam.model.spemd
-Two dimensional, softened power-law elliptical mass distribution mapper. Calculates and visualizes profiles and maps.
-
-
-*** gleam.utils
-Several utility features such as custom color maps, basic lensing computations, plotting functions, etc.
+Two dimensional, softened power-law elliptical mass distribution
+mapper. Calculates and visualizes profiles and maps.
 
 
 * Libraries
 
 ** GLASS
-   GLEAM interfaces with GLASS, which is why GLASS is included in as a package in ~src~.
-   To install it on macOS simply use the ~compile~ and ~install~ scripts.
-   On linux, glpk sometimes installs its build library in ~src/glass/build/glpk_build/lib64~ which needs
-   to be renamed to ~src/glass/build/glpk_build/lib~.
-   For now this has to be done manually. Automatic fixes are in work...
+   GLEAM interfaces with GLASS, which is why GLASS is included in as a
+   package in ~src~.  To install it on macOS simply use the ~compile~
+   and ~install~ scripts.  On linux, glpk sometimes installs its build
+   library in ~src/glass/build/glpk_build/lib64~ which needs to be
+   renamed to ~src/glass/build/glpk_build/lib~.  If the subsequent
+   install fails, it might be worth renaming it manually.
 

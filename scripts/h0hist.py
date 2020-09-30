@@ -11,7 +11,7 @@ import sys
 import os
 import numpy as np
 from matplotlib import pyplot as plt
-gleam_root = "/Users/phdenzel/gleam"
+gleam_root = "/home/phdenzel/gleam"
 sys.path.append(gleam_root)
 from gleam.glass_interface import glass_renv
 from gleam.utils.lensing import LensModel
@@ -31,8 +31,8 @@ if __name__ == "__main__":
 
     for mdl in models:
         print("Processing lens model {}...".format(mdl))
-        # h0hist_plot(mdl, units='km/s/Mpc', savefig=True, verbose=True)
-        fig, axes = h0hist_plot(mdl, units='aHz', result_label=True, label_pos='right',
+        # h0hist_plot(mdl, units='aHz', savefig=True, verbose=True)
+        fig, axes = h0hist_plot(mdl, units='km/s/Mpc', result_label=True, label_pos='right',
                                 showfig=False, savefig=False, verbose=True)
         savename = os.path.splitext(mdl.filename)[0]
         plt.savefig('h0hist_{}.pdf'.format(savename))

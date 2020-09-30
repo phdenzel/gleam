@@ -25,10 +25,14 @@ if os.path.exists(libspath):
         lib = os.path.join(libspath, l)
         if lib not in sys.path or not any(['glass' in p for p in sys.path]):
             sys.path.insert(3, lib)
-import glass
-from glass.command import command, Commands
-from glass.environment import env, Environment
-from glass.exceptions import GLInputError
+try:
+    import glass
+    from glass.command import command, Commands
+    from glass.environment import env, Environment
+    from glass.exceptions import GLInputError
+except ImportError:
+    print("Problem importing GLASS... needs fixing!")
+    sys.exit(1)
 
 
 # Variables ###################################################################
@@ -94,6 +98,7 @@ def _detect_omp(force_gcc=False):
     try:
         import weave
     except ImportError:
+        print("import weave failed!")
         kw = {}
     try:
         weave.inline(' ', **kw)
