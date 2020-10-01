@@ -189,7 +189,8 @@ class ModelArray(object):
 
     @property
     def obj_name(self):
-        return '.'.join(self.filename.split('.')[:-1])
+        if self.filename:
+            return '.'.join(self.filename.split('.')[:-1])
 
     @property
     def N(self):
@@ -1194,6 +1195,8 @@ def DL(zl, zs, cosmo=None):
         - * DL(zl_actual,zs_actual)/DL(zl_used,zs_used)
     """
     global Dcomov
+    if zl > zs:
+        zl, zs = zs, zl
     comov = partial(Dcomov, cosmo=cosmo)
     alens = 1./(1+zl)
     asrc = 1./(1+zs)
@@ -1221,6 +1224,8 @@ def DS(zl, zs, cosmo=None):
         - * DL(zl_actual,zs_actual)/DL(zl_used,zs_used)
     """
     global Dcomov
+    if zl > zs:
+        zl, zs = zs, zl
     comov = partial(Dcomov, cosmo=cosmo)
     alens = 1./(1+zl)
     asrc = 1./(1+zs)
@@ -1249,6 +1254,8 @@ def DLDSDLS(zl, zs, cosmo=None):
         - * DLDSDLS(zl_actual,zs_actual)/DLDSDLS(zl_used,zs_used)
     """
     global Dcomov
+    if zl > zs:
+        zl, zs = zs, zl
     comov = partial(Dcomov, cosmo=cosmo)
     alens = 1./(1+zl)
     asrc = 1./(1+zs)
@@ -1276,6 +1283,8 @@ def DLSDS(zl, zs, cosmo=None):
         ratio <float> - distance ratio D_S/D_L
     """
     global Dcomov
+    if zl > zs:
+        zl, zs = zs, zl
     comov = partial(Dcomov, cosmo=cosmo)
     alens = 1./(1+zl)
     asrc = 1./(1+zs)
@@ -1461,7 +1470,7 @@ def encmass_profile(model, obj_index=0, mdl_index=-1, maprad=None,
     return radii, profile
 
 
-def radial_profile(data, center=None, bins=None):
+def radial_profile(data, center=None, bins=None, center_fix=False):
     """
     Calculate radial profiles of some data maps
 
@@ -1470,6 +1479,7 @@ def radial_profile(data, center=None, bins=None):
 
     Kwarg:
         center <tuple/list> - center indices of profile
+        center_fix <int> - omit the [1:center_fix] profile data points
 
     Return:
         radial_profile <np.ndarray> - radially-binned 1D profile
@@ -1480,20 +1490,24 @@ def radial_profile(data, center=None, bins=None):
     if bins is None:
         bins = N//2
     if center is None:
-        # center = np.unravel_index(data.argmax(), data.shape)
         center = [c//2 for c in data.shape][::-1]
-    dta_cent = data[center[0], center[1]]
+    dta_cent = np.sum(data[center[0]:center[0]+2, center[1]:center[1]+2])/2.
     x, y = np.indices((data.shape))
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
     r = r.reshape(r.size)
     data = data.reshape(data.size)
     rbins = np.arange(bins) + 0.5
     encavg = np.array([np.sum(data[r < ri])/len(data[r < ri])
-                       if len(data[r < ri]) else dta_cent for ri in rbins])
+                       if len(data[r < ri]) else dta_cent
+                       for ri in rbins])
+    if center_fix:
+        encavg = np.concatenate((encavg[0:1], encavg[center_fix-1:]))
+        rbins = np.concatenate((rbins[0:1], rbins[center_fix-1:]))
     return rbins, encavg
 
 
-def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, refined=True, factor=1.):
+def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None,
+                  refined=True, factor=1.):
     """
     Calculate radial kappa profiles for GLASS models or (for other models) by
     simply radially binning a generally kappa grid
@@ -1520,7 +1534,7 @@ def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None, re
         model = LensModel(model)
     kappa_grid = model.kappa_grid(model_index=mdl_index, refined=refined) * factor
     maprad = model.maprad if maprad is None else maprad
-    pixrad = kappa_grid.shape[0]//2+1 if pixrad is None else pixrad
+    pixrad = kappa_grid.shape[0]//2+1# if pixrad is None else pixrad
     pxls = model.pixel_size if refined else model.toplevel
     radii, profile = radial_profile(kappa_grid, bins=pixrad) 
     radii = radii * pxls

@@ -963,9 +963,9 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
     radii = []
     ax = plt.gca()
     for m in data:
-        radius, profile = kappa_profile(m, obj_index=model.obj_idx, factor=kfactor,
+        radius, profile = kappa_profile(m, obj_index=model.obj_idx,
+                                        factor=kfactor,
                                         maprad=maprad, pixrad=pixrad)
-        radius = radius[:] * rfactor
         if profile[0] <= 0.2:
             continue
         if interpolate > 1:
