@@ -66,15 +66,16 @@ class Measure(object):
     def sig_lims(self):
         return self.mean+self.std[0], self.mean+self.std[1]
     
-    def plot(self, y=0, transform=None, color=None, msize=4, xshift=0, yshift=0, lw=3, fontsize=18):
+    def plot(self, y=0, transform=None, color=None, msize=4, xshift=0, yshift=0,
+             lw=3, fontsize=18, textcolor='black'):
         if transform is None:
             transform = lambda x: x
         estimate, yvals = self(y)
         estimate = transform(estimate)
         plt.scatter(transform(self.mean), y, s=msize, color=color)
         plt.plot(estimate, yvals, lw=lw, color=color)
-        plt.text(transform(self.mean+xshift), y+yshift, self.name, color='black',
-                 fontsize=fontsize, horizontalalignment='center')
+        plt.text(transform(self.mean+xshift), y+yshift, self.name,
+                 color=textcolor, fontsize=fontsize, horizontalalignment='center')
         
     def span_monocolor(self, ax=None, Nbins=50, transform=None, color='black', alpha=1.0):
         if ax is None:

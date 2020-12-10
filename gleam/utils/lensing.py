@@ -1507,7 +1507,7 @@ def radial_profile(data, center=None, bins=None, center_fix=False):
 
 
 def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None,
-                  refined=True, factor=1.):
+                  refined=True, factor=1., center_fix=False):
     """
     Calculate radial kappa profiles for GLASS models or (for other models) by
     simply radially binning a generally kappa grid
@@ -1536,7 +1536,7 @@ def kappa_profile(model, obj_index=0, mdl_index=-1, maprad=None, pixrad=None,
     maprad = model.maprad if maprad is None else maprad
     pixrad = kappa_grid.shape[0]//2+1# if pixrad is None else pixrad
     pxls = model.pixel_size if refined else model.toplevel
-    radii, profile = radial_profile(kappa_grid, bins=pixrad) 
+    radii, profile = radial_profile(kappa_grid, bins=pixrad, center_fix=center_fix) 
     radii = radii * pxls
     return radii, profile
 

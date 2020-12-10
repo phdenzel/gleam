@@ -11,6 +11,7 @@ import os
 import numpy as np
 import scipy.ndimage as ndimage
 from scipy.optimize import curve_fit
+from skimage import measure as skmeasure
 from matplotlib import patches
 from matplotlib import pyplot as plt
 from matplotlib.colors import to_rgba
@@ -827,7 +828,7 @@ def arrival_time_surface_plot(model, N=None, geofactor=1., psifactor=1.,
 
 def kappa_profile_plot(model, refined=True,
                        obj_index=-1, maprad=None, pixrad=None,
-                       r_shift=0, kappa_factor=1.,
+                       r_shift=0, kappa_factor=1., center_fix=False,
                        kappa1_line=True, einstein_radius_indicator=False,
                        annotation_color='black', label=None,
                        **kwargs):
@@ -861,13 +862,16 @@ def kappa_profile_plot(model, refined=True,
     if isinstance(model, np.ndarray):  # kappa grid
         model = LensModel(model, maprad=maprad, pixrad=pixrad)
         radii, profile = kappa_profile(model.data, factor=kappa_factor,
-                                       maprad=maprad, pixrad=pixrad, refined=refined)
+                                       maprad=maprad, pixrad=pixrad, refined=refined,
+                                       center_fix=center_fix)
     elif isinstance(model, dict) and 'obj,data' in model:  # a glass model
         radii, profile = kappa_profile(model, obj_index=obj_index, factor=kappa_factor,
-                                       maprad=maprad, pixrad=pixrad, refined=refined)
+                                       maprad=maprad, pixrad=pixrad, refined=refined,
+                                       center_fix=center_fix)
     elif isinstance(model, LensModel):
         radii, profile = kappa_profile(model, obj_index=obj_index, factor=kappa_factor,
-                                       maprad=model.maprad, pixrad=model.pixrad, refined=refined)
+                                       maprad=model.maprad, pixrad=model.pixrad, refined=refined,
+                                       center_fix=center_fix)
     else:  # otherwise assume profile and radii were inputted
         radii, profile = model
         radii = np.asarray(radii)
@@ -892,7 +896,7 @@ def kappa_profile_plot(model, refined=True,
 def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, refined=True,
                         interpolate=None, extent=None, kfactor=1., rfactor=1.,
                         as_range=False, kappa1_line=True, einstein_radius_indicator=True,
-                        maprad=None, pixrad=None,
+                        maprad=None, pixrad=None, center_fix=False,
                         hilite_color=GLEAMcolors.red, annotation_color='black',
                         levels=20, cmap=GLEAMcmaps.agaveglitch,
                         adjust_limits=True, label=None, label_axes=False, fontsize=None,
@@ -964,7 +968,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
     ax = plt.gca()
     for m in data:
         radius, profile = kappa_profile(m, obj_index=model.obj_idx,
-                                        factor=kfactor,
+                                        factor=kfactor, center_fix=center_fix,
                                         maprad=maprad, pixrad=pixrad)
         if profile[0] <= 0.2:
             continue
@@ -993,7 +997,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         ax.set_aspect('auto')
     # radius, profile <- ensemble average
     radius, profile = kappa_profile(eavg, obj_index=model.obj_idx, factor=kfactor,
-                                    maprad=maprad, pixrad=pixrad)
+                                    maprad=maprad, pixrad=pixrad, center_fix=center_fix)
     radius = radius[:] * rfactor
     if ensemble_average:
         if interpolate > 1:
@@ -1001,6 +1005,7 @@ def kappa_profiles_plot(model, obj_index=0, src_index=0, ensemble_average=True, 
         kw = dict(lw=kwargs['lw'], ls=kwargs['ls'], color=hilite_color, alpha=kwargs['alpha'])
         plot, radius, profile = kappa_profile_plot((radius, profile), obj_index=model.obj_idx,
                                                    kappa1_line=False, maprad=maprad, pixrad=pixrad,
+                                                   center_fix=center_fix,
                                                    annotation_color=annotation_color, **kw)
         plots.append(plot)
         profiles.append(profile)
@@ -1565,13 +1570,12 @@ class IPPointCache(object):
         return distances
 
 
-
 # EXPERIMENTAL #################################################################
 def kappa_ensemble_interactive(gls, obj_index=0, src_index=0, subcells=1,
                                extent=None, levels=3, delta=0.2, log=True,
-                               oversample=True,
+                               oversample=True, factor=1.,
                                cmap=None, add_slider=True, slider_index=0,
-                               savename="kappa_model.html"):
+                               savename="kappa_model.html", dark_theme=False):
     """
     Create an interactive ensemble image plot with bokeh
 
@@ -1594,7 +1598,15 @@ def kappa_ensemble_interactive(gls, obj_index=0, src_index=0, subcells=1,
     from bokeh import plotting as bkpl
     from bokeh import palettes as bkpalettes
     from bokeh import models as bkmd
-    if isinstance(gls, np.ndarray) and len(gls.shape) == 3:
+    from bokeh.themes import built_in_themes
+    from bokeh.io import curdoc
+    if isinstance(gls, LensModel):
+        gls.obj_idx = obj_index
+        gls.src_idx = src_index
+        ensemble_data = gls.data.astype(np.float32)
+        if extent is None:
+            extent = gls.extent
+    elif isinstance(gls, np.ndarray) and len(gls.shape) == 3:
         ensemble_data = np.array(gls, dtype=np.float32)
         if extent is None:
             extent = [-1, 1, -1, 1]
@@ -1619,20 +1631,25 @@ def kappa_ensemble_interactive(gls, obj_index=0, src_index=0, subcells=1,
     #                      ensemble_data.shape, obj_index, subcells, extent,
     #                      levels, log, oversample, cmap, add_slider,
     #                      slider_index, savename)
+
     N = ensemble_data.shape[0]
     ensemble_data = np.array([np.flipud(e) for e in ensemble_data])
     img_data = np.array([
         kappa_map_transf(m, obj_index=obj_index, subcells=subcells, extent=extent,
-                         levels=levels, delta=delta, log=log, oversample=oversample)[0]
-        for m in ensemble_data], dtype=np.float32)
+                         levels=levels, delta=delta, log=log, oversample=oversample,
+                         factor=factor)[0]
+        for m in ensemble_data[:]], dtype=np.float32)
     x = np.linspace(extent[0], extent[1], img_data.shape[2])
     y = np.linspace(extent[2], extent[3], img_data.shape[1])
+
     source = bkmd.ColumnDataSource(data=dict(
         images=[img_data],
         image=[img_data[slider_index, :, :]],
+        # kappa=[ensemble_data[slider_index, :, :]],
         kappa=[ensemble_data[slider_index, :, :]],
         dimensions=[img_data[slider_index, :, :].shape],
-        x=[x[0]], y=[y[0]], dw=[abs(x[-1]-x[0])], dh=[abs(y[-1]-y[0])]))
+        x=[x[0]], y=[y[0]], dw=[abs(x[-1]-x[0])], dh=[abs(y[-1]-y[0])],
+    ))
     p = bkpl.figure(tools="box_zoom,wheel_zoom,zoom_in,zoom_out,save,reset",
                     tooltips=[("x", "$x"), ("y", "$y"), ("kappa", "@kappa")],
                     x_range=extent[0:2], y_range=extent[-2:])
@@ -1669,6 +1686,10 @@ def kappa_ensemble_interactive(gls, obj_index=0, src_index=0, subcells=1,
     slider.js_on_change('value', callback)
 
     layout = bklo.column(p, slider)
-    bkpl.output_file(savename, title="Convergence map")
-    bkpl.save(layout, filename=savename, title="Convergence map")
+    bkpl.output_file(savename, title="Convergence maps")
+
+    if dark_theme:
+        curdoc().theme = 'dark_minimal'
+
+    bkpl.save(layout, filename=savename, title="Convergence maps")
     # bkpl.show(layout)

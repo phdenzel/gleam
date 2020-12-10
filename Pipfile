@@ -5,21 +5,24 @@ name = "pypi"
 
 [packages]
 future = "*"
-jupyter = "*"
 numpy = "*"
 scipy = "*"
 matplotlib = "*"
-pillow = "*"
-scikit-learn = "<0.20"
-scikit-image = "<0.15"
+pillow = "==6.2.2"
+scikit-learn = "==0.20"
+scikit-image = "==0.14.5"
 pathos = "*"
-astropy = "*"
+more-itertools = "==5.0.0"
+astropy = "==2.0.16"
 emcee = "*"
 weave = "*"
 cython = "*"
-cymem = "*"
+cymem = "==2.0.3"
+bokeh = "==1.3.4"
 
 [dev-packages]
+jupyter = "*"
+jupyterthemes = "*"
 pylint = "*"
 
 [requires]
