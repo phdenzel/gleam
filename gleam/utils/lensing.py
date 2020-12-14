@@ -102,12 +102,13 @@ class ModelArray(object):
         return cls(dta, **kwargs)
 
     @classmethod
-    def from_fitsfiles(cls, filenames, **kwargs):
+    def from_fitsfiles(cls, filenames, return_skipped=False, **kwargs):
         data = None
         pixrad = None
         maprad = None
         index = 0
-        for filename in filenames:
+        skipped = []
+        for i, filename in enumerate(filenames):
             with open(filename) as f:
                 hdu = fits.open(f, memmap=False)
                 dta, hdr = hdu[0].data, hdu[0].header
@@ -115,18 +116,21 @@ class ModelArray(object):
             if np.sum(np.abs(dta)) == 0:
                 if data is not None:
                     data = data[:-1]
+                skipped.append(i)
                 continue
             if pixrad is None:
                 pixrad = dta.shape[-1]//2
             if dta.shape[-1]//2 != pixrad:
                 if data is not None:
                     data = data[:-1]
+                skipped.append(i)
                 continue
             if maprad is None:
                 maprad = pixrad * hdr['CD2_2']*3600
             if (pixrad * hdr['CD2_2']*3600) != maprad:
                 if data is not None:
                     data = data[:-1]
+                skipped.append(i)
                 continue
             if data is None:
                 data = np.empty((len(filenames),) + dta.shape)
@@ -134,6 +138,8 @@ class ModelArray(object):
             index += 1
         kwargs.update({'pixrad': pixrad, 'maprad': maprad})
         kwargs.setdefault('filename', 'lensmodels.fits')
+        if return_skipped:
+            return cls(data, **kwargs), skipped
         return cls(data, **kwargs)
 
     def subset(self, indices=None, mask=None, axis=0, **kwargs):
