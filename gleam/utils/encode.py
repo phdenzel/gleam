@@ -83,7 +83,7 @@ class GLEAMDecoder(object):
         return jdict
 
 
-def an_sort(data):
+def an_sort(data, argsort=False):
     """
     Perform an alpha-numeric, natural sort
 
@@ -101,4 +101,6 @@ def an_sort(data):
 
     def an_key(key):
         return [convert(c) for c in re.split('([0-9]+)', key)]
+    if argsort:
+        return [i[0] for i in sorted(enumerate(data), key=lambda x: an_key(x[1]))]
     return sorted(data, key=an_key)
