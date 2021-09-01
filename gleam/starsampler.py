@@ -171,9 +171,11 @@ class StarSampler(object):
             Mag_data = ADU2Mag(ADU_data)
         else:
             ADU_data = [self.light_model.integrate(data, mask=self.mask) for data in band_data]
+            print("ADU data", ADU_data)
             Mag_data = ADU2Mag(ADU_data)
             # usually doesn't make much of a difference, but why not
             Mag_data = MegaCam2SDSS(Mag_data)
+            print("Mag data", Mag_data)
             Mag_data = Mag_data[3]  # only 'i' band necessary
         # load Chabrier table and look up the mass corresponding to the magnitude
         m_stel = self.chabrier_table_mass(Mag_model, self.zl)

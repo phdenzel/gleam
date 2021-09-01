@@ -166,7 +166,7 @@ class ModelArray(object):
               ('grid_size', 'grid_size'), ('pixrad', 'pixrad'), ('maprad', 'maprad'),
               ('_obj_idx', 'obj_index'), ('_src_idx', 'src_index'),
               ('minima', 'minima'), ('saddle_points', 'saddle_points'), ('maxima', 'maxima'),
-              ('_zl', 'zl'), ('_zs', 'zs')]
+              ('_zl', 'zl'), ('_zs', 'zs'), ('cosmo', 'cosmo')]
         for key in kw:
             if hasattr(self, key[0]):
                 v = self.__getattribute__(key[0])
@@ -183,7 +183,7 @@ class ModelArray(object):
     @property
     def tests(self):
         return ['filename', 'filepath', 'N', 'pixrad', 'maprad', 'pixel_size', 'kappa',
-                'minima', 'saddle_points', 'maxima', 'zl', 'zs']
+                'minima', 'saddle_points', 'maxima', 'zl', 'zs', 'cosmo']
 
     @property
     def __v__(self):
@@ -426,6 +426,11 @@ class ModelArray(object):
     def rescale(self, zl_new, zs_new, zl=None, zs=None, cosmo=None):
         """
         Rescale the lens model to new lens and source redshifts
+
+        Note:
+            - Distances rescale with DL_new/DL
+            - Masses rescale with    (DL*DS/DLS)_new / (DL*DS/DLS)
+            - Kappa rescales with    (DS/DLS)_new / (DS/DLS)
         """
         if cosmo is None:
             cosmo = cosmology()
@@ -623,7 +628,7 @@ class ModelArray(object):
 
     def kappa_profile(self, model_index=-1, pixrad=None, refined=True, runit='arcsec', factor=1):
         kappa_grid = self.kappa_grid(model_index=model_index, refined=refined) 
-        kappa_grid = kappa_grid[:] * factor
+        kappa_grid = kappa_grid.copy() * factor
         pixrad = kappa_grid.shape[0]//2+1 if pixrad is None else pixrad
         pxls = self.pixel_size if refined else self.toplevel
         radii, profile = radial_profile(kappa_grid, bins=pixrad)

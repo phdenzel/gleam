@@ -1,4 +1,4 @@
-#!/usr/bin/e4;46;13Mnv python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 @author: phdenzel

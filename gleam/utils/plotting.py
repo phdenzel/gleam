@@ -190,7 +190,7 @@ def plot_scalebar(R, length=None, unit=r'$^{\prime\prime}$',
 
 
 def plot_labelbox(label, position='bottom left', padding=(0.05, 0.05), color='white',
-                  **kwargs):
+                  facecolor=None, facealpha=0.35, **kwargs):
     """
     Add a box with a label to an image plot
 
@@ -206,8 +206,7 @@ def plot_labelbox(label, position='bottom left', padding=(0.05, 0.05), color='wh
     Return:
         TODO
     """
-    facecolor = color
-    facealpha = 0.35
+    facecolor = color if facecolor is None else facecolor
     if color in ['k', 'black', 'grey']:
         facecolor = 'grey'
         facealpha = 0.05
